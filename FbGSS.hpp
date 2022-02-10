@@ -46,3 +46,12 @@ class FbGSS
     float    IntegratorTriangle = 0.0; //Интегратор для треугольных импульсов.
     uint32_t SummatorRnd        = 1  ; //Сумматор для псевдослучайных чисел.
 };
+
+/*
+  DbGSS1.Set_Period(1.0); //Период выходного сигнала [с].
+  DbGSS1.Set_PulseTime(0.5); //Время импульса [с].
+  DbGSS1.Set_Ts(GV.Ts); //Шаг дискретизации по времени [с].
+  DbGSS1.Run();
+  GV.tmp_floats[0] = DbGSS1.Get_RectangleR(); //Прямоугольный сигнал вещественный.
+  GV.Do0           = DbGSS1.Get_RectangleB(); //Прямоугольный сигнал булевый.
+*/
