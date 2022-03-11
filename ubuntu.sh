@@ -39,6 +39,7 @@ echo "ubuntu software"
 #geany
 
 echo "example"
+#python3 -m youtube_dl 'https://youtu.be/M379y0op1WM'
 #git clone https://github.com/DIYPLC/DIY_PLC_V3.git
 #git clone https://github.com/DIYPLC/Test.git
 #sudo reboot
