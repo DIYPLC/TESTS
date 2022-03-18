@@ -1,5 +1,3 @@
 all:
-	gcc *.c     #Compiler: *.c -> ./*.o
-	gcc main.c  #Linker : ./*.o -> ./*.so
-	rm -rf *.o  #Clean files *.o
+	gcc *.c     #Compiler:
 	./a.out     #Run program
