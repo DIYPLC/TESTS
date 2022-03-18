@@ -77,7 +77,7 @@ uint8_t  uint8[4];
 
 Convertor.float32 = 1.0;
 printf("Convertor.float32 = %f \n ",Convertor.float32);
-printf("Convertor.uint32 = %d \n ",Convertor.uint32);
+printf("Convertor.uint32 = %X \n ",Convertor.uint32);
 
   return Error_counter;
 }
