@@ -4,6 +4,17 @@
 #include <iso646.h>
 #include "FbFilterNaN.h"
 
+uint8_t Unit_test_for_FbFilterNaN(void);
+
+int main (void)
+{
+uint8_t Error_counter = 0;
+Error_counter = Error_counter + Unit_test_for_FbFilterNaN();
+printf("Error_counter Unit_test_for_FbFilterNaN = %d \n ",Error_counter);
+
+return 0;
+}
+
 uint8_t Unit_test_for_FbFilterNaN(void)
 {
   uint8_t Error_counter = 0;
@@ -38,22 +49,13 @@ uint8_t Unit_test_for_FbFilterNaN(void)
   DbFilterNaN1.In = NAN1;
   FbFilterNaN(&DbFilterNaN1);
   if (0.0 != DbFilterNaN1.Out) { Error_counter = Error_counter + 1; }
-
+/*
   float NAN2 = 0.0;
   NAN2 = ~NAN2;
   printf("NAN2 = %f \n ",NAN2);
   DbFilterNaN1.In = NAN2;
   FbFilterNaN(&DbFilterNaN1);
   if (0.0 != DbFilterNaN1.Out) { Error_counter = Error_counter + 1; }
-
+*/
   return Error_counter;
-}
-
-int main (void)
-{
-uint8_t Error_counter = 0;
-Error_counter = Error_counter + Unit_test_for_FbFilterNaN(void);
-printf("Error_counter Unit_test_for_FbFilterNaN = %d \n ",Error_counter);
-
-return 0;
 }
