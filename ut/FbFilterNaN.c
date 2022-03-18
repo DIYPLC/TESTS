@@ -18,10 +18,12 @@ uint16_t uint16[2];
 uint8_t  uint8[4];
 } Convertor;
 
+Convertor.float32 = In;  
+
 //Если In==(NaN или Inf или -Inf) то Out=0 иначе Out=In.
 // hex 7F800000 = bin 01111111_10000000_00000000_00000000
 //Стандарт IEEE 754.
-if ( 0x7F800000 == ( ((uint32_t)In) bitand 0x7F800000) )
+if ( 0x7F800000 == (Convertor.uint32 & 0x7F800000) )
 {
 Out   = 0.0;
 Alarm = true;
