@@ -6,11 +6,8 @@
 int main (void)
 {
 
-bool var = false;
-printf("var = %d \n ",var);
-
-var = not(var);
-printf("var = %d \n ",var);
+uint32_t var = 5;
+printf("var = %d\n", var);
 
 return 0;
 }
