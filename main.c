@@ -3,11 +3,11 @@
 #include <stdbool.h>
 #include <iso646.h>
 
-int main (void)
+int main(void)
 {
 
-uint32_t var = 5;
-printf("var = %d\n", var);
+uint32_t i = 5;
+printf("var = %d\n", i);
 
 return 0;
 }
