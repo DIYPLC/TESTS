@@ -51,3 +51,4 @@ echo "example"
 #df -h #print disk free size
 #ifconfig
 #iwconfig
+#pstree #see process tree
