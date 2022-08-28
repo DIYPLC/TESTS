@@ -1,5 +1,6 @@
 #https://github.com/emakefun/microbit-mecanum-car
 #https://makecode.microbit.org/#editor
+#Car random time go fwd and back
 
 def rew():
     magicbit.motor_run_dual(magicbit.Motors.M1, 150, magicbit.Motors.M4, -150)
