@@ -1,5 +1,6 @@
 //MODBUS TCP SLAVE
 //FLProg + Arduino Uno + W5100
+//Ненадежно сбоит если передернуть сетевой кабель.
 #include <Ethernet.h>
 #include <SPI.h>
 int _modbusSlaveDataTable_4[3];
