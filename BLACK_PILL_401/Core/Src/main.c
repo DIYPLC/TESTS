@@ -1,20 +1,23 @@
 /* USER CODE BEGIN Header */
-/**
- ******************************************************************************
- * @file           : main.c
- * @brief          : Main program body
- ******************************************************************************
- * @attention
- *
- * Copyright (c) 2022 STMicroelectronics.
- * All rights reserved.
- *
- * This software is licensed under terms that can be found in the LICENSE file
- * in the root directory of this software component.
- * If no LICENSE file comes with this software, it is provided AS-IS.
- *
- ******************************************************************************
- */
+/*
+ DIY PLC
+ STM32F401CCU6
+ CPU ARM Cortex-M4 32Bit 84MHz
+ RAM 64Kb
+ Flash 256Kb
+
+ UART1 9600Bod 8N1 MODBUS ASCII SLAVE ADR1
+
+ C Проект
+ STM32CubeIDE Version: 1.10.1
+
+ FREERTOS использует TIM1 можно и другой.
+ //модель памяти heap_1 только создание задач
+ //удаление задач запретил vTaskDelete = DISABLE
+ //стек по умолчанию 128слов = 512байт. слово = 4 байта
+ //всего стек TOTAL_HEAP_SIZE = 3072 байта
+
+*/
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
@@ -22,6 +25,17 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include <stdint.h>
+#include <stdbool.h>
+#include <iso646.h>
+#include "GlobalVar.h"
+#include "MODBUS.h"
+
+struct GlobalVar GV = { 0 };
+struct DbMODBUS DbMODBUS = { 0 };
+
+#define TX_OFF() HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_RESET)
+#define TX_ON() HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_SET)
 
 /* USER CODE END Includes */
 
@@ -42,6 +56,8 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+UART_HandleTypeDef huart1;
+
 /* Definitions for defaultTask */
 osThreadId_t defaultTaskHandle;
 const osThreadAttr_t defaultTask_attributes = {
@@ -63,6 +79,7 @@ const osThreadAttr_t myTask02_attributes = {
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
+static void MX_USART1_UART_Init(void);
 void StartDefaultTask(void *argument);
 void StartTask02(void *argument);
 
@@ -72,6 +89,59 @@ void StartTask02(void *argument);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+uint8_t RxByte() {
+	uint8_t Buff[2];
+	HAL_UART_Receive(&huart1, Buff, 1, 0xFFFF); //block fun
+	return Buff[0];
+}
+
+void RxMessage(struct DbMODBUS *p) {
+	const uint8_t START_BYTE = 0x3A;
+	const uint8_t STOP_BYTE1 = 0x0D;
+	const uint8_t STOP_BYTE2 = 0x0A;
+	static uint8_t ByteCounter = 0;
+	uint8_t ReciveByte;
+	ReciveByte = RxByte();
+//�?шем стартовый байт в <i> сброса и приема пакета.
+	if ((ReciveByte == START_BYTE)
+			&& ((p->State == MODBUS_STATE_RESET)
+					|| (p->State == MODBUS_STATE_RX_ADU))) {
+		p->State = MODBUS_STATE_RX_ADU;
+		ByteCounter = 0;
+		p->Message[0] = ReciveByte;
+	}
+	//recive bytes
+	while (p->State == MODBUS_STATE_RX_ADU) {
+		ReciveByte = RxByte();
+		ByteCounter = ByteCounter + 1;
+		//check OWF
+		if (ByteCounter <= 30) {
+			p->Message[ByteCounter] = ReciveByte; //OK
+		} else {
+			p->State = MODBUS_STATE_RESET; //OWF
+		}
+		//find end bytes
+		if ((ReciveByte == STOP_BYTE2)
+				&& (p->Message[ByteCounter - 1] == STOP_BYTE1)) {
+			p->State = MODBUS_STATE_ADU_TO_PDU;
+			p->SizeMessage = ByteCounter + 1;
+			ByteCounter = 0;
+		}
+	}
+	return;
+}
+
+void TxMessage(struct DbMODBUS *p) {
+	//TX_ON();
+	//LED_ON();
+	HAL_UART_Transmit(&huart1, p->Message, p->SizeMessage, 0xFFFF);
+	p->State = MODBUS_STATE_RESET;
+	//TX_OFF();
+	//LED_OFF();
+	return;
+}
+
 
 /* USER CODE END 0 */
 
@@ -103,6 +173,7 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
 
   /* USER CODE END 2 */
@@ -203,6 +274,39 @@ void SystemClock_Config(void)
 }
 
 /**
+  * @brief USART1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART1_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART1_Init 0 */
+
+  /* USER CODE END USART1_Init 0 */
+
+  /* USER CODE BEGIN USART1_Init 1 */
+
+  /* USER CODE END USART1_Init 1 */
+  huart1.Instance = USART1;
+  huart1.Init.BaudRate = 9600;
+  huart1.Init.WordLength = UART_WORDLENGTH_8B;
+  huart1.Init.StopBits = UART_STOPBITS_1;
+  huart1.Init.Parity = UART_PARITY_NONE;
+  huart1.Init.Mode = UART_MODE_TX_RX;
+  huart1.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart1.Init.OverSampling = UART_OVERSAMPLING_16;
+  if (HAL_UART_Init(&huart1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART1_Init 2 */
+
+  /* USER CODE END USART1_Init 2 */
+
+}
+
+/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
@@ -251,6 +355,8 @@ void StartDefaultTask(void *argument)
 	/* Infinite loop */
 	for (;;)
 	{
+		osDelay(1); //Delay for MODBUS ASCII
+		GV.MW[0] = (uint16_t) (HAL_GetTick() / 1000);
 		if (KEY_BUILTIN_STATE())
 		{
 			LED_BUILTIN_ON();
@@ -279,7 +385,15 @@ void StartTask02(void *argument)
 	/* Infinite loop */
 	for (;;)
 	{
-		osDelay(1);
+		//osDelay(1);
+		//MODBUS ASCII;
+		RxMessage(&DbMODBUS);
+		Fb_MODBUS_ASCII_SLAVE_ADU_TO_PDU(&DbMODBUS);
+		//taskENTER_CRITICAL();
+		Fb_MODBUS_SLAVE_PROCESSING_PDU(&DbMODBUS, &GV);
+		//taskEXIT_CRITICAL();
+		Fb_MODBUS_ASCII_SLAVE_PDU_TO_ADU(&DbMODBUS);
+		TxMessage(&DbMODBUS);
 	}
   /* USER CODE END StartTask02 */
 }
