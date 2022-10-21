@@ -1,0 +1,79 @@
+Перечень элементов www.odotautomation.com
+
+Поставщик1:
+https://www.consys.ru/
+Поставщик2:
+https://modbus.pro/
+Поставщик3:
+https://russian.alibaba.com/product-detail/16-channel-digital-input-24VDC-Sink-1600343830699.html
+
+Цены 2022г.
+PROFINET ADAPTER    ODOT CN-8032    22050,6 руб
+16DI 24VDC SINK     ODOT CT-121F    6820    руб
+16DO 24VDC SOURCE   ODOT CT-222F    7678    руб
+8AI 4-20mA 15bit    ODOT CT-3238    14828   руб
+4AO 4-20mA 16bit    ODOT CT-4234    13596   руб
+TERMINAL MODULE     ODOT CT-5801    3080    руб
+
+Решение модули удаленного ввода вывода для SIEMENS.
+
+Наименование   : ПЛК.
+Заказной номер : ODOT CP-9131
+Количество     : 1шт.
+Примечание     : https://www.odotautomation.com/downloads_catalog/catalogs/
+
+Наименование   : Адаптер modbus tcp.
+Заказной номер : ODOT CN-8031
+Количество     : 1шт.
+Примечание     : https://www.odotautomation.com/odot-cn-8031-modbus-tcp-network-adapter-product/
+
+Наименование   : Адаптер профинет.
+Заказной номер : ODOT CN-8032-L
+Количество     : 1шт.
+Примечание     : https://www.odotautomation.com/odot-cn-8032-l-profinet-network-adapter-product/
+
+Наименование   : Адаптер профинет (быстрый).
+Заказной номер : ODOT CN-8032
+Количество     : 1шт.
+Примечание     : https://www.odotautomation.com/odot-cn-8032-profinet-network-adapter-product/
+
+Наименование   : Адаптер профибас.
+Заказной номер : ODOT CN-8012
+Количество     : 1шт.
+Примечание     : https://www.odotautomation.com/odot-cn-8012-profibus-dp-network-adapter-product/
+
+Наименование   : Модуль расширения 8AI 4-20mA 15bit.
+Заказной номер : ODOT CT-3238
+Количество     : 1шт.
+Примечание     : https://www.odotautomation.com/ct-3238-8-channel-analog-input-product/
+
+Наименование   : Модуль расширения 4AO 4-20mA 16bit.
+Заказной номер : ODOT CT-4234
+Количество     : 1шт.
+Примечание     : https://www.odotautomation.com/ct-4234-4-channel-analog-output-product/
+
+Наименование   : Модуль расширения 16DI 24VDC SINK.
+Заказной номер : ODOT CT-121F
+Количество     : 1шт.
+Примечание     : https://www.odotautomation.com/ct-121f16-channel-digital-input24vdc-sink-type-product/
+
+Наименование   : Модуль расширения 16DO 24VDC SOURCE.
+Заказной номер : ODOT CT-222F
+Количество     : 1шт.
+Примечание     : https://www.odotautomation.com/ct-222f16-channel-digital-output24vdcsource-type-product/
+
+Наименование   : Терминальный модуль.
+Заказной номер : ODOT CT-5801
+Количество     : 1шт.
+Примечание     : https://www.odotautomation.com/ct-5800-terminal-module-product/
+
+Наименование   : Модуль питания.
+Заказной номер : ODOT CT-7221
+Количество     : 1шт.
+Примечание     : https://www.odotautomation.com/ct-7221-power-supply-extension-module-5v2a-product/
+
+
+
+
+
+
