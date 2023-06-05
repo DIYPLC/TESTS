@@ -609,6 +609,77 @@ init()
 while(True):
     loop()
 
+"""
+***********************************************************************************
+Упрощенная архитектура программного ПЛК.
+ODOT CN-8031 Remote IO MODBUS TCP SLAVE
+ |
+MODBUS_TCP_MASTER
+ |
+SOFT_PLC.py
+ |
+MODBUS_TCP_SLAVE
+ |
+SCADA WinCC MODBUS_TCP_MASTER
+
+Основной код управления программного ПЛК на языке си.
+Связь с аппаратными ресурсами на языке пайтон.
+SOFT_PLC.py <-> SOFT_PLC.c <-+-> Task_1.c <-> PIDcontrol.c
+                             |
+                             +-> Task_2.c <-> Blink.c
+
+Вариант архитектуры где можно проще добиться надежности и синхронизации.
+Он менее логичный и вероятно более медленный.
+А еще при данной архитектуре приложение можно выполнять одновременно на четырех компьютерах по сети не знаю только зачем.
+MODBUS_TCP_SLAVE.py (приложение фоновое 1)
+ |
+ +-GUI.pyw (приложение графическое 1)
+ |
+ +-MODBUS_TCP_MASTER_IO1.py (приложение фоновое 2)
+ |
+ +-SOFT_PLC.py (приложение фоновое 3)
+
+Основной модуль (Можно заменить на InSat MODBUS OPC).
+MODBUS_TCP_SLAVE.py
+ |
+MODBUS_TCP_SLAVE
+
+Модуль связи с удаленным вводом выводом.
+MODBUS_TCP_MASTER_IO1.py
+ |
+ +-MODBUS_TCP_MASTER ->- MODBUS_TCP_SLAVE.py
+ |
+ +-MODBUS_TCP_MASTER -<- ODOT CN-8031 Remote IO MODBUS TCP SLAVE
+
+Модуль программного ПЛК.
+SOFT_PLC.py
+ |
+ +-MODBUS_TCP_MASTER ->- MODBUS_TCP_SLAVE.py
+ |
+ +-SOFT_PLC.cpp -<- Task_1.c -<- PIDcontrol.c
+
+Модуль управления с графическим интерфейсом управления.
+GUI.py
+ |
+ +-MODBUS_TCP_MASTER ->- MODBUS_TCP_SLAVE.py
+ |
+ +-tkinter -<- GUI
+
+Карта регистров MODBUS.
+MODBUS TCP SLAVE
+IP ADDRESS = 127.0.0.1
+TCP PORT = 502
+MODBUS ADDRESS = 1
+MODBUS function 3 read_holding_register
+MODBUS function 16 write multiple holding registers
+HOLDING REGISTER uint16 default data type
+HR0 uint16 Reset 0/1 Флаг первого скана.
+HR1 uint32 Ts_ms Время скана
+HR2 uint32 Ts_ms Время скана
+HR3 uint32 Ts_ms millis()
+HR4 uint32 Ts_ms millis()
+"""
+
 #  +---------+
 #  | GNU GPL |
 #  +---------+
