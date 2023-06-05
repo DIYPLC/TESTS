@@ -665,6 +665,20 @@ GUI.py
  |
  +-tkinter -<- GUI
 
+Модуль связи с ПЛК SIMATIC S7 (опция).
+PLC_S7.py
+ |
+ +-MODBUS_TCP_MASTER ->- MODBUS_TCP_SLAVE.py
+ |
+ +-snap7 -<- PLC S7-300
+
+Модуль связи с СУБД MS SQL Server (опция).
+MS_SQL.py
+ |
+ +-MODBUS_TCP_MASTER -<- MODBUS_TCP_SLAVE.py
+ |
+ +-pyodbc ->- MS SQL Server
+
 Карта регистров MODBUS.
 MODBUS TCP SLAVE
 IP ADDRESS = 127.0.0.1
