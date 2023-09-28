@@ -1,16 +1,29 @@
-#define BAUD 45450     //  DELAY_TBIT = 44 // Working on Arduino @16MHz
+// Проект под ардуино уно с нормальными исходниками
+// https://github.com/tuenhidiy/Arduino_Profibus_DP
+// https://www.instructables.com/INTEGRATING-ARDUINO-INTO-PLC-SYSTEM/
+// https://www.youtube.com/watch?v=TC1FKypClzU
+// https://www.youtube.com/watch?v=G7TGFvfsMPU
+// Умная книжка по профибасу
+// https://www.felser.ch/profibus-manual/d-sub_stecker.html
+// Реализация для PB DP SL MSP430F2252
+// https://www.mikrocontroller.net/topic/106174
+
+#define Profibus_out_register PLC_IB //Байты IB передаем S7-300.
+#define Profibus_in_register PLC_QB  //Байты QB принимаем от S7-300.
+
+#define BAUD 45450 //  DELAY_TBIT = 44 // Working on Arduino @16MHz
+#define DELAY_TBIT 44 // This is timer delay for 1 TBIT
 
 #define VCC_PIN     8
 #define GND_PIN     9
 #define LED_PIN     10
-#define TOUCH_PIN   11
+#define TOUCH_PIN   11 // Передаем состояние входа D11 в IB0 S7-300;
+
+#define TX_ENABLE_PIN   2   // PORTD2 = "D2" This pin toggles the MAX485 IC from Transmit to Recieve
+#define SLAVE_ADDRESS   6   // PROFIBUS DP SLAVE ADDRESS
+#define LED_ERROR_PIN   13  // PB5 D13 Встроенный светодиод горит если PLC в STOP и светодиод не горит если PLC в RUN, но на ошибки связи не реагирует.
 
 unsigned long samplingtime = 0;
-
-#define DELAY_TBIT      44  // This is timer delay for 1 TBIT
-#define TX_ENABLE_PIN   2   // This pin toggles the MAX485 IC from Transmit to Recieve
-#define SLAVE_ADDRESS   6   // This is the address of this slave device
-#define LED_ERROR_PIN   13  // This is the built in led on pin 13 Arduino Uno - PB5
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -18,7 +31,7 @@ unsigned long samplingtime = 0;
 #define LED_ERROR_OFF   PORTB &= ~(1<<5);
 
 #define TX_ENABLE_ON    PORTD |= (1<<TX_ENABLE_PIN);
-#define TX_ENABLE_OFF   PORTD &= ~(1<<TX_ENABLE_PIN); 
+#define TX_ENABLE_OFF   PORTD &= ~(1<<TX_ENABLE_PIN);
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 #define TIMER1_RUN TCCR1B |= (1 << CS11);
 #define TIMER1_STOP TCCR1B &= ~(1 << CS11);
@@ -199,8 +212,8 @@ unsigned long samplingtime = 0;
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 #define MAX_BUFFER_SIZE       32
 
-#define INPUT_DATA_SIZE       16    // Number of bytes coming from the master
-#define OUTPUT_DATA_SIZE      16    // Number of bytes going to master
+#define INPUT_DATA_SIZE       16    // Количество байт QB принимаемых от S7-300.
+#define OUTPUT_DATA_SIZE      16    // Количество байт IB передаваемых в S7-300.
 #define VENDOR_DATA_SIZE      0     // Number of bytes for manufacturer-specific data
 #define EXT_DIAG_DATA_SIZE    0     // Number of bytes for extended diagnostics
 
@@ -248,40 +261,48 @@ unsigned char Vendor_Data_size;   // Number of read-in manufacturer-specific byt
 
 void setup() {
 
-  pinMode(LED_ERROR_PIN,OUTPUT); // CPU RUN/STOP LED
-  pinMode(TX_ENABLE_PIN,OUTPUT); // TX enable output
+  pinMode(LED_ERROR_PIN, OUTPUT); // CPU RUN/STOP LED
+  pinMode(TX_ENABLE_PIN, OUTPUT); // TX enable output
   pinMode(VCC_PIN, OUTPUT);
   pinMode(GND_PIN, OUTPUT);
   pinMode(LED_PIN, OUTPUT);
-  pinMode(TOUCH_PIN, INPUT);
-  digitalWrite(VCC_PIN,HIGH); // Set HIGH at VCC pin Touch Button
-  digitalWrite(GND_PIN,LOW);  // Set LOW at GND pin Touch Button
+  pinMode(TOUCH_PIN, INPUT); //D11
+  digitalWrite(VCC_PIN, HIGH); // Set HIGH at VCC pin Touch Button
+  digitalWrite(GND_PIN, LOW); // Set LOW at GND pin Touch Button
   init_Profibus();
   TX_ENABLE_OFF; // Disable Transmit (Switch to Recieve)
+
 }
 
 void loop() {
+
+  // Тест приема и передачи данных по сети.
+  PLC_IB[1] = PLC_QB[1];
+
+  // Циклически каждые 10 мс ?
   if ( (unsigned long) (micros() - samplingtime) > 10  )
   {
+    // Передаем состояние входа D11 в IB0 S7-300;
     if (digitalRead(TOUCH_PIN) == LOW)
     {
-    Profibus_out_register[0]=0X01;       
+      Profibus_out_register[0] = 0X01;
     }
     else
-    {   
-    Profibus_out_register[0]=0X00;
-    
-    }   
-    samplingtime = micros();
-  }       
+    {
+      Profibus_out_register[0] = 0X00;
 
-  if(new_data==1)
-  {
-      Profibus_out_register[0] +=new_data;
-      new_data=0;
-      Profibus_out_register[0] = Profibus_in_register[0];     
     }
-  digitalWrite(LED_PIN, bitRead(Profibus_in_register[0],0)==0?1:0); // Correct the led state on Touch button
+    samplingtime = micros();
+  }
+
+  if (new_data == 1)
+  {
+    Profibus_out_register[0] += new_data;
+    new_data = 0;
+    Profibus_out_register[0] = Profibus_in_register[0];
+  }
+
+  digitalWrite(LED_PIN, bitRead(Profibus_in_register[0], 0) == 0 ? 1 : 0); // Correct the led state on Touch button
 }
 
 void init_Profibus (void)
@@ -298,35 +319,35 @@ void init_Profibus (void)
   slave_addr = SLAVE_ADDRESS;  // <<< Temporary address assignment.
   // TODO: Read address from EEPROM or switches.
   // Illegal addresses are forced to DEFAULT (126). Set Address can be used to change it.
-  if((slave_addr == 0) || (slave_addr > 126))
+  if ((slave_addr == 0) || (slave_addr > 126))
     slave_addr = DEFAULT_ADD;
 
   // Clear data
-  #if (OUTPUT_DATA_SIZE > 0)
+#if (OUTPUT_DATA_SIZE > 0)
   for (cnt = 0; cnt < OUTPUT_DATA_SIZE; cnt++)
   {
     Profibus_out_register[cnt] = 0xFF;
   }
-  #endif
-  #if (INPUT_DATA_SIZE > 0)
+#endif
+#if (INPUT_DATA_SIZE > 0)
   for (cnt = 0; cnt < INPUT_DATA_SIZE; cnt++)
   {
     Profibus_in_register[cnt] = 0x00;
   }
-  #endif
-  #if (VENDOR_DATA_SIZE > 0)
+#endif
+#if (VENDOR_DATA_SIZE > 0)
   for (cnt = 0; cnt < VENDOR_DATA_SIZE; cnt++)
   {
     Vendor_Data[cnt] = 0x00;
   }
-  #endif
-  #if (DIAG_DATA_SIZE > 0)
+#endif
+#if (DIAG_DATA_SIZE > 0)
   for (cnt = 0; cnt < DIAG_DATA_SIZE; cnt++)
   {
     Diag_Data[cnt] = 0x00;
   }
-  #endif
-  new_data=0;
+#endif
+  new_data = 0;
   noInterrupts();           // Disable all interrupts
   init_UART0(BAUD);
   TCCR1A = 0;
@@ -334,7 +355,7 @@ void init_Profibus (void)
   TCNT1  = 0;
   OCR1A = TIMEOUT_MAX_SYN_TIME;
   TCCR1B |= (1 << WGM12);   // CTC mode
-  TCCR1B |= (1 << CS11);    // Prescaler    
+  TCCR1B |= (1 << CS11);    // Prescaler
   TIMSK1 |= (1 << OCIE1A);  // Enable timer compare interrupt
   interrupts();             // Enable all interrupts
 }
@@ -356,61 +377,61 @@ void profibus_RX (void)
 
   process_data = false;
   telegramm_type = uart_buffer[0];
-  
+
   switch (telegramm_type)
   {
     case SD1: // Telegram without data, max. 6 bytes
 
-        if (uart_byte_cnt != 6) break;
+      if (uart_byte_cnt != 6) break;
 
-        destination_add = uart_buffer[1];
-        source_add      = uart_buffer[2];
-        function_code   = uart_buffer[3];
-        FCS_data        = uart_buffer[4];
+      destination_add = uart_buffer[1];
+      source_add      = uart_buffer[2];
+      function_code   = uart_buffer[3];
+      FCS_data        = uart_buffer[4];
 
-        if (addmatch(destination_add)       == false) break;
-        if (checksum(&uart_buffer[1], 3) != FCS_data) break;
+      if (addmatch(destination_add)       == false) break;
+      if (checksum(&uart_buffer[1], 3) != FCS_data) break;
 
-        process_data = true;
+      process_data = true;
 
-        break;
+      break;
 
     case SD2: // Telegram with variable data length
 
-        if (uart_byte_cnt != uart_buffer[1] + 6) break;
+      if (uart_byte_cnt != uart_buffer[1] + 6) break;
 
-        PDU_size        = uart_buffer[1];
-        destination_add = uart_buffer[4];
-        source_add      = uart_buffer[5];
-        function_code   = uart_buffer[6];
-        FCS_data        = uart_buffer[PDU_size + 4];
+      PDU_size        = uart_buffer[1];
+      destination_add = uart_buffer[4];
+      source_add      = uart_buffer[5];
+      function_code   = uart_buffer[6];
+      FCS_data        = uart_buffer[PDU_size + 4];
 
-        if (addmatch(destination_add)              == false) break;
-        if (checksum(&uart_buffer[4], PDU_size) != FCS_data) break;
+      if (addmatch(destination_add)              == false) break;
+      if (checksum(&uart_buffer[4], PDU_size) != FCS_data) break;
 
-        process_data = true;
+      process_data = true;
 
-        break;
+      break;
 
     case SD3: // Telegram with 5 bytes data, max. 11 bytes
-        if (uart_byte_cnt != 11) break;
-        PDU_size        = 8;              // DA + SA + FC + PDU
-        destination_add = uart_buffer[1];
-        source_add      = uart_buffer[2];
-        function_code   = uart_buffer[3];
-        FCS_data        = uart_buffer[9];
-        if (addmatch(destination_add)       == false) break;
-        if (checksum(&uart_buffer[1], 8) != FCS_data) break;
-        process_data = true;
-        break;
+      if (uart_byte_cnt != 11) break;
+      PDU_size        = 8;              // DA + SA + FC + PDU
+      destination_add = uart_buffer[1];
+      source_add      = uart_buffer[2];
+      function_code   = uart_buffer[3];
+      FCS_data        = uart_buffer[9];
+      if (addmatch(destination_add)       == false) break;
+      if (checksum(&uart_buffer[1], 8) != FCS_data) break;
+      process_data = true;
+      break;
     case SD4: // Token with 3 Byte Data
-        if (uart_byte_cnt != 3) break;
-        destination_add = uart_buffer[1];
-        source_add      = uart_buffer[2];
-        if (addmatch(destination_add)       == false) break;
-        break;
+      if (uart_byte_cnt != 3) break;
+      destination_add = uart_buffer[1];
+      source_add      = uart_buffer[2];
+      if (addmatch(destination_add)       == false) break;
+      break;
     default:
-        break;
+      break;
   }
 
   // Only evaluate if data is OK
@@ -426,228 +447,228 @@ void profibus_RX (void)
       // 2) SSAP 62 -> DSAP 61 (Set Parameters Request)
       // 3) SSAP 62 -> DSAP 62 (Check Config Request)
       // 4) SSAP 62 -> DSAP 60 (Get Diagnostics Request)
-      // 5) Data Exchange Request (normal cycle)      
+      // 5) Data Exchange Request (normal cycle)
       switch (DSAP_data)
       {
         case SAP_SET_SLAVE_ADR: // Set Slave Address (SSAP 62 -> DSAP 55)
-            // Only possible in the "Wait Parameter" (WPRM) state
-            slave_addr = uart_buffer[9];
-            profibus_send_CMD(SC, 0, SAP_OFFSET, &uart_buffer[0], 0);
-            break;
+          // Only possible in the "Wait Parameter" (WPRM) state
+          slave_addr = uart_buffer[9];
+          profibus_send_CMD(SC, 0, SAP_OFFSET, &uart_buffer[0], 0);
+          break;
         case SAP_GLOBAL_CONTROL: // Global Control Request (SSAP 62 -> DSAP 58)
-            // If "Clear Data" high, then PLC CPU on "Stop"
-            if (uart_buffer[9] & CLEAR_DATA_)
-            {
-              LED_ERROR_ON;  // Status "PLC not ready"
-            }
-            else
-            {
-              LED_ERROR_OFF; // Status "PLC OK"
-            }
+          // If "Clear Data" high, then PLC CPU on "Stop"
+          if (uart_buffer[9] & CLEAR_DATA_)
+          {
+            LED_ERROR_ON;  // Status "PLC not ready"
+          }
+          else
+          {
+            LED_ERROR_OFF; // Status "PLC OK"
+          }
 
-            // Calculate group
-            for (cnt = 0;  uart_buffer[10] != 0; cnt++) uart_buffer[10]>>=1;
+          // Calculate group
+          for (cnt = 0;  uart_buffer[10] != 0; cnt++) uart_buffer[10] >>= 1;
 
-            // If command is for us
-            if (cnt == group)
+          // If command is for us
+          if (cnt == group)
+          {
+            if (uart_buffer[9] & UNFREEZE_)
             {
-              if (uart_buffer[9] & UNFREEZE_)
-              {
-                // Delete FREEZE state
-              }
-              else if (uart_buffer[9] & UNSYNC_)
-              {
-                // Delete SYNC state
-              }
-              else if (uart_buffer[9] & FREEZE_)
-              {
-                // Do not read inputs again
-              }
-              else if (uart_buffer[9] & SYNC_)
-              {
-                // Set outputs only with SYNC command
-              }
+              // Delete FREEZE state
             }
+            else if (uart_buffer[9] & UNSYNC_)
+            {
+              // Delete SYNC state
+            }
+            else if (uart_buffer[9] & FREEZE_)
+            {
+              // Do not read inputs again
+            }
+            else if (uart_buffer[9] & SYNC_)
+            {
+              // Set outputs only with SYNC command
+            }
+          }
 
-            break;
+          break;
 
         case SAP_SLAVE_DIAGNOSIS: // Get Diagnostics Request (SSAP 62 -> DSAP 60)
-           
-              // After receiving the diagnosis, the DP slave changes state
-              // "Power on Reset" (POR) in the state "Wait Parameter" (WPRM)
-              // At the end of initialization ("Data Exchange" state (DXCHG))
-              // the master sends a Diagnostics Request a second time to check correct configuration
-            if (function_code == (REQUEST_ + FCB_ + SRD_HIGH))
-            {
-              uart_buffer[7]  = SSAP_data;                    // Target SAP Master
-              uart_buffer[8]  = DSAP_data;                    // Source SAP Slave
-              uart_buffer[9]  = STATION_NOT_READY_;           // Status 1
-              uart_buffer[10] = STATUS_2_DEFAULT + PRM_REQ_;  // Status 2
-              uart_buffer[11] = DIAG_SIZE_OK;                 // Status 3
-              uart_buffer[12] = MASTER_ADD_DEFAULT;           // Address Master
-              uart_buffer[13] = IDENT_HIGH_BYTE;              // Ident high
-              uart_buffer[14] = IDENT_LOW_BYTE;               // Ident low
-              #if (EXT_DIAG_DATA_SIZE > 0)
-              uart_buffer[15] = EXT_DIAG_DATA_SIZE;           // Device-related diagnosis (number of bytes)
-              for (cnt = 0; cnt < EXT_DIAG_DATA_SIZE; cnt++)
-              {
-                uart_buffer[16+cnt] = Diag_Data[cnt];
-              }
-              #endif
-              profibus_send_CMD(SD2, DATA_LOW, SAP_OFFSET, &uart_buffer[7], 8 + EXT_DIAG_DATA_SIZE);
-            }
-            else if (function_code == (REQUEST_ + FCV_ + SRD_HIGH) ||
-                     function_code == (REQUEST_ + FCV_ + FCB_ + SRD_HIGH))
-            {
-              // Diagnostic request to check data from Check Config Request
-              uart_buffer[7]  = SSAP_data;                    // Target SAP Master
-              uart_buffer[8]  = DSAP_data;                    // Source SAP slave
-              if (diagnose_status == true)
-                uart_buffer[9]  = EXT_DIAG_;                  // Status 1
-              else
-                uart_buffer[9]  = 0x00;
-              uart_buffer[10] = STATUS_2_DEFAULT;             // Status 2
-              uart_buffer[11] = DIAG_SIZE_OK;                 // Status 3
-              uart_buffer[12] = master_addr - SAP_OFFSET;     // Address Master
-              uart_buffer[13] = IDENT_HIGH_BYTE;              // Ident high
-              uart_buffer[14] = IDENT_LOW_BYTE;               // Ident low
-              #if (EXT_DIAG_DATA_SIZE > 0)
-              uart_buffer[15] = EXT_DIAG_DATA_SIZE;           // Device-related diagnosis (number of bytes)
-              for (cnt = 0; cnt < EXT_DIAG_DATA_SIZE; cnt++)
-              {
-                uart_buffer[16+cnt] = Diag_Data[cnt];
-              }
-              #endif
 
-              profibus_send_CMD(SD2, DATA_LOW, SAP_OFFSET, &uart_buffer[7], 8 + EXT_DIAG_DATA_SIZE);
+          // After receiving the diagnosis, the DP slave changes state
+          // "Power on Reset" (POR) in the state "Wait Parameter" (WPRM)
+          // At the end of initialization ("Data Exchange" state (DXCHG))
+          // the master sends a Diagnostics Request a second time to check correct configuration
+          if (function_code == (REQUEST_ + FCB_ + SRD_HIGH))
+          {
+            uart_buffer[7]  = SSAP_data;                    // Target SAP Master
+            uart_buffer[8]  = DSAP_data;                    // Source SAP Slave
+            uart_buffer[9]  = STATION_NOT_READY_;           // Status 1
+            uart_buffer[10] = STATUS_2_DEFAULT + PRM_REQ_;  // Status 2
+            uart_buffer[11] = DIAG_SIZE_OK;                 // Status 3
+            uart_buffer[12] = MASTER_ADD_DEFAULT;           // Address Master
+            uart_buffer[13] = IDENT_HIGH_BYTE;              // Ident high
+            uart_buffer[14] = IDENT_LOW_BYTE;               // Ident low
+#if (EXT_DIAG_DATA_SIZE > 0)
+            uart_buffer[15] = EXT_DIAG_DATA_SIZE;           // Device-related diagnosis (number of bytes)
+            for (cnt = 0; cnt < EXT_DIAG_DATA_SIZE; cnt++)
+            {
+              uart_buffer[16 + cnt] = Diag_Data[cnt];
             }
-            
-            break;
+#endif
+            profibus_send_CMD(SD2, DATA_LOW, SAP_OFFSET, &uart_buffer[7], 8 + EXT_DIAG_DATA_SIZE);
+          }
+          else if (function_code == (REQUEST_ + FCV_ + SRD_HIGH) ||
+                   function_code == (REQUEST_ + FCV_ + FCB_ + SRD_HIGH))
+          {
+            // Diagnostic request to check data from Check Config Request
+            uart_buffer[7]  = SSAP_data;                    // Target SAP Master
+            uart_buffer[8]  = DSAP_data;                    // Source SAP slave
+            if (diagnose_status == true)
+              uart_buffer[9]  = EXT_DIAG_;                  // Status 1
+            else
+              uart_buffer[9]  = 0x00;
+            uart_buffer[10] = STATUS_2_DEFAULT;             // Status 2
+            uart_buffer[11] = DIAG_SIZE_OK;                 // Status 3
+            uart_buffer[12] = master_addr - SAP_OFFSET;     // Address Master
+            uart_buffer[13] = IDENT_HIGH_BYTE;              // Ident high
+            uart_buffer[14] = IDENT_LOW_BYTE;               // Ident low
+#if (EXT_DIAG_DATA_SIZE > 0)
+            uart_buffer[15] = EXT_DIAG_DATA_SIZE;           // Device-related diagnosis (number of bytes)
+            for (cnt = 0; cnt < EXT_DIAG_DATA_SIZE; cnt++)
+            {
+              uart_buffer[16 + cnt] = Diag_Data[cnt];
+            }
+#endif
+
+            profibus_send_CMD(SD2, DATA_LOW, SAP_OFFSET, &uart_buffer[7], 8 + EXT_DIAG_DATA_SIZE);
+          }
+
+          break;
 
         case SAP_SET_PRM: // Set Parameters Request (SSAP 62 -> DSAP 61)
 
-            // After receiving the parameters, the DP slave changes state
-            // "Wait Parameter" (WPRM) in the state "Wait Configuration" (WCFG)
+          // After receiving the parameters, the DP slave changes state
+          // "Wait Parameter" (WPRM) in the state "Wait Configuration" (WCFG)
 
-            // Only accept data for our device
-            if ((uart_buffer[13] == IDENT_HIGH_BYTE) && (uart_buffer[14] == IDENT_LOW_BYTE))
-            {
-              // User Parameter Size = Length - DA, SA, FC, DSAP, SSAP, 7 Parameter Bytes
-              Vendor_Data_size = PDU_size - 12;
-              // Read in user parameters
-              #if (VENDOR_DATA_SIZE > 0)
-              for (cnt = 0; cnt < Vendor_Data_size; cnt++) Vendor_Data[cnt] = uart_buffer[16+cnt];
-              #endif
-              // Read group
-              for (group = 0; uart_buffer[15] != 0; group++) uart_buffer[15]>>=1;
-              profibus_send_CMD(SC, 0, SAP_OFFSET, &uart_buffer[0], 0);
-            }
-            break;
+          // Only accept data for our device
+          if ((uart_buffer[13] == IDENT_HIGH_BYTE) && (uart_buffer[14] == IDENT_LOW_BYTE))
+          {
+            // User Parameter Size = Length - DA, SA, FC, DSAP, SSAP, 7 Parameter Bytes
+            Vendor_Data_size = PDU_size - 12;
+            // Read in user parameters
+#if (VENDOR_DATA_SIZE > 0)
+            for (cnt = 0; cnt < Vendor_Data_size; cnt++) Vendor_Data[cnt] = uart_buffer[16 + cnt];
+#endif
+            // Read group
+            for (group = 0; uart_buffer[15] != 0; group++) uart_buffer[15] >>= 1;
+            profibus_send_CMD(SC, 0, SAP_OFFSET, &uart_buffer[0], 0);
+          }
+          break;
 
         case SAP_CHK_CFG: // Check Config Request (SSAP 62 -> DSAP 62)
-           
-        // After receiving the configuration, the DP slave changes state
-        // "Wait Configuration" (WCFG) in the "Data Exchange" state (DXCHG)
-        // IO configuration:
-        // Compact format for max. 16/32 bytes IO
-        // special format for max. 64/132 bytes IO
-        // evaluate several bytes depending on the PDU data size
-        // LE / LEr - (DA + SA + FC + DSAP + SSAP) = number of config bytes
-      Output_Data_size=0;
-      Input_Data_size=0;
-            for (cnt = 0; cnt < uart_buffer[1] - 5; cnt++)
+
+          // After receiving the configuration, the DP slave changes state
+          // "Wait Configuration" (WCFG) in the "Data Exchange" state (DXCHG)
+          // IO configuration:
+          // Compact format for max. 16/32 bytes IO
+          // special format for max. 64/132 bytes IO
+          // evaluate several bytes depending on the PDU data size
+          // LE / LEr - (DA + SA + FC + DSAP + SSAP) = number of config bytes
+          Output_Data_size = 0;
+          Input_Data_size = 0;
+          for (cnt = 0; cnt < uart_buffer[1] - 5; cnt++)
+          {
+            switch (uart_buffer[9 + cnt] & CFG_DIRECTION_)
             {
-              switch (uart_buffer[9+cnt] & CFG_DIRECTION_)
-              {
-                case CFG_INPUT:
-                    Input_Data_size += (uart_buffer[9+cnt] & CFG_BYTE_CNT_) + 1;
-                    if (uart_buffer[9+cnt] & CFG_WIDTH_ & CFG_WORD)
-                      Input_Data_size += Input_Data_size*2;
+              case CFG_INPUT:
+                Input_Data_size += (uart_buffer[9 + cnt] & CFG_BYTE_CNT_) + 1;
+                if (uart_buffer[9 + cnt] & CFG_WIDTH_ & CFG_WORD)
+                  Input_Data_size += Input_Data_size * 2;
+                break;
+
+              case CFG_OUTPUT:
+                Output_Data_size += (uart_buffer[9 + cnt] & CFG_BYTE_CNT_) + 1;
+                if (uart_buffer[9 + cnt] & CFG_WIDTH_ & CFG_WORD)
+                  Output_Data_size += Output_Data_size * 2;
+                break;
+
+              case CFG_INPUT_OUTPUT:
+                Input_Data_size += (uart_buffer[9 + cnt] & CFG_BYTE_CNT_) + 1;
+                Output_Data_size += (uart_buffer[9 + cnt] & CFG_BYTE_CNT_) + 1;
+                if (uart_buffer[9 + cnt] & CFG_WIDTH_ & CFG_WORD)
+                {
+                  Input_Data_size += Input_Data_size * 2;
+                  Output_Data_size += Output_Data_size * 2;
+                }
+                break;
+
+              case CFG_SPECIAL:
+                // Special format
+                // Manufacturer-specific bytes available?
+                if (uart_buffer[9 + cnt] & CFG_SP_VENDOR_CNT_)
+                {
+                  // Save the number of manufacturer data
+                  Vendor_Data_size = uart_buffer[9 + cnt] & CFG_SP_VENDOR_CNT_;
+                  // Deduct number of total
+                  uart_buffer[1] -= Vendor_Data_size;
+                }
+
+                // I/O Data
+                switch (uart_buffer[9 + cnt] & CFG_SP_DIRECTION_)
+                {
+                  case CFG_SP_VOID:
+                    // Empty data field
                     break;
 
-                case CFG_OUTPUT:
-                    Output_Data_size += (uart_buffer[9+cnt] & CFG_BYTE_CNT_) + 1;
-                    if (uart_buffer[9+cnt] & CFG_WIDTH_ & CFG_WORD)
-                      Output_Data_size += Output_Data_size*2;
+                  case CFG_SP_INPUT:
+                    Input_Data_size += (uart_buffer[10 + cnt] & CFG_SP_BYTE_CNT_) + 1;
+                    if (uart_buffer[10 + cnt] & CFG_WIDTH_ & CFG_WORD)
+                      Input_Data_size += Input_Data_size * 2;
+                    cnt++;  // We already have this byte
                     break;
 
-                case CFG_INPUT_OUTPUT:
-                    Input_Data_size += (uart_buffer[9+cnt] & CFG_BYTE_CNT_) + 1;
-                    Output_Data_size += (uart_buffer[9+cnt] & CFG_BYTE_CNT_) + 1;
-                    if (uart_buffer[9+cnt] & CFG_WIDTH_ & CFG_WORD)
-                    {
-                      Input_Data_size += Input_Data_size*2;
-                      Output_Data_size += Output_Data_size*2;
-                    }
+                  case CFG_SP_OUTPUT:
+                    Output_Data_size += (uart_buffer[10 + cnt] & CFG_SP_BYTE_CNT_) + 1;
+                    if (uart_buffer[10 + cnt] & CFG_WIDTH_ & CFG_WORD)
+                      Output_Data_size += Output_Data_size * 2;
+                    cnt++;  //We already have this byte
                     break;
 
-                case CFG_SPECIAL:
-                    // Special format
-                    // Manufacturer-specific bytes available?
-                    if (uart_buffer[9+cnt] & CFG_SP_VENDOR_CNT_)
-                    {
-                      // Save the number of manufacturer data
-                      Vendor_Data_size = uart_buffer[9+cnt] & CFG_SP_VENDOR_CNT_;
-                      // Deduct number of total
-                      uart_buffer[1] -= Vendor_Data_size;
-                    }
-
-                    // I/O Data
-                    switch (uart_buffer[9+cnt] & CFG_SP_DIRECTION_)
-                    {
-                      case CFG_SP_VOID:
-                          // Empty data field
-                          break;
-
-                      case CFG_SP_INPUT:
-                          Input_Data_size += (uart_buffer[10+cnt] & CFG_SP_BYTE_CNT_) + 1;
-                          if (uart_buffer[10+cnt] & CFG_WIDTH_ & CFG_WORD)
-                            Input_Data_size += Input_Data_size*2;
-                          cnt++;  // We already have this byte
-                          break;
-
-                      case CFG_SP_OUTPUT:
-                          Output_Data_size += (uart_buffer[10+cnt] & CFG_SP_BYTE_CNT_) + 1;
-                          if (uart_buffer[10+cnt] & CFG_WIDTH_ & CFG_WORD)
-                            Output_Data_size += Output_Data_size*2;
-                          cnt++;  //We already have this byte
-                          break;
-
-                      case CFG_SP_INPUT_OPTPUT:
-                          // Erst Ausgang...
-                          Output_Data_size += (uart_buffer[10+cnt] & CFG_SP_BYTE_CNT_) + 1;
-                          if (uart_buffer[10+cnt] & CFG_WIDTH_ & CFG_WORD)
-                            Output_Data_size += Output_Data_size*2;
-                          // Dann Eingang
-                          Input_Data_size += (uart_buffer[11+cnt] & CFG_SP_BYTE_CNT_) + 1;
-                          if (uart_buffer[11+cnt] & CFG_WIDTH_ & CFG_WORD)
-                            Input_Data_size += Input_Data_size*2;
-                          cnt += 2;  // We already have these bytes
-                          break;
-
-                    } // Switch End
+                  case CFG_SP_INPUT_OPTPUT:
+                    // Erst Ausgang...
+                    Output_Data_size += (uart_buffer[10 + cnt] & CFG_SP_BYTE_CNT_) + 1;
+                    if (uart_buffer[10 + cnt] & CFG_WIDTH_ & CFG_WORD)
+                      Output_Data_size += Output_Data_size * 2;
+                    // Dann Eingang
+                    Input_Data_size += (uart_buffer[11 + cnt] & CFG_SP_BYTE_CNT_) + 1;
+                    if (uart_buffer[11 + cnt] & CFG_WIDTH_ & CFG_WORD)
+                      Input_Data_size += Input_Data_size * 2;
+                    cnt += 2;  // We already have these bytes
                     break;
 
-                default:
-                    Input_Data_size = 0;
-                    Output_Data_size = 0;
-                    break;
+                } // Switch End
+                break;
 
-              } // Switch End
-            } // For End
+              default:
+                Input_Data_size = 0;
+                Output_Data_size = 0;
+                break;
 
-            if (Vendor_Data_size != 0)
-            {
-              // Evaluate
-            }
-            //In case of error -> send CFG_FAULT_ to diagnosis
-            // short acknowledgment
-            profibus_send_CMD(SC, 0, SAP_OFFSET, &uart_buffer[0], 0);
-            break;
+            } // Switch End
+          } // For End
+
+          if (Vendor_Data_size != 0)
+          {
+            // Evaluate
+          }
+          //In case of error -> send CFG_FAULT_ to diagnosis
+          // short acknowledgment
+          profibus_send_CMD(SC, 0, SAP_OFFSET, &uart_buffer[0], 0);
+          break;
 
         default:
-            // Unknown SAP
-            break;
+          // Unknown SAP
+          break;
       } //Switch DSAP_data end
     }
     // Destination: Slave address
@@ -664,35 +685,35 @@ void profibus_RX (void)
       {
 
         // Read data from master
-        #if (INPUT_DATA_SIZE > 0)
+#if (INPUT_DATA_SIZE > 0)
         for (cnt = 0; cnt < INPUT_DATA_SIZE; cnt++)
         {
           Profibus_in_register[cnt] = uart_buffer[cnt + 7];
-      new_data=1;
+          new_data = 1;
         }
-        #endif
+#endif
 
 
         // Write data for master in buffer
-        #if (OUTPUT_DATA_SIZE > 0)
+#if (OUTPUT_DATA_SIZE > 0)
         for (cnt = 0; cnt < OUTPUT_DATA_SIZE; cnt++)
         {
           uart_buffer[cnt + 7] = Profibus_out_register[cnt];
         }
-        #endif
+#endif
 
 
-        #if (OUTPUT_DATA_SIZE > 0)
+#if (OUTPUT_DATA_SIZE > 0)
         if (diagnose_status == true)
           profibus_send_CMD(SD2, DIAGNOSE, 0, &uart_buffer[7], 0);  // Request a diagnosis
         else
           profibus_send_CMD(SD2, DATA_LOW, 0, &uart_buffer[7], Input_Data_size);  // send data
-        #else
+#else
         if (diagnose_status == true)
           profibus_send_CMD(SD1, DIAGNOSE, 0, &uart_buffer[7], 0);  // Request a diagnosis
         else
           profibus_send_CMD(SC, 0, 0, &uart_buffer[7], 0);          // short acknowledgment
-        #endif
+#endif
       }
     }
 
@@ -703,12 +724,12 @@ void profibus_RX (void)
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /*!
   Compile and send * \ brief Profibus telegram
-  * \ param type telegram type (SD1, SD2 etc.)
-  * \ param function_code Function code to be transmitted
-  * \ param sap_offset Value of the SAP offset
-  * \ param pdu pointer to data field (PDU)
-  * \ param length_pdu Length of pure PDU without DA, SA or FC
-  */
+    \ param type telegram type (SD1, SD2 etc.)
+    \ param function_code Function code to be transmitted
+    \ param sap_offset Value of the SAP offset
+    \ param pdu pointer to data field (PDU)
+    \ param length_pdu Length of pure PDU without DA, SA or FC
+*/
 void profibus_send_CMD (unsigned char type,
                         unsigned char function_code,
                         unsigned char sap_offset,
@@ -718,7 +739,7 @@ void profibus_send_CMD (unsigned char type,
   unsigned char length_data;
 
 
-  switch(type)
+  switch (type)
   {
     case SD1:
       uart_buffer[0] = SD1;
@@ -739,8 +760,8 @@ void profibus_send_CMD (unsigned char type,
       uart_buffer[5] = slave_addr + sap_offset;
       uart_buffer[6] = function_code;
       //Data is already filled in before the function is called
-      uart_buffer[7+length_pdu] = checksum(&uart_buffer[4], length_pdu + 3);
-      uart_buffer[8+length_pdu] = ED;
+      uart_buffer[7 + length_pdu] = checksum(&uart_buffer[4], length_pdu + 3);
+      uart_buffer[8 + length_pdu] = ED;
       length_data = length_pdu + 9;
       break;
 
@@ -778,13 +799,13 @@ void profibus_send_CMD (unsigned char type,
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /*!
   Send * \ letter telegram
-  * \ param data pointer to data field
-  * \ param length Length of the data
-  */
+    \ param data pointer to data field
+    \ param length Length of the data
+*/
 void profibus_TX (char *data, unsigned char length)
 {
   TX_ENABLE_ON;  // Enable Transmit (Switch to Transmit)
-  OCR1A = TIMEOUT_MAX_TX_TIME;  
+  OCR1A = TIMEOUT_MAX_TX_TIME;
   profibus_status = PROFIBUS_SEND_DATA;
 
   uart_byte_cnt = length;         // Number of bytes to send
@@ -796,15 +817,15 @@ void profibus_TX (char *data, unsigned char length)
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /*!
   Calculate brief checksum. Simple adding of all data bytes in the telegram.
-  * \ param data pointer to data field
-  * \ param length Length of the data
-  * \ return checksum
-  */
+    \ param data pointer to data field
+    \ param length Length of the data
+    \ return checksum
+*/
 unsigned char checksum(char *data, unsigned char length)
 {
   unsigned char csum = 0;
 
-  while(length--)
+  while (length--)
   {
     csum += data[length];
   }
@@ -817,24 +838,24 @@ unsigned char checksum(char *data, unsigned char length)
 /*!
   Check the letter destination. Address must be with slave address or broadcast (including SAP offset)
            to match
-  * \ param destination destination address
-  * \ return TRUE if destination is ours, FALSE if not
-  */
+    \ param destination destination address
+    \ return TRUE if destination is ours, FALSE if not
+*/
 unsigned char addmatch (unsigned char destination)
 {
   if ((destination != slave_addr) &&                // Slave
       (destination != slave_addr + SAP_OFFSET) &&   // SAP Slave
       (destination != BROADCAST_ADD) &&             // Broadcast
-      (destination != BROADCAST_ADD + SAP_OFFSET)){  // SAP Broadcast
-        return false;
-      }
+      (destination != BROADCAST_ADD + SAP_OFFSET)) { // SAP Broadcast
+    return false;
+  }
   return true;
 }
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /*!
- * \brief ISR TIMER1
- */
+   \brief ISR TIMER1
+*/
 
 ISR (TIMER1_COMPA_vect)    // Timer1 Output Compare 1A.
 {
@@ -842,29 +863,29 @@ ISR (TIMER1_COMPA_vect)    // Timer1 Output Compare 1A.
   switch (profibus_status)
   {
     case PROFIBUS_WAIT_SYN: // TSYN expired
-        profibus_status = PROFIBUS_WAIT_DATA;
-        OCR1A = TIMEOUT_MAX_SDR_TIME;
-        uart_byte_cnt = 0;
-        break;
+      profibus_status = PROFIBUS_WAIT_DATA;
+      OCR1A = TIMEOUT_MAX_SDR_TIME;
+      uart_byte_cnt = 0;
+      break;
 
     case PROFIBUS_WAIT_DATA:  // TSDR expired but no data there
-        break;
+      break;
 
     case PROFIBUS_GET_DATA:   // TSDR expired and data there
-        profibus_status = PROFIBUS_WAIT_SYN;
-        // We have already waited TIMEOUT_MAX_RX_TIME of bus idle. So subtract that from Tsyn.
-        OCR1A = TIMEOUT_MAX_SYN_TIME-TIMEOUT_MAX_RX_TIME;
-        profibus_RX(); 
-        break;
+      profibus_status = PROFIBUS_WAIT_SYN;
+      // We have already waited TIMEOUT_MAX_RX_TIME of bus idle. So subtract that from Tsyn.
+      OCR1A = TIMEOUT_MAX_SYN_TIME - TIMEOUT_MAX_RX_TIME;
+      profibus_RX();
+      break;
 
     case PROFIBUS_SEND_DATA:  // Transmission timeout expired, go back to reception
-        profibus_status = PROFIBUS_WAIT_SYN;
-        OCR1A = TIMEOUT_MAX_SYN_TIME;   
-        TX_ENABLE_OFF;  // Disable Transmit (Switch to Recieve)
-        break;
+      profibus_status = PROFIBUS_WAIT_SYN;
+      OCR1A = TIMEOUT_MAX_SYN_TIME;
+      TX_ENABLE_OFF;  // Disable Transmit (Switch to Recieve)
+      break;
 
     default:
-        break;
+      break;
 
   }
   // Timer 1 Start
@@ -873,8 +894,8 @@ ISR (TIMER1_COMPA_vect)    // Timer1 Output Compare 1A.
 }
 
 /*!
- * ISR UART0 Receive
- */
+   ISR UART0 Receive
+*/
 ISR(USART_RX_vect)
 {
   // Retrieve RXdata to buffer
@@ -890,45 +911,45 @@ ISR(USART_RX_vect)
   {
     uart_byte_cnt++;
     // Check for buffer overflow!
-    if(uart_byte_cnt >= MAX_BUFFER_SIZE) uart_byte_cnt--;
+    if (uart_byte_cnt >= MAX_BUFFER_SIZE) uart_byte_cnt--;
   }
-  TCNT1 = 0; 
+  TCNT1 = 0;
 }
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /*!
- * ISR UART Transmit
- */
+   ISR UART Transmit
+*/
 ISR(USART_UDRE_vect)
 {
   // Everything sent?
   if (uart_transmit_cnt < uart_byte_cnt)
   {
     // TX Buffer
-    UDR0 = uart_buffer[uart_transmit_cnt++];    
+    UDR0 = uart_buffer[uart_transmit_cnt++];
   }
   else
   {
     // All sent, interrupt again
     UCSR0B &= ~( 1 << UDRIE0 );
   }
-  TCNT1=0;
+  TCNT1 = 0;
 }
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /*!
- * Initialize UART0
- * Even parity, 1 stop bit.
- */
+   Initialize UART0
+   Even parity, 1 stop bit.
+*/
 /* */
 void init_UART0(unsigned long baud)
 {
   // Try U2X mode first
   uint16_t baud_setting = (F_CPU / 4 / baud - 1) / 2;
   UCSR0A = 1 << U2X0;
-  if (((F_CPU == 16000000UL) && (baud == 57600)) || (baud_setting >4095))
+  if (((F_CPU == 16000000UL) && (baud == 57600)) || (baud_setting > 4095))
   {
     UCSR0A = 0;
     baud_setting = (F_CPU / 8 / baud - 1) / 2;
