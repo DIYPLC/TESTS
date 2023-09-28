@@ -1,12 +1,98 @@
-// Проект под ардуино уно с нормальными исходниками
+// PROFIBUS DP SLAVE
+// ARDUINO NANO ATMEGA328P 16MHz
+//
+// Оригинальный проект под ардуино уно с нормальными исходниками
 // https://github.com/tuenhidiy/Arduino_Profibus_DP
 // https://www.instructables.com/INTEGRATING-ARDUINO-INTO-PLC-SYSTEM/
 // https://www.youtube.com/watch?v=TC1FKypClzU
 // https://www.youtube.com/watch?v=G7TGFvfsMPU
 // Умная книжка по профибасу
 // https://www.felser.ch/profibus-manual/d-sub_stecker.html
-// Реализация для PB DP SL MSP430F2252
+// Реализация для MSP430F2252
 // https://www.mikrocontroller.net/topic/106174
+// https://www.mikrocontroller.net/attachment/37699/profibus.c
+
+//                 DD1
+//           +------------+
+//           | MAX3085ESA |
+// |1       1|            |8    8|
+// +---------+RO       VCC+------+
+// |2       2|            |7    7|
+// +---------+nRE        B+------+
+// |3       3|            |6    6|
+// +---------+DE         A+------+
+// |4       4|            |5    5|
+// +---------+D        GND+------+
+// |         |            |      |
+// |         +------------+      |
+// +-----------------------------+
+// |
+// |1
+// +--PCB_ARDUINO_NANO.D0 (ATMEGA328P.RX)
+// |2
+// +--PCB_ARDUINO_NANO.D2 (ATMEGA328P.PORTD2)
+// |3
+// +--PCB_ARDUINO_NANO.D2 (ATMEGA328P.PORTD2)
+// |4
+// +--PCB_ARDUINO_NANO.D1 (ATMEGA328P.TX)
+// |5
+// +--DB9_FEMALE_PB_DP.PIN5 (-GND)
+// |6
+// +--DB9_FEMALE_PB_DP.PIN3 (+RS485)
+// |7
+// +--DB9_FEMALE_PB_DP.PIN8 (-RS485)
+// |8
+// +--DB9_FEMALE_PB_DP.PIN6 (+5VDC)
+
+// Разъем DB9 RS485 PROFIBUS DP
+// DB9 PLC: Мама
+// DB9 Кабель: Папа
+// PB9.PIN1:
+// PB9.PIN2:
+// PB9.PIN3: RS485+ P(B) красный
+// PB9.PIN4:
+// PB9.PIN5: -0GND от PLC
+// PB9.PIN6: +5VDC от PLC
+// PB9.PIN7:
+// PB9.PIN8: RS485- N(A) желтый
+// PB9.PIN9:
+// PB9.SHIELD: PE(Заземлить)-оплетку кабеля сюда
+// Резисторы в разъеме DB9
+// Резистор терминальный 220 Ом
+// Резистор подтягивающий к +5VDC 390 Ом
+// Резистор подтягивающий к -0GND 390 Ом
+// Резисторы в PLC DB9
+// Между землей и минусом резистор 1 МОм и конденсатор хз зачем.
+// Схема PLC с PROFIBUS DP совместимым разъемом DB9 Мама.
+// Схема PLC с PROFIBUS DP совместимым разъемом DB9 Мама.
+//  |                             XS1
+//  |                        +-----------+
+//  |                        | DB9 RS485 |
+//  |                    PIN1|           |
+//  |                    ----+           |
+//  |                    PIN2|           |
+//  |                    ----+           |
+//  |RS485_DB9_RS485P    PIN3|           |
+//  +------------------------+RS485P+    |
+//  |                    PIN4|           |
+//  |                    ----+           |
+//  |RS485_DB9_GND       PIN5|           |
+//  +------------------------+GND        |
+//  |RS485_DB9_5VCC      PIN6|           |
+//  +------------------------+5VCC       |
+//  |                    PIN7|           |
+//  |                    ----+           |
+//  |RS485_DB9_RS485N    PIN8|           |
+//  +------------------------+RS485N-    |
+//  |                    PIN9|           |
+//  |                    ----+           |
+//  |RS485_DB9_PE      SHIELD|           |
+//  +------------------------+PE         |
+//  |                        |           |
+//  |                        +-----------+
+// PROFIBUS DP
+// SD1-SD4 (Start Delimiter) стартовый байт для отличия различных форматов телеграмм (SD1=10h, SD2=68h, SD3=A2h, SD4=DCh)
+// ED (End Delimiter) оконечный байт, указывает на конец телеграммы (ED=16h)
 
 #define Profibus_out_register PLC_IB //Байты IB передаем S7-300.
 #define Profibus_in_register PLC_QB  //Байты QB принимаем от S7-300.
