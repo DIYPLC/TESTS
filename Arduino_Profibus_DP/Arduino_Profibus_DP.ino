@@ -1,5 +1,9 @@
 // PROFIBUS DP SLAVE
 // ARDUINO NANO ATMEGA328P 16MHz
+// Arduiono IDE 1.8.19
+// Потребление на линии 5VDC для Arduino + RS485 = 37mA, 185мВт  (все светодиоды включены).
+// Программатор AVRISP mkll
+// С помощью STK500 удается только записать новый загрузчик, скетч не записывается.
 //
 // Оригинальный проект под ардуино уно с нормальными исходниками
 // https://github.com/tuenhidiy/Arduino_Profibus_DP
