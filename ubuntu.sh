@@ -40,10 +40,14 @@ echo "ubuntu software"
 
 echo "example"
 #python3 -m youtube_dl 'https://youtu.be/M379y0op1WM'
+
+
 git clone https://github.com/DIYPLC/LIB_PLC.git
 git clone https://github.com/DIYPLC/DIY_PLC.git
 git clone https://github.com/DIYPLC/HMI_PLC.git
 git clone https://github.com/DIYPLC/Tests.git
+
+
 #sudo reboot
 #sudo halt
 #sudo tcpdump -vv -i eth0 port 502
