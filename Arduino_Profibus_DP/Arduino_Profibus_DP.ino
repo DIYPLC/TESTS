@@ -101,7 +101,8 @@
 #define Profibus_out_register PLC_IB //Байты IB передаем S7-300.
 #define Profibus_in_register PLC_QB  //Байты QB принимаем от S7-300.
 
-#define BAUD 45450 //  DELAY_TBIT = 44 // Working on Arduino @16MHz
+//UART0, 45450 Bod, 8E1, 8 bit data,  Even parity, 1 stop bit.
+#define BAUD 45450 //  DELAY_TBIT = 44 // Working on Arduino @16MHz https://www.felser.ch/profibus-manual/kabellaengen.html
 #define DELAY_TBIT 44 // This is timer delay for 1 TBIT
 
 #define VCC_PIN     8
@@ -110,7 +111,7 @@
 #define TOUCH_PIN   11 // Передаем состояние входа D11 в IB0 S7-300;
 
 #define TX_ENABLE_PIN   2   // PORTD2 = "D2" This pin toggles the MAX485 IC from Transmit to Recieve
-#define SLAVE_ADDRESS   6   // PROFIBUS DP SLAVE ADDRESS
+#define SLAVE_ADDRESS   6   // PROFIBUS DP SLAVE ADDRESS https://www.felser.ch/profibus-manual/adressierung_der_stationen.html
 #define LED_ERROR_PIN   13  // PB5 D13 Встроенный светодиод горит если PLC в STOP и светодиод не горит если PLC в RUN, но на ошибки связи не реагирует.
 
 unsigned long samplingtime = 0;
@@ -144,7 +145,7 @@ unsigned long samplingtime = 0;
 // Command types
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 #define SD1                   0x10  // Telegram without data field
-#define SD2                   0x68  // Data telegram variable
+#define SD2                   0x68  // Data telegram variable https://www.felser.ch/profibus-manual/telegrammformate.html
 #define SD3                   0xA2  // Data telegram fixed
 #define SD4                   0xDC  // Token
 #define SC                    0xE5  // Short acknowledgment
@@ -368,20 +369,13 @@ void loop() {
 
   // Тест приема и передачи данных по сети.
   PLC_IB[1] = PLC_QB[1];
-
-  // Циклически каждые 10 мс ?
-  if ( (unsigned long) (micros() - samplingtime) > 10  )
+  
+  PLC_IB[2] = 0xAA;
+  
+  // Циклически каждые 1 000 000 мкс
+  if ( (unsigned long) (micros() - samplingtime) > 1000000  )
   {
-    // Передаем состояние входа D11 в IB0 S7-300;
-    if (digitalRead(TOUCH_PIN) == LOW)
-    {
-      Profibus_out_register[0] = 0X01;
-    }
-    else
-    {
-      Profibus_out_register[0] = 0X00;
-
-    }
+    PLC_IB[3] = PLC_IB[3] + 1;
     samplingtime = micros();
   }
 
@@ -390,6 +384,16 @@ void loop() {
     Profibus_out_register[0] += new_data;
     new_data = 0;
     Profibus_out_register[0] = Profibus_in_register[0];
+  }
+
+  // Передаем состояние входа D11 в IB0 S7-300;
+  if (digitalRead(TOUCH_PIN) == LOW)
+  {
+    Profibus_out_register[0] = 0X01;
+  }
+  else
+  {
+    Profibus_out_register[0] = 0X00;
   }
 
   digitalWrite(LED_PIN, bitRead(Profibus_in_register[0], 0) == 0 ? 1 : 0); // Correct the led state on Touch button
@@ -1034,7 +1038,7 @@ ISR(USART_UDRE_vect)
    Even parity, 1 stop bit.
 */
 /* */
-void init_UART0(unsigned long baud)
+void init_UART0(unsigned long baud) //https://www.felser.ch/profibus-manual/uart_codierung.html
 {
   // Try U2X mode first
   uint16_t baud_setting = (F_CPU / 4 / baud - 1) / 2;
