@@ -21,22 +21,35 @@ sudo apt-get install tmux
 
 echo "ubuntu software"
 #tcpdump
+#Wireshark
+#nmap
 #strace
 #latex
 #OBS Studio
 #LibreCAD
 #libreoffice
 #FreeCAD
+#Cura
+#KiCAD
 #VLC
 #gimp
+#InkScape
+#pinta
 #Wine
 #VirtualBox
 #Telegram Desktop
+#Jami
 #nano
 #sublime-text
-#chromium
-#putty
 #geany
+#Eclipse
+#chromium
+#transmission
+#uget
+#putty
+#Jupyter Notebook
+#pycharm
+#7Zip
 
 echo "example"
 #python3 -m youtube_dl 'https://youtu.be/M379y0op1WM'
