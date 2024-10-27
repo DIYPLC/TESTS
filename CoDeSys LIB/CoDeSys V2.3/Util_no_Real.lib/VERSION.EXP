@@ -1,0 +1,24 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '0' *)
+PROGRAM Version
+VAR
+(******************************************************************************************)
+(* Version	Datum		Kommentar										*)
+(* 1.00		28.02.2001	generated								 		*)
+(* 1.01		29.06.2001	bugfix in GEN (HP)								*)
+(* 1.02		03.01.2002	INTEGRAL was calculated for sec instead of msec 	*)
+(* 1.03		12.11.2002	comments added 								*)
+(* 1.04		28.01.2004	POINT structure removed 							*)
+(* 1.05		02.08.2004	CHARCURVE added (bug #3293 *)
+(* 1.06		23.08.2006	RAMP_INT (#5709) *)
+(* 1.07		16.05.2007	Typed literal warnings removed (bug #7576)			*)
+(******************************************************************************************)
+END_VAR
+
+(* @END_DECLARATION := '0' *)
+(* @TEXT_IMPLEMENTATION := 'ST' *)
+;
+END_PROGRAM

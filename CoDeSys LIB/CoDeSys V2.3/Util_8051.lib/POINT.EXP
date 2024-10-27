@@ -1,0 +1,9 @@
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+TYPE POINT :
+STRUCT
+	X,Y: DINT;
+END_STRUCT
+END_TYPE
+(* @END_DECLARATION := '0' *)

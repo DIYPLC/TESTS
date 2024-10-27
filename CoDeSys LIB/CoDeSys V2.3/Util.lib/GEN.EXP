@@ -1,0 +1,100 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/signals' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+(* function block for generating some periodic functions *)
+FUNCTION_BLOCK GEN
+VAR_INPUT
+	MODE:GEN_MODE;	(* define type :
+								TRIANGLE				triangular	from - AMPL. to + AMPL.
+								TRIANGLE_POS		triangular	from 0 to AMPL. 
+								SAWTOOTH_RISE	sawtooth increasing from -AMPL. to +AMPL.
+								SAWTOOTH_FALL	sawtooth decreasing from AMPL to -AMPL
+								RECTANGLE			rectangular switching from  -AMPL. to +AMPL 
+								SINUS					sinus
+								COSINUS				cosinus *)
+	BASE:BOOL;			(* FALSE: period referring to call; TRUE: period referring to time *)
+	PERIOD:TIME:=t#1s;	(* period time, only relevant if BASE=TRUE *)
+	CYCLES:INT:=1000;	(* number of calls per period, only relevant if BASE=FALSE *)
+	AMPLITUDE:INT;		(* amplitude *)
+	RESET:BOOL;			(* reset *)
+END_VAR
+VAR_OUTPUT
+	OUT:INT;				(* generated function variable *)
+END_VAR
+VAR
+	CET,PER:DINT;
+	COUNTER:INT;
+	CLOCK:TON;
+	help: REAL;
+END_VAR
+(* @END_DECLARATION := '0' *)
+(* @TEXT_IMPLEMENTATION := 'ST' *)
+IF RESET THEN
+	COUNTER:=0;
+	OUT:=0;
+	CLOCK.PT := t#0s;
+	CLOCK(IN:=FALSE);
+ELSE
+	IF BASE=FALSE THEN
+		COUNTER:=(COUNTER+1)MOD CYCLES;
+		CASE MODE OF
+		0:	(* Dreiecksfunktion von -AMPL bis AMPL.*)
+			OUT:=(CYCLES-2*ABS(CYCLES-2*COUNTER))*AMPLITUDE/CYCLES;
+		1:	(* Dreiecksfunktion von 0 bis AMPL.*)
+			OUT:=(CYCLES-ABS(CYCLES-2*COUNTER))*AMPLITUDE/CYCLES;
+		2:	(* Sägezahn steigend *)
+			OUT:=(2*COUNTER-CYCLES)*AMPLITUDE/CYCLES;
+		3:	(* Sägezahn fallend *)
+			OUT:=(CYCLES-2*COUNTER)*AMPLITUDE/CYCLES;
+		4:	(* Rechteck AMPL./-AMPL. *)
+			IF 2*COUNTER>CYCLES THEN
+				OUT:=-AMPLITUDE;
+			ELSE
+				OUT:=AMPLITUDE;
+			END_IF
+		5:	(* Sinusfunktion *)
+			OUT:=REAL_TO_INT(SIN(6.283167*COUNTER/CYCLES)*AMPLITUDE);
+		6:	(* Cosinusfunktion *)
+			OUT:=REAL_TO_INT(COS(6.283167*COUNTER/CYCLES)*AMPLITUDE);
+		END_CASE;
+	ELSE										(* Periodizität bzgl. Zeit *)
+		CLOCK;									(* Timer abfragen *)
+		IF CLOCK.PT<>PERIOD+PERIOD THEN			(* Initialisierung *)
+			CLOCK.PT:=PERIOD+PERIOD;			(* Setze Timer auf zwei PERIODn *)
+			CLOCK(IN:=TRUE);
+		ELSE
+			CET:=TIME_TO_DINT(CLOCK.ET);
+			PER:=TIME_TO_DINT(PERIOD);
+			IF CET>=PER THEN					(* Neuinitialisierung des Timers *)
+				CLOCK(IN:=FALSE);
+				CLOCK(IN:=TRUE);
+				CET:=CET MOD PER;
+			END_IF
+			CASE MODE OF
+			0:	(* Dreiecksfunktion -AMPL bis AMPL.*)
+				OUT:=DINT_TO_INT((2*ABS(PER-2*CET)*AMPLITUDE+PER/2)/PER-AMPLITUDE);
+			1:	(* Dreiecksfunktion 0 bis AMPL.*)
+				OUT:=DINT_TO_INT(((PER-ABS(PER-2*CET))*AMPLITUDE+PER/2)/PER);
+			2:	(* Sägezahn steigend *)
+				OUT:=DINT_TO_INT((CET-PER)*2*AMPLITUDE/PER+AMPLITUDE);
+			3:	(* Sägezahn fallend *)
+				OUT:=DINT_TO_INT((PER-CET)*2*AMPLITUDE/PER+AMPLITUDE);
+			4:	(* Rechteck AMPL./-AMPL. *)
+				IF CET*2<PER THEN
+					OUT:=-AMPLITUDE;
+				ELSE
+					OUT:=AMPLITUDE;
+				END_IF
+			5:	(* Sinusfunktion *)
+				help:=SIN(6.283167*CET/PER)*AMPLITUDE;
+				OUT:=REAL_TO_INT(help+0.5);
+			6:	(* Cosinusfunktion *)
+				help:=COS(6.283167*CET/PER)*AMPLITUDE;
+				OUT:=REAL_TO_INT(help+0.5);
+			END_CASE;
+		END_IF
+	END_IF;
+END_IF;
+END_FUNCTION_BLOCK

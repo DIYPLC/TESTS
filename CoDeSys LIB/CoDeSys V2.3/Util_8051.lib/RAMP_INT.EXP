@@ -1,0 +1,74 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/function manipulators' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '0' *)
+(* function block to limit the slope of a value to a certain value *)
+FUNCTION_BLOCK RAMP_INT
+VAR_INPUT
+	IN: INT;							(* input variable *)
+	ASCEND: INT;						(* maximum positive slope *)
+	DESCEND: INT;					(* maximum negative slope (non-negative!!) *)
+	TIMEBASE: TIME;					(* reference for ASCEND/DESCEND :
+											t#0s : ASCEND/DESCEND defined per call
+											else : ASCEND/DESCEND defined per specified time*)
+	RESET:BOOL;						(* reset *)
+END_VAR
+VAR_OUTPUT
+	OUT: INT;							(* value of function with limited slope *)
+END_VAR
+VAR
+	DIFF: DINT;
+	OLD_IN: INT;
+	TB,CET:DWORD;
+	CH:INT;
+	CLOCK: TON;
+END_VAR
+(* @END_DECLARATION := '0' *)
+(* @TEXT_IMPLEMENTATION := 'ST' *)
+IF RESET=TRUE OR CLOCK.PT<>TIMEBASE THEN			(* Reset *)
+	OLD_IN:=IN;
+	CLOCK(PT:=TIMEBASE,IN:=FALSE);
+END_IF
+
+DIFF:=INT_TO_DINT(IN)-OLD_IN;									(* Änderung zum letzten WERT *)
+
+IF TIMEBASE=t#0s THEN								(* Bezugswert : Aufruf *)
+	IF DIFF>ASCEND THEN
+		OUT:=OLD_IN+ASCEND;
+	ELSIF DIFF<-DESCEND THEN
+		OUT:=OLD_IN-DESCEND;
+	ELSE
+		OUT:=IN;
+	END_IF;
+ELSE												(* Bezugswert : TIMEBASE *)
+	TB:=TIME_TO_DWORD(TIMEBASE);					(* TIMEBASE als DWORD *)
+	CLOCK;
+	CET:=TIME_TO_DWORD(CLOCK.ET);					(* verstrichene Zeit *)
+	IF CET>0 THEN									(* wenn Zeit verstrichen *)
+		IF (DWORD_TO_DINT(TB)*DIFF+CET/2)/DWORD_TO_DINT(CET)>ASCEND THEN			(* zu starker Anstieg *)
+			CH:=DWORD_TO_INT((CET*ASCEND)/TB);
+			IF CH<>0 THEN
+					OUT:=OLD_IN+CH;
+			END_IF;
+		ELSIF DIFF*TB/DWORD_TO_DINT(CET)<-DESCEND THEN	(* zu starker Abfall *)
+			CH:=DWORD_TO_INT((CET*DESCEND)/TB);
+			IF CH<>0 THEN
+					OUT:=OLD_IN-CH;
+			END_IF;
+		ELSE
+			CH:=1;									(* Änderung in erlaubten Grenzen *)
+			OUT:=IN;
+		END_IF;
+		IF CH<>0 THEN
+			CLOCK(IN:=FALSE);						(* Timer neu starten *)
+			CLOCK(IN:=TRUE);
+		END_IF;
+	ELSE											(* keine Zeit verstrichen *)
+		CLOCK.PT:=TIMEBASE;							(* => ggf. Initialisierung *)
+		CLOCK(IN:=TRUE);							(* => ggf. Timer neu starten *)
+	END_IF;
+END_IF;
+
+OLD_IN:=OUT;
+END_FUNCTION_BLOCK

@@ -1,0 +1,45 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/mathematical functions' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+(* function block for statistics: calculating minimum, maximum and average of an input value *)
+FUNCTION_BLOCK STATISTICS_REAL
+VAR_INPUT
+	IN: REAL;					(* input value*)
+	RESET: BOOL;			(* reset: average set to 0, min and max to minimum and maximum possible REALs*)
+END_VAR
+VAR_OUTPUT
+	MN: REAL:=3E+38;		(* minimum value*)
+	MX: REAL:=1E-37;			(* maximum value*)
+	AVG: REAL;				(* average value*)
+END_VAR
+VAR
+	COUNTER: DINT;
+	SUM:REAL;
+END_VAR
+
+(* @END_DECLARATION := '0' *)
+(* @TEXT_IMPLEMENTATION := 'ST' *)
+IF RESET THEN
+	AVG:=0;
+	COUNTER:=0;
+	SUM:=0;
+	MN:=3.402823466e+38;
+	MX:=1.175494351e-38;
+ELSE
+	IF IN<MN THEN
+		MN:=IN;
+	END_IF
+	IF IN>MX THEN
+		MX:=IN;
+	END_IF
+
+	IF ABS(COUNTER)>2000000000 THEN						(* falls Überlauf droht *)
+		COUNTER:=COUNTER/2;
+	END_IF;
+
+	COUNTER:=COUNTER+1;
+	AVG:=AVG/COUNTER*(COUNTER-1)+IN/COUNTER;
+END_IF;
+END_FUNCTION_BLOCK

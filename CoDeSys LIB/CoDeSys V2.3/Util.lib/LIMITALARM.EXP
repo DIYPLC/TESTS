@@ -1,0 +1,26 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/analog monitors' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+(* function block monitoring, whether the input value IN lies between LOW and HIGH *)
+FUNCTION_BLOCK LIMITALARM
+VAR_INPUT
+	IN:INT;					(* INPUT value *)
+	HIGH:INT;				(* upper threshold value *)
+	LOW:INT;				(* lower threshold value *)
+END_VAR
+VAR_OUTPUT
+	O:BOOL;				(* TRUE, if IN > HIGH, else FALSE *)
+	U:BOOL;				(* TRUE, if IN < LOW, else FALSE *)
+	IL:BOOL;				(* neither O nor U *)
+END_VAR
+VAR
+END_VAR
+(* @END_DECLARATION := '0' *)
+(* @TEXT_IMPLEMENTATION := 'ST' *)
+O:=(IN>HIGH);
+U:=(IN<LOW);
+IL:=NOT (O OR U);
+
+END_FUNCTION_BLOCK

@@ -1,0 +1,31 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/mathematical functions' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+(* function block to approximate the integral of IN over the time *)
+FUNCTION_BLOCK INTEGRAL
+VAR_INPUT
+	IN:REAL;						(* input variable *)
+	TM:DWORD;					(* time since last call in msec *)
+	RESET:BOOL;					(* reset: OUT is set to zero and OVERFLOW to false *)
+END_VAR
+VAR_OUTPUT
+	OUT:REAL;					(* value of the integral *)
+	OVERFLOW:BOOL:=FALSE;	(* overflow *)
+END_VAR
+VAR
+END_VAR
+(* @END_DECLARATION := '0' *)
+(* @TEXT_IMPLEMENTATION := 'ST' *)
+IF RESET THEN
+	OUT:=0;
+	OVERFLOW:=FALSE;
+ELSIF NOT OVERFLOW  THEN
+	IF 1E38 - IN*TM < OUT OR -1E38 - IN*TM > OUT THEN
+		OVERFLOW:=TRUE;
+	ELSE
+		OUT:=OUT+IN*TM/1000;
+	END_IF;
+END_IF;
+END_FUNCTION_BLOCK

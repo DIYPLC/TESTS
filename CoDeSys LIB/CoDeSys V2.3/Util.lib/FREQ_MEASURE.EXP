@@ -1,0 +1,67 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/signals' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION_BLOCK FREQ_MEASURE
+(* FB to measure the frequency of a signal *)
+VAR_INPUT
+	IN:BOOL;						(* input signal *)
+	PERIODS: INT (1..10) :=1;	(* out is the average frequency during PERIODS (number of periods) *)
+	RESET: BOOL;				(* reset measurement *)
+END_VAR
+VAR_OUTPUT
+	OUT:REAL;					(* frequency [Hz]*)
+	VALID:BOOL;					(* FALSE: not yet PERIODS measurements done OR time distance between two rising edges > 3*OUT *)
+END_VAR
+VAR
+	OLDIN: BOOL;
+	INIT: BOOL;
+	OLDT: TIME;
+	DIFF: DWORD;
+	ADIFF: ARRAY[0..9] OF DWORD;
+	V: INT;
+	B:INT;
+	I: INT;
+END_VAR
+(* @END_DECLARATION := '0' *)
+(* @TEXT_IMPLEMENTATION := 'ST' *)
+IF RESET THEN
+	B:=0;
+	V:=0;
+	INIT:=FALSE;
+	VALID:=FALSE;
+	OUT:=0;
+	RETURN;
+END_IF
+
+IF IN AND NOT OLDIN THEN	(*rising edge *)
+	IF INIT THEN
+		DIFF := TIME_TO_DWORD(TIME()-OLDT);
+		IF Diff > 0 THEN
+			ADIFF[B] := DIFF;
+			B := (B+1) MOD PERIODS;
+			V:= MIN(V+1, PERIODS);
+			IF V=PERIODS THEN
+				OUT := 0;
+				FOR I:=0 TO PERIODS-1 DO
+					OUT := OUT + ADIFF[I];
+				END_FOR
+				OUT := 1000.0 * PERIODS / OUT;
+				VALID:=TRUE;
+			ELSE
+				VALID:=FALSE;
+			END_IF
+		END_IF
+	END_IF
+	INIT := TRUE;
+	OLDT := TIME();
+ELSIF INIT AND VALID AND TIME_TO_DWORD(TIME()-OLDT) > 3000*OUT THEN
+	VALID:=FALSE;
+	V:=0;
+	B:=0;
+END_IF
+
+OLDIN:=IN;
+
+END_FUNCTION_BLOCK

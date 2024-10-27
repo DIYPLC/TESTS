@@ -1,0 +1,26 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/analog monitors' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '0' *)
+(* function block, which sets OUT to TRUE, if input IN is less than LOW, and which sets OUT to FALSE, if input IN is bigger than HIGH *)
+FUNCTION_BLOCK HYSTERESIS
+VAR_INPUT
+	IN:INT;			(* input value *)
+	HIGH:INT;		(* upper threshold value *)
+	LOW:INT;		(* lower threshold value *)
+END_VAR
+VAR_OUTPUT
+	OUT:BOOL;	(* hysteresis value *)
+END_VAR
+VAR
+END_VAR
+(* @END_DECLARATION := '0' *)
+(* @TEXT_IMPLEMENTATION := 'ST' *)
+IF  IN<LOW THEN
+	OUT:=TRUE;
+END_IF;
+IF IN>HIGH THEN
+	OUT:=FALSE;
+END_IF;
+END_FUNCTION_BLOCK

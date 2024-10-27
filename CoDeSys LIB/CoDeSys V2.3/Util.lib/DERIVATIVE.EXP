@@ -1,0 +1,40 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/mathematical functions' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+(* function block to approximate the derivative of a value *)
+(* to calculate this, always four values are used in order to be as exact as possible *)
+FUNCTION_BLOCK DERIVATIVE
+VAR_INPUT
+	IN:REAL;						(* input variable *)
+	TM:DWORD;					(* time since last call in msec *)
+	RESET:BOOL;					(* reset: set OUT to zero *)
+END_VAR
+VAR_OUTPUT
+	OUT:REAL;					(* derivative *)
+END_VAR
+VAR
+	X3,X2,X1:REAL;
+	T2,T1:DWORD;
+	INIT:BOOL:=TRUE;
+END_VAR
+(* @END_DECLARATION := '0' *)
+(* @TEXT_IMPLEMENTATION := 'ST' *)
+IF INIT OR RESET THEN
+	X1:=IN;
+	X2:=IN;
+	X3:=IN;
+	OUT:=0;
+	INIT:=FALSE;
+ELSE
+	IF TM>0 THEN
+		OUT:=(3*(IN-X3)+X1-X2)/((3*T2+4*T1+3*TM))*1000;
+		X3:=X2;
+		X2:=X1;
+		X1:=IN;
+		T2:=T1;
+		T1:=TM;
+	END_IF;
+END_IF;
+END_FUNCTION_BLOCK

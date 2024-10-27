@@ -1,0 +1,17 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '0' *)
+PROGRAM Version
+VAR
+(******************************************************************************************)
+(* Version	Datum		Kommentar										*)
+(* 1.00		29.08.2007	generated as a clone from UTIL_NO_REAL.LIB, removed POU CHARCURVE	 *)
+(******************************************************************************************)
+END_VAR
+
+(* @END_DECLARATION := '0' *)
+(* @TEXT_IMPLEMENTATION := 'ST' *)
+;
+END_PROGRAM

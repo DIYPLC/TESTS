@@ -1,0 +1,66 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/function manipulators' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+(* function block to limit the slope of a value to a certain value *)
+FUNCTION_BLOCK RAMP_REAL
+VAR_INPUT
+	IN: REAL;							(* input variable *)
+	ASCEND: REAL;					(* maximum positive slope *)
+	DESCEND: REAL;				(* maximum negative slope (non-negative!!) *)
+	TIMEBASE: TIME;					(* reference for ASCEND/DESCEND :
+											t#0s : ASCEND/DESCEND defined per call
+											else : ASCEND/DESCEND defined per specified time*)
+	RESET:BOOL;						(* reset *)
+END_VAR
+VAR_OUTPUT
+	OUT: REAL;						(* value of function with limited slope *)
+END_VAR
+VAR
+	DIFF: REAL;
+	OLD_IN: REAL;
+	TB,CET:DWORD;
+	CLOCK: TON;
+	probe:REAL;
+END_VAR
+(* @END_DECLARATION := '0' *)
+(* @TEXT_IMPLEMENTATION := 'ST' *)
+IF RESET=TRUE OR CLOCK.PT<>TIMEBASE THEN			(* Reset *)
+	OLD_IN:=IN;
+	CLOCK(PT:=TIMEBASE,IN:=FALSE);
+END_IF
+
+DIFF:=IN-OLD_IN;									(* Änderung zum letzten WERT *)
+
+IF TIMEBASE=t#0s THEN								(* Bezugswert : Aufruf *)
+	IF DIFF>ASCEND THEN
+		OUT:=OLD_IN+ASCEND;
+	ELSIF DIFF<-DESCEND THEN
+		OUT:=OLD_IN-DESCEND;
+	ELSE
+		OUT:=IN;
+	END_IF;
+ELSE												(* Bezugswert : TIMEBASE *)
+	TB:=TIME_TO_DWORD(TIMEBASE);					(* TIMEBASE als DWORD *)
+	CLOCK;
+	CET:=TIME_TO_DWORD(CLOCK.ET);					(* verstrichene Zeit *)
+	IF CET>0 THEN									(* wenn Zeit verstrichen *)
+		CLOCK(IN:=FALSE);							(* Timer neu starten *)
+		CLOCK(IN:=TRUE);
+		probe:=DIFF*TB/CET;
+		IF probe>ASCEND THEN						(* zu starker Anstieg *)
+			OUT:=OLD_IN+ASCEND*CET/DWORD_TO_REAL(TB);
+		ELSIF probe<-DESCEND THEN					(* zu starker Abfall *)
+			OUT:=OLD_IN-DESCEND*CET/DWORD_TO_REAL(TB);
+		ELSE										(* Änderung in erlaubten Grenzen *)
+			OUT:=IN;
+		END_IF;
+	ELSE											(* keine Zeit verstrichen *)
+		CLOCK.PT:=TIMEBASE;							(* => ggf. Initialisierung *)
+		CLOCK(IN:=TRUE);							(* => ggf. Timer neu starten *)
+	END_IF;
+END_IF;
+
+OLD_IN:=OUT;
+END_FUNCTION_BLOCK

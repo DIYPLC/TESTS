@@ -1,0 +1,33 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/bit/byte functions' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+(* function block unpacks byte into 8 bits *)
+FUNCTION_BLOCK UNPACK
+VAR_INPUT
+	B:BYTE;	(* byte to be unpacked *)
+END_VAR
+VAR_OUTPUT
+	B0:BOOL;		(* value of bit 0 *)
+	B1:BOOL;		(* value of bit 1 *)
+	B2:BOOL;		(* value of bit 2 *)
+	B3:BOOL;		(* value of bit 3 *)
+	B4:BOOL;		(* value of bit 4 *)
+	B5:BOOL;		(* value of bit 5 *)
+	B6:BOOL;		(* value of bit 6 *)
+	B7:BOOL;		(* value of bit 7 *)
+END_VAR
+VAR
+END_VAR
+(* @END_DECLARATION := '0' *)
+(* @TEXT_IMPLEMENTATION := 'ST' *)
+B7:=BYTE_TO_BOOL(B AND 128);
+B6:=BYTE_TO_BOOL(B AND 64);
+B5:=BYTE_TO_BOOL(B AND 32);
+B4:=BYTE_TO_BOOL(B AND 16);
+B3:=BYTE_TO_BOOL(B AND 8);
+B2:=BYTE_TO_BOOL(B AND 4);
+B1:=BYTE_TO_BOOL(B AND 2);
+B0:=BYTE_TO_BOOL(B AND 1);
+END_FUNCTION_BLOCK

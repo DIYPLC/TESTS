@@ -1,0 +1,32 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/mathematical functions' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+(* function block to calculate the mathematical variance of a variable*)
+FUNCTION_BLOCK VARIANCE
+VAR_INPUT
+	IN:REAL;		(* input variable *)
+	RESET:BOOL;	(* reset *)
+END_VAR
+VAR_OUTPUT
+	OUT:REAL;	(* variance *)
+END_VAR
+VAR
+	Z:INT;
+	A,B:REAL;
+END_VAR
+(* @END_DECLARATION := '0' *)
+(* @TEXT_IMPLEMENTATION := 'ST' *)
+IF RESET THEN
+	Z:=0;
+	A:=0;
+	B:=0;
+	OUT:=0;
+ELSE
+	Z:=Z+1;
+	A:=A+IN*IN;
+	B:=B+IN;
+	OUT:=(A-B*B/Z)/Z;
+END_IF;
+END_FUNCTION_BLOCK

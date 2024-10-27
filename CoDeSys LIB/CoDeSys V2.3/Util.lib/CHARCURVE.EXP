@@ -1,0 +1,56 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/function manipulators' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+(* function block to map an input signal on a characteristic curve *)
+FUNCTION_BLOCK CHARCURVE
+VAR_INPUT
+	IN:INT;								(* input signal *)
+	N:BYTE;							(* number of  points defining the characteristic curve : 2<=N<=11 *)
+END_VAR
+VAR_IN_OUT
+	P:ARRAY[0..10] OF POINT;		(* ARRAY of N points to describe the characteristic curve *)
+END_VAR
+VAR_OUTPUT
+	OUT:INT;							(* output variable *)
+	ERR: BYTE;							(* error :
+												0 : 	no error
+												1 :	error in ARRAY: wrong sequence ( completely tested, only if IN is equal to largest X-value of P)
+												2 :	IN outside of limits of P
+												4 :	number of POINTS (N) invalid *)
+END_VAR
+VAR
+	I:INT;
+END_VAR
+(* @END_DECLARATION := '0' *)
+(* @TEXT_IMPLEMENTATION := 'ST' *)
+IF 1<N AND N<12 THEN							(* N zulässig ? *)
+	ERR:=0;
+	IF IN<P[0].X THEN							(* Prüfe, ob IN im zulässigen Bereich *)
+		ERR:=2;
+		OUT:=DINT_TO_INT(P[0].Y);
+	ELSIF IN>P[N-1].X THEN						(* Prüfe, ob IN im zulässigen Bereich *)
+		ERR:=2;
+		OUT:=DINT_TO_INT(P[N-1].Y);
+	ELSE
+		FOR I:=1 TO N-1 DO
+			IF P[I-1].X>=P[I].X THEN			(* Prüfe, ob Reihenfolge der Punkte richtig *)
+				ERR:=1;
+				EXIT;
+			END_IF;
+			IF IN<=P[I].X THEN					(* Verlasse Schleife, wenn IN im Intervall [I-1;I] *)
+				EXIT;
+			END_IF
+		END_FOR;
+		IF ERR=0 THEN
+			OUT:=DINT_TO_INT(P[I].Y-(P[I].X-IN)*(P[I].Y-P[I-1].Y)/(P[I].X-P[I-1].X));	(* Berechne OUT *)
+		ELSE
+			OUT:=0;
+		END_IF;
+	END_IF
+ELSE
+	ERR:=4;
+END_IF;
+
+END_FUNCTION_BLOCK

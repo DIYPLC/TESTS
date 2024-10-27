@@ -1,0 +1,45 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/mathematical functions' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+(* function block for statistics: calculating minimum, maximum and average of an input value *)
+FUNCTION_BLOCK STATISTICS_INT
+VAR_INPUT
+	IN: INT;				(* input value*)
+	RESET: BOOL;		(* reset: average set to 0, min and max to minimum and maximum possible INTs*)
+END_VAR
+VAR_OUTPUT
+	MN: INT:=32767;		(* minimum value*)
+	MX: INT:=-32768;		(* maximum value*)
+	AVG: INT;				(* average value*)
+END_VAR
+VAR
+	SUM:DINT;
+	COUNTER:DINT;
+END_VAR
+(* @END_DECLARATION := '0' *)
+(* @TEXT_IMPLEMENTATION := 'ST' *)
+IF RESET THEN
+	AVG:=IN;
+	COUNTER:=0;
+	SUM:=0;
+	MN:=IN;
+	MX:=IN;
+ELSE
+	IF IN<MN THEN
+		MN:=IN;
+	END_IF
+	IF IN>MX THEN
+		MX:=IN;
+	END_IF
+	IF ABS(SUM)>2000000000 OR ABS(COUNTER)>2000000000 THEN		(* falls Überlauf droht *)
+		SUM:=SUM/2;
+		COUNTER:=COUNTER/2;
+	END_IF;
+
+	COUNTER:=COUNTER+1;
+	SUM:=SUM+IN;
+	AVG:=DINT_TO_INT((SUM+COUNTER/2)/COUNTER);  				(* gerundeter Durchschnitt *)
+END_IF;
+END_FUNCTION_BLOCK

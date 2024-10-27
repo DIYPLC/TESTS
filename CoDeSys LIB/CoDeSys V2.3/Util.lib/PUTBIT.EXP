@@ -1,0 +1,22 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/bit/byte functions' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+(* function sets bit N of X to B and returns new value *)
+FUNCTION PUTBIT : DWORD
+VAR_INPUT
+	X:DWORD;	(* value to be manipulated *)
+	N:BYTE;		(* position of bit to be changed *)
+	B:BOOL;		(* value of specified bit *)
+END_VAR
+
+(* @END_DECLARATION := '0' *)
+(* @TEXT_IMPLEMENTATION := 'ST' *)
+IF B=TRUE THEN
+	PUTBIT:=(X OR SHL(DWORD#1,N));
+ELSE
+	PUTBIT:=(X AND ROL(DWORD#4294967294,N));
+END_IF;
+
+END_FUNCTION

@@ -1,0 +1,19 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/BCD conversions' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '0' *)
+(* function reads BCD-Byte and returns its INT value; a wrong BCD value causes a return of -1 *)
+FUNCTION BCD_TO_INT : INT
+VAR_INPUT
+	B:BYTE;		(* byte containing the BCD value *)
+END_VAR
+
+(* @END_DECLARATION := '0' *)
+(* @TEXT_IMPLEMENTATION := 'ST' *)
+IF SHR(B,4)>9 OR B-SHL(SHR(B,4),4)>9 THEN
+	BCD_TO_INT:=-1;
+ELSE
+	BCD_TO_INT:=B-SHR(B,4)*6;
+END_IF;
+END_FUNCTION

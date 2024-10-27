@@ -1,0 +1,31 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/bit/byte functions' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+(* pack eight bits into 1 byte *)
+FUNCTION PACK : BYTE
+VAR_INPUT
+	B0:BOOL;		(* value of bit 0 *)
+	B1:BOOL;		(* value of bit 1 *)
+	B2:BOOL;		(* value of bit 2 *)
+	B3:BOOL;		(* value of bit 3 *)
+	B4:BOOL;		(* value of bit 4 *)
+	B5:BOOL;		(* value of bit 5 *)
+	B6:BOOL;		(* value of bit 6 *)
+	B7:BOOL;		(* value of bit 7 *)
+END_VAR
+
+(* @END_DECLARATION := '0' *)
+(* @TEXT_IMPLEMENTATION := 'ST' *)
+PACK:=BOOL_TO_BYTE(B7);
+PACK:=PACK*2+BOOL_TO_BYTE(B6);
+PACK:=PACK*2+BOOL_TO_BYTE(B5);
+PACK:=PACK*2+BOOL_TO_BYTE(B4);
+PACK:=PACK*2+BOOL_TO_BYTE(B3);
+PACK:=PACK*2+BOOL_TO_BYTE(B2);
+PACK:=PACK*2+BOOL_TO_BYTE(B1);
+PACK:=PACK*2+BOOL_TO_BYTE(B0);
+
+
+END_FUNCTION

@@ -1,0 +1,18 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/bit/byte functions' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '0' *)
+(* function returns Bit N of value X *)
+FUNCTION EXTRACT : BOOL
+VAR_INPUT
+	X:DWORD;	(* value *)
+	N:BYTE;		(* number of bit to be extracted *)
+END_VAR
+VAR
+END_VAR
+(* @END_DECLARATION := '0' *)
+(* @TEXT_IMPLEMENTATION := 'ST' *)
+EXTRACT:=((SHR(X,N) AND 1)=1);
+
+END_FUNCTION

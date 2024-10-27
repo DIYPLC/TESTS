@@ -1,0 +1,89 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/controller' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+(* PD controller *)
+FUNCTION_BLOCK PD
+VAR_INPUT
+	ACTUAL :REAL;		(* actual value, process variable *)
+	SET_POINT:REAL;	(* desired value, set point *)
+	KP:REAL;				(* proportionality const. (P)*)
+	TV:REAL;				(* rate time, derivative time (D) in sec *)
+	Y_MANUAL:REAL;		(* Y is set to this value as long as MANUAL=TRUE *)
+	Y_OFFSET:REAL;		(* offset for manipulated variable *)
+	Y_MIN:REAL;			(* minimum value for manipulated variable *)
+	Y_MAX:REAL;			(* maximum value for manipulated variable *)
+	MANUAL:BOOL;		(* 	TRUE: manual: Y is not influenced by controller,
+								FALSE: controller determines Y *)
+	RESET:BOOL;			(* reset: set Y output to Y_OFFSET *)
+END_VAR
+VAR_OUTPUT
+	Y:REAL;				(* manipulated variable, set value*)
+	LIMITS_ACTIVE:BOOL:=FALSE;	(* true set value would exceed limits Y_MIN, Y_MAX *)
+END_VAR
+VAR
+	CLOCK:TON;
+	D: DERIVATIVE;
+	TMDIFF: DWORD;
+	ERROR: REAL;
+	INIT: BOOL:=TRUE;
+	Y_ADDOFFSET: REAL;
+	KPcopy:REAL;
+	TVcopy:REAL;
+END_VAR
+
+
+(* @END_DECLARATION := '0' *)
+(* @TEXT_IMPLEMENTATION := 'ST' *)
+IF KP<> 0 THEN
+	ERROR := SET_POINT-ACTUAL;								(* Regeldifferenz *)
+
+	IF RESET OR MANUAL OR INIT OR (KP<>KPcopy OR TV<>TVcopy) THEN							(* Reset oder Handbetrieb *)
+		D(RESET:=TRUE);
+		LIMITS_ACTIVE:=FALSE;
+		IF RESET OR INIT THEN
+			Y := Y_OFFSET;
+			INIT:=FALSE;
+			Y_ADDOFFSET :=  0;
+		ELSIF MANUAL THEN
+			Y := Y_MANUAL;
+			Y_ADDOFFSET := Y_MANUAL-(Y_OFFSET+KP*(ERROR+D.OUT*TV));
+		ELSE
+			Y_ADDOFFSET := Y - Y_OFFSET - KP*ERROR;
+		END_IF
+		TMDIFF:=0;
+		CLOCK(IN:=FALSE);									(* Timer neu starten *)
+		CLOCK(PT:=t#1h, IN:=TRUE);
+
+		TVcopy := TV;
+		KPcopy := KP;
+	ELSE
+		CLOCK;												(* Timer abfragen *)
+		TMDIFF:=TIME_TO_DWORD(CLOCK.ET);					(* Zeitdifferenz seit letztem Aufruf *)
+	END_IF;
+
+	IF TMDIFF>0 THEN
+		CLOCK(IN:=FALSE);									(* Timer neu starten *)
+		CLOCK(PT:=t#1h, IN:=TRUE);
+
+		D(IN:=ERROR, TM:=TMDIFF, RESET:=FALSE);				(* Differential abschätzen *)
+
+		Y:=Y_OFFSET+KP*(ERROR+D.OUT*TV) + Y_ADDOFFSET;
+
+		LIMITS_ACTIVE:=FALSE;
+		IF Y_MAX>Y_MIN AND Y>Y_MAX  THEN					(* Stellwert-Obergrenze überschritten *)
+			Y:=Y_MAX;
+			LIMITS_ACTIVE:=TRUE;
+		END_IF;
+
+		IF Y_MAX>Y_MIN AND Y<Y_MIN THEN						(* Stellwert-Untergrenze unterschritten *)
+			Y:=Y_MIN;
+			LIMITS_ACTIVE:=TRUE;
+		END_IF;
+	ELSE
+		CLOCK(PT:=t#1h,IN:=TRUE);
+	END_IF;
+
+END_IF;
+END_FUNCTION_BLOCK

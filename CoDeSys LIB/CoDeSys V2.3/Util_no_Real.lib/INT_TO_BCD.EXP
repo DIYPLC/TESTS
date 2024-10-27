@@ -1,0 +1,20 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/BCD conversions' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '0' *)
+(* function reads INT and returns its BCD value; a wrong INT value (<0 or >99) causes a return of 255 *)
+FUNCTION INT_TO_BCD : BYTE
+VAR_INPUT
+	I:INT;		(* INT value to be converted to BCD*)
+END_VAR
+VAR
+END_VAR
+(* @END_DECLARATION := '0' *)
+(* @TEXT_IMPLEMENTATION := 'ST' *)
+IF I>99 OR I<0 THEN
+	INT_TO_BCD:=255;
+ELSE
+	INT_TO_BCD:=INT_TO_BYTE((I/10)*6+I);
+END_IF;
+END_FUNCTION
