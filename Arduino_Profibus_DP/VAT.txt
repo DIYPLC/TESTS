@@ -1,8 +1,0 @@
-M      0.0		BOOL	true	false
-MW     2		DEC	0	0
-MW     4		DEC	0	0
-MW     6		DEC	0	0
-IB     0		HEX	B#16#01	
-IB     1		HEX	B#16#FE	
-QB     0		HEX	B#16#00	
-QB     1		HEX	B#16#FE	B#16#FE
