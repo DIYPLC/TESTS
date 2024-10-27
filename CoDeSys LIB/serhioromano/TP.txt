@@ -1,0 +1,45 @@
+FUNCTION_BLOCK TP
+    (* Пульсовый таймер. Q включается на время PT на каждый
+    повышающий сигнал входа IN *)
+
+    VAR_INPUT
+        IN: BOOL; (* Включение таймера *)
+        PT: TIME; (* Длина сигнала *)
+    END_VAR
+
+    VAR_OUTPUT
+        Q: BOOL;  (* Выход, который включается на время PT
+                     после повышающего сигнала на IN *)
+        ET: TIME; (* Время, которое таймер уже работает *)
+    END_VAR
+
+    VAR
+        StartTime: TIME; (* Точка времени начала работы таймера *)
+    END_VAR
+
+    IF (Q) THEN
+        ET := TIME() - STARTTIME;
+        IF (ET >= PT) THEN
+            Q := FALSE;
+            IF (NOT IN) THEN
+                ET := t#0s;
+            ELSE
+                ET := PT;
+            END_IF
+        END_IF
+    ELSIF (NOT IN) THEN
+            (* Сбросить таймер *)
+            ET := t#0s;
+    ELSIF (IN AND ET = t#0s) THEN
+            (* Начать таймер *)
+            STARTTIME := TIME();
+            Q := TRUE;
+            ET := t#0s;
+    END_IF
+
+END_FUNCTION_BLOCK
+
+// Книга: Изучаем Structured Text стандарта МЭК 61131-3
+// ISBN: 978-1-64199-106-3
+// https://vk.com/serhioromano
+// https://www.youtube.com/user/serhioromano

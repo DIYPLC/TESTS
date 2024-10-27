@@ -1,0 +1,26 @@
+FUNCTION_BLOCK F_TRIG
+
+    VAR_INPUT
+        CLK:BOOL;
+    END_VAR
+
+    VAR_OUT
+        Q: BOOL;
+    END_VAR
+
+    VAR
+        M: BOOL;
+    END_VAR
+
+    Q := FALSE;
+    IF NOT CLK AND M THEN
+        Q := TRUE;
+    END_IF
+    M := CLK;
+
+END_FUNCTION_BLOCK
+
+// Книга: Изучаем Structured Text стандарта МЭК 61131-3
+// ISBN: 978-1-64199-106-3
+// https://vk.com/serhioromano
+// https://www.youtube.com/user/serhioromano

@@ -1,0 +1,29 @@
+FUNCTION_BLOCK DE (*Detect Edge*)
+
+    VAR_INPUT
+        CLK:BOOL;
+    END_VAR
+
+    VAR_OUT
+        QR: BOOL; (* R От слова Raise *)
+        QF: BOOL; (* F От слова Fall *)
+    END_VAR
+
+    VAR
+        M: BOOL;
+    END_VAR
+
+    QR := QF := FALSE;
+    IF CLK AND NOT M THEN
+        QR := TRUE;
+    ELSIF NOT CLK AND M THEN
+        QF := TRUE;
+    END_IF
+    M := CLK;
+
+END_FUNCTION_BLOCK
+
+// Книга: Изучаем Structured Text стандарта МЭК 61131-3
+// ISBN: 978-1-64199-106-3
+// https://vk.com/serhioromano
+// https://www.youtube.com/user/serhioromano

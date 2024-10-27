@@ -1,0 +1,45 @@
+FUNCTION_BLOCK TOF
+(* Таймер задержки отключения. Q равен FALSE, после
+выдержки времени PT как только на IN пропал сигнал. *)
+
+VAR_INPUT
+    IN: BOOL; (* Начать отсчет после выключения *)
+    PT:TIME;  (* Время, через которое Q выключится *)
+END_VAR
+
+VAR_OUTPUT
+    Q: BOOL;  (* Включается сразу же после включения
+                 IN и выключается, как только пройдёт
+                 время PT после выключения IN *)
+    ET: TIME; (* Время работы *)
+END_VAR
+
+VAR
+    M: BOOL;         (* Память *)
+    StartTime: TIME; (* Время начала отсчета таймера *)
+END_VAR
+
+IF (IN) THEN
+    (* Сбросить все *)
+    Q := TRUE;
+    ET := t#0s;
+ELSE
+    IF (M) THEN
+        (* Начать таймер *)
+        STARTTIME := TIME();
+    END_IF
+    IF (Q) THEN
+        (* Таймер в работе *)
+        ET := TIME() - STARTTIME;
+        IF (ET >= PT) THEN
+            Q := FALSE;
+            ET := PT;
+        END_IF
+    END_IF
+END_IF
+M := IN;
+
+// Книга: Изучаем Structured Text стандарта МЭК 61131-3
+// ISBN: 978-1-64199-106-3
+// https://vk.com/serhioromano
+// https://www.youtube.com/user/serhioromano
