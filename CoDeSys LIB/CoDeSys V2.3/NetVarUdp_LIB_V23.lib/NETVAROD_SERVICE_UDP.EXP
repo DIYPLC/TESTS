@@ -1,0 +1,28 @@
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+TYPE NetVarOD_Service_Udp :
+(
+	ODStateFree := 0,
+	ODReadRequest,
+	ODReadRequestReply,
+	ODWriteRequest,
+	ODWriteRequestReply,
+	ODAcknowledgement,
+	ODBootUpRequest,
+
+	ODErrorReplyUnnown := 20,
+	ODErrorReplyItems,
+	ODErrorReplyAccess,
+	ODErrorReplyIdx,
+	ODErrorReplySub,
+	ODErrorReplyLen,
+
+	ODErrorWrongService,
+	ODErrorTimeOut,
+	ODErrorReplyCPUStopped,
+
+	ODStateBusy := 100
+);
+END_TYPE
+(* @END_DECLARATION := '0' *)

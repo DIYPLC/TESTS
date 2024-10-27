@@ -1,0 +1,9 @@
+LIBRARY
+SysLibTime.lib 20.2.06 12:31:16
+(* @LIBRARYSYMFILEINFO := '0' *)
+NumOfPOUs: 2
+CurTime: 0
+CurTimeEx: 0
+NumOfGVLs: 1
+Globale_Variablen: 0
+END_LIBRARY

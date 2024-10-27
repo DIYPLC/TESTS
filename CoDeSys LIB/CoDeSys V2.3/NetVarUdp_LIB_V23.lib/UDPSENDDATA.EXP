@@ -1,0 +1,31 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/Udp specific' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '0' *)
+FUNCTION UdpSendData : DINT
+(* Function to send data via UDP protocol.
+	Return:	Number of bytes realy sent
+*)	
+VAR_INPUT
+	diSocket		:DINT;	(* Socket Id *)
+	iPort			:INT;	(* Port number, to send data *)
+	stIPAddress		:STRING;(* IP-address or name *)
+	pbyData			:DWORD;	(* Address of data buffer *)
+	diDataSize		:DINT;	(* Size of data to send *)
+END_VAR
+VAR
+	sa				:SOCKADDRESS;
+END_VAR
+(* @END_DECLARATION := '0' *)
+(* @TEXT_IMPLEMENTATION := 'ST' *)
+sa.sin_family:=SOCKET_AF_INET;
+IF stIPAddress <> '' THEN
+	sa.sin_addr:=GetIPAddress(stIPAddress);
+ELSE
+	sa.sin_addr:=SOCKET_INADDR_BROADCAST;
+END_IF
+sa.sin_port:=SysSockHtons(iPort);
+UdpSendData:=SysSockSendTo(diSocket, pbyData, diDataSize, 0, ADR(sa), SIZEOF(sa));
+
+END_FUNCTION

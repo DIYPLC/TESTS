@@ -1,0 +1,10 @@
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+TYPE NetVarTelegramm_Udp:
+STRUCT
+	Header		: NetVarTlgHeader_Udp;
+	pData		: ARRAY[0..256] OF BYTE;
+END_STRUCT
+END_TYPE
+(* @END_DECLARATION := '0' *)

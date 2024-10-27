@@ -1,0 +1,32 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/NetVar POUs' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '0' *)
+PROGRAM NetVarGetConnectStatus_UDP
+VAR_INPUT
+	nBasisId		: INT;
+END_VAR
+VAR_OUTPUT
+	bConnectNewData	: BOOL;
+	bConnectError	: BOOL;
+	dwErrorCode		: DWORD;
+END_VAR
+VAR
+	n				: INT;
+END_VAR
+(* @END_DECLARATION := '0' *)
+(* @TEXT_IMPLEMENTATION := 'ST' *)
+bConnectNewData	:= FALSE;
+bConnectError	:= FALSE;
+dwErrorCode		:= 0;
+
+FOR n := 0 TO MAX_NetVarPDO_Rx_Udp DO
+	IF (pNetVarPDO_Rx_Udp[n].sNetTelegramm.Header.nIndex = nBasisId) THEN
+		bConnectError := bConnectError OR (pNetVarPDO_Rx_Udp[n].nStatus <> 0);
+		pNetVarPDO_Rx_Udp[n].NewDataRec();
+		bConnectNewData := bConnectNewData OR pNetVarPDO_Rx_Udp[n].bDataNew;
+	END_IF
+END_FOR
+
+END_PROGRAM

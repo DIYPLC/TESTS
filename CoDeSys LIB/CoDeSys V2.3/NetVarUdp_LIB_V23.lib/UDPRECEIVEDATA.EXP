@@ -1,0 +1,28 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/Udp specific' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '0' *)
+FUNCTION UdpReceiveData : CLIENT_REPLY
+(* Function to receive data via UDP protocol.
+	Return:	diBytesReceived:Number of bytes received
+				stIPAddressTransmitter: IP-address of client, that sent the data
+ *)	
+VAR_INPUT
+	diSocket:DINT;		(* Socket Id *)
+	iPort:INT;			(* Port number, to send data *)
+	pbyData:DWORD;		(* Address of data buffer *)
+	diDataSize:DINT;	(* Size of data to send *)
+END_VAR
+VAR
+	sa:SOCKADDRESS;
+	ia:INADDR;
+END_VAR
+(* @END_DECLARATION := '0' *)
+(* @TEXT_IMPLEMENTATION := 'ST' *)
+UdpReceiveData.diBytesReceived := SysSockRecvFrom(diSocket, pbyData, diDataSize, 0, ADR(sa), SIZEOF(sa));
+ia.S_addr := DINT_TO_DWORD(sa.sin_addr);
+UdpReceiveData.dwIPAddress := DINT_TO_DWORD(sa.sin_addr);
+SysSockInetNtoa(ia, UdpReceiveData.stIPAddressTransmitter, SIZEOF(UdpReceiveData.stIPAddressTransmitter));
+
+END_FUNCTION

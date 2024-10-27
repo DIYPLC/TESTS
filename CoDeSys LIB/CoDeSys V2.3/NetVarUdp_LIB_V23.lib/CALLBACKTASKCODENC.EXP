@@ -1,0 +1,18 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/NetVar POUs' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '2048' *)
+FUNCTION CallbackTaskCodeNC : BYTE
+VAR_INPUT
+	dwEvent			: DWORD;
+	dwFilter		: DWORD;
+	dwOwner			: DWORD;
+END_VAR
+(* @END_DECLARATION := '0' *)
+(* @TEXT_IMPLEMENTATION := 'ST' *)
+g_bCPUStopNetVar := TRUE;
+NetVarManager_Udp();
+g_bCPUStopNetVar := FALSE;
+
+END_FUNCTION

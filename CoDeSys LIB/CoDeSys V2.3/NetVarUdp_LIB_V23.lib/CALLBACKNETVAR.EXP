@@ -1,0 +1,25 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/NetVar POUs' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '0' *)
+FUNCTION CallbackNetVar:BYTE
+VAR_INPUT
+	dwEvent			: DWORD;
+	dwFilter		: DWORD;
+	dwOwner			: DWORD;
+END_VAR
+
+(* @END_DECLARATION := '0' *)
+(* @TEXT_IMPLEMENTATION := 'ST' *)
+IF (dwEvent = EVENT_STOP OR dwEvent = EVENT_BEFORE_RESET OR dwEvent = EVENT_BEFORE_DOWNLOAD) THEN
+	NetVarManager_Udp.CloseSockets();
+END_IF
+
+IF (dwEvent = EVENT_DEBUG_LOOP) THEN
+	(* Call die NetVarManager_Udp for Flush the Socket-Buffer while
+		a BreakPoint is Activ in the IEC-Programm *)
+	NetVarManager_Udp();
+END_IF
+
+END_FUNCTION

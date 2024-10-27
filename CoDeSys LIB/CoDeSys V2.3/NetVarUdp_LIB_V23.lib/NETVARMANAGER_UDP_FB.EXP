@@ -1,0 +1,327 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/NetVar POUs' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '0' *)
+FUNCTION_BLOCK NetVarManager_Udp_FB
+VAR
+	diSoketRx		: DINT := SOCKET_INVALID;
+	diSoketTx		: DINT := SOCKET_INVALID;
+	diRxLen		: DINT;
+	diOffset		: DINT;
+	diCallCounter	: DINT;
+	diMsgCounter : DINT := 0;
+	dwOneIPAddress	: DWORD;
+	ppUserSdo		: ARRAY[1..16] OF POINTER TO NetVarSDO_Udp;
+	Sem				: SEMA;
+	pszHostName		: STRING(80);
+	Read			: CLIENT_REPLY;
+	Tlg				: NetVarTelegramm_Udp;
+	nStatus		: INT;
+	n				: INT;
+	bIsActiv		: BOOL;
+	bReadNext	: BOOL;
+	bTlgReady		: BOOL;
+	iTlgPerCycle: INT;
+	iTlgCount : INT;
+	tInhibit: TON := (pt := t#1500ms);
+	a: DINT;
+END_VAR
+VAR_INPUT
+	bByteSwap	: BOOL;
+	iPort			: INT := 1202; (* Port number, to send data *)
+	iNewTlgPerCycle : INT := 0; (*Maximum number of telegramms processed within one IEC-cycle.*)
+END_VAR
+
+(* @END_DECLARATION := '0' *)
+(* @TEXT_IMPLEMENTATION := 'ST' *)
+Sem(CLAIM := TRUE, RELEASE:= FALSE);
+
+IF (Sem.BUSY) THEN
+	RETURN;
+END_IF
+a:=a+1;
+IF (nStatus = 5) THEN (* Initialisierung abgeschlossen, ankommende MSG's verarbeiten *)
+	diCallCounter := diCallCounter + 1;
+
+	iTlgPerCycle := iNewTlgPerCycle;
+	iTlgCount := 0;
+
+	bReadNext := TRUE;
+	WHILE (bReadNext) AND ((iTlgPerCycle = 0) OR (iTlgCount < iTlgPerCycle)) DO
+		bTlgReady := FALSE;
+
+		(* Read anzahl der Zeichen im Empfangsbuffer (ohne löschen der Zeichen) *)
+		diRxLen := UdpGetReceiveDataSize(diSoketRx);  (* Read ohne Löschen der Buffer *)
+
+		(* Hier : RETURN, wenn es keine Telegramme gibt         *)
+		IF diRxLen = 0 THEN
+			Sem(CLAIM := FALSE, RELEASE:= TRUE);
+			RETURN;
+		END_IF
+
+		iTlgCount := iTlgCount + 1;
+
+		IF (diOffset = 0) THEN
+			IF (diRxLen >= SIZEOF(Tlg.Header)) THEN
+				(* Read Header form Soket *)
+
+				Read := UdpReceiveData(diSoketRx, iPort,  ADR(Tlg), SIZEOF(Tlg));
+				IF Read.diBytesReceived = 0 THEN
+					Sem(CLAIM := FALSE, RELEASE:= TRUE);
+					RETURN;
+				END_IF
+
+				IF bByteSwap THEN
+					Swap(ADR(Tlg.Header.nLen), SIZEOF(Tlg.Header.nLen));
+					Swap(ADR(Tlg.Header.dwIdentity), SIZEOF(Tlg.Header.dwIdentity));
+				END_IF
+
+				IF ( (Tlg.Header.nLen<= SIZEOF(Tlg) ) AND (Tlg.Header.dwIdentity = TELEGRAM_IDENT)) THEN
+					IF (Read.diBytesReceived >= Tlg.Header.nLen) THEN
+						diOffset := 0;
+						bTlgReady := TRUE;
+						diMsgCounter := diMsgCounter + 1;
+					ELSE
+						diOffset := Read.diBytesReceived;
+					END_IF
+				END_IF
+			ELSE
+				bReadNext := FALSE;
+			END_IF
+		ELSE (* Telegramm weiter lesen *)
+			IF (diOffset + diRxLen) < SIZEOF(Tlg) THEN
+				Read := UdpReceiveData(diSoketRx, iPort,  ADR(Tlg) + diOffset, SIZEOF(Tlg) - diOffset);
+				diOffset := diOffset + Read.diBytesReceived;
+				IF (diOffset >= Tlg.Header.nLen) THEN
+					diOffset := 0;
+					bTlgReady := TRUE;
+					diMsgCounter := diMsgCounter + 1;
+				END_IF
+			ELSE
+				diOffset := 0;
+			END_IF
+		END_IF
+
+		IF bTlgReady AND bByteSwap THEN
+			Swap(ADR(Tlg.Header.dwID), SIZEOF(Tlg.Header.dwID));
+			Swap(ADR(Tlg.Header.nIndex), SIZEOF(Tlg.Header.nIndex));
+			Swap(ADR(Tlg.Header.nSubIndex), SIZEOF(Tlg.Header.nSubIndex));
+			Swap(ADR(Tlg.Header.nItems), SIZEOF(Tlg.Header.nItems));
+			Swap(ADR(Tlg.Header.nCounter), SIZEOF(Tlg.Header.nCounter));
+		END_IF
+
+		IF (bTlgReady AND
+			(Read.dwIPAddress <> dwOneIPAddress) AND
+			(Tlg.Header.dwIdentity = TELEGRAM_IDENT)) THEN
+
+			CASE Tlg.Header.dwID OF
+				ODAcknowledgement:
+						(*Bestätigung empfangen*)
+						FOR n := 0 TO MAX_NetVarPDO_Tx_Udp DO
+							(*prüfen, ob Bestätigung mit  einem konfiguriertem Sende-PDO übereinstimmt*)
+							IF  ((Tlg.Header.nIndex = pNetVarPDO_Tx_Udp[n].sNetTelegramm.Header.nIndex) AND
+								(Tlg.Header.nSubIndex = pNetVarPDO_Tx_Udp[n].sNetTelegramm.Header.nSubIndex) AND
+								(Tlg.Header.nItems = pNetVarPDO_Tx_Udp[n].sNetTelegramm.Header.nItems) AND
+								(Tlg.Header.nLen = SIZEOF(Tlg.Header)) ) THEN
+
+								 IF ((Tlg.Header.nCounter = pNetVarPDO_Tx_Udp[n].sNetTelegramm.Header.nCounter) AND
+									(pNetVarPDO_Tx_Udp[n].nIndex >= 0)) THEN
+									(*Anzahl der Acknowledgement's seit dem letzten senden erhöhen*)
+									pNetVarPDO_Tx_Diagnosis_UDP[pNetVarPDO_Tx_Udp[n].nIndex].nAcknowledges :=
+											pNetVarPDO_Tx_Diagnosis_UDP[pNetVarPDO_Tx_Udp[n].nIndex].nAcknowledges + 1;
+								END_IF
+
+								IF ((NOT Tlg.Header.byFlags.2) AND (pNetVarPDO_Tx_Udp[n].nIndex >= 0)) THEN
+									(*negative Bestätigung => LastError setzten*)
+									pNetVarPDO_Tx_Diagnosis_UDP[pNetVarPDO_Tx_Udp[n].nIndex].sLastError := NetVarUDPError_NOTACKNOWLEDGED;
+									pNetVarPDO_Tx_Diagnosis_UDP[pNetVarPDO_Tx_Udp[n].nIndex].tLastError := TIME();
+									pNetVarPDO_Tx_Diagnosis_UDP[pNetVarPDO_Tx_Udp[n].nIndex].nErrorCount := pNetVarPDO_Tx_Diagnosis_UDP[pNetVarPDO_Tx_Udp[n].nIndex].nErrorCount + 1;
+								END_IF
+
+								bTlgReady := FALSE;
+								EXIT;
+							END_IF
+						END_FOR
+
+				ODBootUpRequest:
+						(* BootupRequest empfangen *)
+						FOR n := 0 TO MAX_NetVarPDO_Tx_Udp DO
+							(*prüfen, ob der Request mit  einem konfiguriertem Sende-PDO übereinstimmt*)
+							IF  ((Tlg.Header.nIndex = pNetVarPDO_Tx_Udp[n].sNetTelegramm.Header.nIndex) AND
+								(Tlg.Header.nSubIndex = pNetVarPDO_Tx_Udp[n].sNetTelegramm.Header.nSubIndex) AND
+								(Tlg.Header.nItems = pNetVarPDO_Tx_Udp[n].sNetTelegramm.Header.nItems) AND
+								(Tlg.Header.nCounter = 0) AND
+								(Tlg.Header.nLen = SIZEOF(Tlg.Header)) ) THEN
+
+								(*BootupRequest beantworten*)
+								pNetVarPDO_Tx_Udp[n].stIPAddressBootupRequest := Read.stIPAddressTransmitter ;
+								pNetVarPDO_Tx_Udp[n].bBootupRequestReceived := TRUE;
+								pNetVarPDO_Tx_Udp[n]();
+								bTlgReady := FALSE;
+
+								EXIT;
+							END_IF
+						END_FOR
+				ELSE
+						(*Daten empfangen?*)
+						FOR n := 0 TO MAX_NetVarPDO_Rx_Udp DO
+							(* prüfen, ob empfangenen Header mit Konfigurierten PDO übereinstimmt *)
+							IF (pNetVarPDO_Rx_Udp[n].bActive AND
+								(Tlg.Header.dwID = pNetVarPDO_Rx_Udp[n].sNetTelegramm.Header.dwID) AND
+								(Tlg.Header.nIndex = pNetVarPDO_Rx_Udp[n].sNetTelegramm.Header.nIndex) AND
+								(Tlg.Header.nSubIndex = pNetVarPDO_Rx_Udp[n].sNetTelegramm.Header.nSubIndex)) THEN
+
+									IF((Tlg.Header.nItems = pNetVarPDO_Rx_Udp[n].sNetTelegramm.Header.nItems) AND
+										(Tlg.Header.nLen = pNetVarPDO_Rx_Udp[n].sNetTelegramm.Header.nLen)) THEN
+
+										(* Telegramm-Daten und Counter kopieren *)
+										pNetVarPDO_Rx_Udp[n].sNetTelegramm.Header.nCounter := Tlg.Header.nCounter;
+										pNetVarPDO_Rx_Udp[n].sNetTelegramm.Header.byFlags := Tlg.Header.byFlags;
+										pNetVarPDO_Rx_Udp[n].sNetTelegramm.Header.byChecksum := Tlg.Header.byChecksum;
+										pNetVarPDO_Rx_Udp[n].sNetTelegramm.pData := Tlg.pData;
+										pNetVarPDO_Rx_Udp[n].stIPAddressTransmitter := Read.stIPAddressTransmitter;
+	
+										(* Sende Bestätigung, wenn erwünscht und setzte Empfangsstatus*)
+										(* Achtung: Empfangene Daten werden erst bei 'Begin Task' übertragen!*)
+										pNetVarPDO_Rx_Udp[n].bReceived := TRUE;
+										pNetVarPDO_Rx_Udp[n]();
+										bTlgReady := FALSE;
+										EXIT;
+									ELSE
+										pNetVarPDO_Rx_Diagnosis_UDP[n].sLastError := NetVarUDPError_LAYOUT;
+										pNetVarPDO_Rx_Diagnosis_UDP[n].tLastError := TIME();
+										pNetVarPDO_Rx_Diagnosis_UDP[n].nErrorCount := pNetVarPDO_Rx_Diagnosis_UDP[n].nErrorCount + 1;
+									END_IF
+								END_IF
+						END_FOR
+			END_CASE;
+
+			(* Auch nicht konfigurierte , aber empfangene PDOs uebergehen *)
+			IF bTlgReady AND (Tlg.Header.dwID = 0) THEN
+					bTlgReady := FALSE;
+			END_IF
+
+			(* prüfen, ob der empfangenen Header mit einem Konfigurierten SDO übereinstimmt *)
+			IF(bTlgReady)THEN
+				FOR n := 0 TO MAX_NetVarOD_Udp DO
+					pNetVarOD_Udp[n].CheckMsg();
+					IF (pNetVarOD_Udp[n].bMsgMatch) THEN
+						bTlgReady := FALSE;
+						EXIT;
+					END_IF
+				END_FOR
+			END_IF
+
+			IF(bTlgReady)THEN
+				FOR n := 1 TO 16 DO
+					(* prüfen, ob der empfangenen Header mit einem Konfigurierten eines User-SDO übereinstimmt *)
+					IF (ppUserSdo[n] <> 0) THEN
+						ppUserSdo[n]^.CheckMsg();
+						IF (ppUserSdo[n]^.bMsgMatch) THEN
+							bTlgReady := FALSE;
+							ppUserSdo[n] := 0;
+							EXIT;
+						END_IF
+					END_IF
+				END_FOR
+			END_IF
+
+			IF(bTlgReady) AND
+				(Tlg.Header.dwID = ODReadRequest OR Tlg.Header.dwID = ODWriteRequest  ) THEN
+				UdpSendTlg.sTelegramm.Header.dwIdentity	:= TELEGRAM_IDENT;
+				UdpSendTlg.sTelegramm.Header.dwID		:= ODErrorReplyIdx;
+				UdpSendTlg.sTelegramm.Header.nIndex		:= Tlg.Header.nIndex;
+				UdpSendTlg.sTelegramm.Header.nSubIndex	:= Tlg.Header.nSubIndex;
+				UdpSendTlg.sTelegramm.Header.nItems		:= Tlg.Header.nItems;
+				UdpSendTlg.sTelegramm.Header.nLen		:= SIZEOF(Tlg.Header);
+				UdpSendTlg.sTelegramm.Header.nCounter	:= 0;
+				bTlgReady := FALSE;
+
+				Swap(ADR(UdpSendTlg.sTelegramm.Header.dwIdentity), SIZEOF(UdpSendTlg.sTelegramm.Header.dwIdentity));
+				Swap(ADR(UdpSendTlg.sTelegramm.Header.dwID), SIZEOF(UdpSendTlg.sTelegramm.Header.dwID));
+				Swap(ADR(UdpSendTlg.sTelegramm.Header.nIndex), SIZEOF(UdpSendTlg.sTelegramm.Header.nIndex));
+				Swap(ADR(UdpSendTlg.sTelegramm.Header.nSubIndex), SIZEOF(UdpSendTlg.sTelegramm.Header.nSubIndex));
+				Swap(ADR(UdpSendTlg.sTelegramm.Header.nLen), SIZEOF(UdpSendTlg.sTelegramm.Header.nLen));
+				Swap(ADR(UdpSendTlg.sTelegramm.Header.nItems), SIZEOF(UdpSendTlg.sTelegramm.Header.nItems));
+				Swap(ADR(UdpSendTlg.sTelegramm.Header.nCounter), SIZEOF(UdpSendTlg.sTelegramm.Header.nCounter));
+
+				UdpSendTlg(stIPAddress := Read.stIPAddressTransmitter);
+			END_IF
+
+		END_IF
+	END_WHILE (* noch mehr Telegramme im Empfangsbuffer ??? *)
+
+ELSIF (nStatus = 0) THEN (* Initialisierung der  *)
+	(* Öffnen der Schnittstelle zur Versendung und zum Empfang der PDO's über die serielle Schnittstelle *)
+	SysCallbackRegister(INDEXOF(CallbackNetVar), EVENT_STOP); (* ToDo 2 übersetzen in EVENT_STOP *)
+	SysCallbackRegister(INDEXOF(CallbackNetVar), EVENT_BEFORE_RESET); (* ToDo 2 übersetzen in EVENT_BEFORE_RESET *)
+	SysCallbackRegister(INDEXOF(CallbackNetVar), EVENT_DEBUG_LOOP); (* ToDo 31 übersetzen in EVENT_DEBUG_LOOP *)
+	SysCallbackRegister(INDEXOF(CallbackNetVar), EVENT_BEFORE_DOWNLOAD); (* ToDo 31 übersetzen in EVENT_DEBUG_LOOP *)
+	SysCallbackRegister(INDEXOF(CallbackTaskCodeNC),EVENT_TASKCODE_NOT_CALLED); (* ToDo 31 übersetzen in EVENT_DEBUG_LOOP *)
+
+	nStatus := 1;
+
+ELSIF (nStatus = 1) THEN (* Initialisierung der  *)
+
+	tInhibit(IN:=TRUE);
+	IF NOT tInhibit.q THEN
+		Sem(CLAIM := FALSE, RELEASE:= TRUE);
+		RETURN;
+	END_IF
+
+	IF (diSoketRx = SOCKET_INVALID) THEN
+		diSoketRx := UdpOpenReceiveSocket(iPort);
+	END_IF
+
+	IF (diSoketTx = SOCKET_INVALID) THEN
+		diSoketTx := UdpOpenSendSocket(iPort);
+	END_IF
+
+	(* prüfen, ob das öffnen der Schnittstelle funktioniert hat *)
+	IF ( (diSoketRx >= 0) AND (diSoketTx >= 0) ) THEN
+		nStatus := 2;
+	END_IF
+
+	SysSockGetHostName(ADR(pszHostName), 80); (* get host name (name OF target PC) *)
+	dwOneIPAddress := SysSockGetHostByName(ADR(pszHostName));
+
+ELSIF (nStatus = 2) THEN (* Initialisierung der  *)
+	(* Öffnen der Schnittstelle zur Versendung und zum Empfang der PDO's über die serielle Schnittstelle *)
+	FOR n := 0 TO MAX_NetVarPDO_Rx_Udp DO
+		(* initialisierungs Aufruf für jedes Empfangs PDO *)
+		pNetVarPDO_Rx_Udp[n](bNewMessage := FALSE);
+	END_FOR
+	FOR n := 0 TO MAX_NetVarPDO_Tx_Udp DO
+		(* initialisierungs Aufruf für jedes Sende PDO *)
+		pNetVarPDO_Tx_Udp[n]();
+	END_FOR
+	nStatus := 5;
+END_IF
+
+Sem(CLAIM := FALSE, RELEASE:= TRUE);
+
+END_FUNCTION_BLOCK
+ACTION	CloseSockets:
+(* @TEXT_IMPLEMENTATION := 'ST' *)
+FOR n := 0 TO MAX_NetVarPDO_Tx_Udp DO
+	(* Alle Transmit PDO's noch mal versenden *)
+	pNetVarPDO_Tx_Udp[n].PDO_TxSendHard();
+	pNetVarPDO_Tx_Udp[n]();
+END_FOR
+
+IF (diSoketRx >= 0) THEN
+	SysSockClose(diSoketRx);
+	diSoketRx := SOCKET_INVALID;
+END_IF
+
+IF (diSoketTx >= 0) THEN
+	SysSockClose(diSoketTx);
+	diSoketTx := SOCKET_INVALID;
+END_IF
+
+tInhibit(IN:=FALSE);
+tInhibit(IN:=TRUE);
+nStatus := 0;
+END_ACTION
+

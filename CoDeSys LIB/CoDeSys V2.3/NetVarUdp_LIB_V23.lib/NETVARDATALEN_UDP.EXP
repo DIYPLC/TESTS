@@ -1,0 +1,13 @@
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+TYPE NetVarDataLen_Udp :
+(
+	OD_TYPE_8BIT_UDP := 1,
+	OD_TYPE_16BIT_UDP := 2,
+	OD_TYPE_32BIT_UDP := 4,
+	OD_TYPE_64BIT_UDP := 8
+);
+
+END_TYPE
+(* @END_DECLARATION := '0' *)

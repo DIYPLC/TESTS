@@ -1,0 +1,22 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '0' *)
+FUNCTION CheckRangeSigned : DINT
+VAR_INPUT
+	value, lower, upper: DINT;
+END_VAR
+VAR
+END_VAR
+(* @END_DECLARATION := '0' *)
+(* @TEXT_IMPLEMENTATION := 'ST' *)
+IF value < lower THEN
+	CheckRangeSigned := lower;
+ELSIF value > upper THEN
+	CheckRangeSigned := upper;
+ELSE
+	CheckRangeSigned := value;
+END_IF
+
+END_FUNCTION

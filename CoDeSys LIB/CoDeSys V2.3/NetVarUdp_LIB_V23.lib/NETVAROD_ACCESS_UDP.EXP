@@ -1,0 +1,11 @@
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+TYPE NetVarOD_Access_Udp :
+(
+	ODReadOnly,
+	ODWriteOnly,
+	ODReadWrite
+);
+END_TYPE
+(* @END_DECLARATION := '0' *)

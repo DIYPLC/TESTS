@@ -1,0 +1,22 @@
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @GLOBAL_VARIABLE_LIST := 'Globale_Variablen' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '0' *)
+VAR_GLOBAL
+	NetVarManager_Udp: NetVarManager_Udp_FB;
+
+	g_bCPUStopNetVar : BOOL;
+END_VAR
+VAR_GLOBAL CONSTANT
+	TELEGRAM_IDENT: DWORD := 16#33532D00;
+END_VAR
+
+
+(* @OBJECT_END := 'Globale_Variablen' *)
+(* @CONNECTIONS := Globale_Variablen
+FILENAME : ''
+FILETIME : 0
+EXPORT : 0
+NUMOFCONNECTIONS : 0
+*)

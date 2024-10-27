@@ -1,0 +1,32 @@
+LIBRARY
+SysLibSockets.lib 20.2.06 12:31:14
+(* @LIBRARYSYMFILEINFO := '0' *)
+NumOfPOUs: 25
+SysSockAccept: 0
+SysSockBind: 0
+SysSockClose: 0
+SysSockConnect: 0
+SysSockCreate: 0
+SysSockGetHostByName: 0
+SysSockGetHostName: 0
+SysSockGetLastError: 2048
+SysSockGetOption: 0
+SysSockHtonl: 0
+SysSockHtons: 0
+SysSockInetAddr: 0
+SysSockInetNtoa: 0
+SysSockIoctl: 0
+SysSockListen: 0
+SysSockNtohl: 0
+SysSockNtohs: 0
+SysSockRecv: 0
+SysSockRecvFrom: 0
+SysSockSelect: 0
+SysSockSend: 0
+SysSockSendTo: 0
+SysSockSetIPAddress: 0
+SysSockSetOption: 0
+SysSockShutdown: 0
+NumOfGVLs: 1
+Globale_Variablen: 0
+END_LIBRARY

@@ -1,0 +1,25 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/Udp specific' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '0' *)
+FUNCTION GetIPAddress : DINT
+VAR_INPUT
+	stIPAddress:STRING;		(* IP-address or computer name *)
+END_VAR
+VAR
+	diIPAddress:DINT;
+END_VAR
+(* @END_DECLARATION := '0' *)
+(* @TEXT_IMPLEMENTATION := 'ST' *)
+diIPAddress := SysSockInetAddr(stIPAddress);
+IF (stIPAddress = '255.255.255.255') THEN
+	(*Avoid name-resolution on our default broadcast address.*)
+	GetIPAddress:=diIPAddress;
+	RETURN ;
+END_IF
+IF diIPAddress = SOCKET_INADDR_NONE THEN
+	diIPAddress := SysSockGetHostByName(ADR(stIPAddress));
+END_IF
+GetIPAddress:=diIPAddress;
+END_FUNCTION

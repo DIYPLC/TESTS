@@ -1,0 +1,10 @@
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+TYPE CLIENT_ACCEPT :
+STRUCT
+	diSocket:DINT;
+	stIPAddress:STRING(20);
+END_STRUCT
+END_TYPE
+(* @END_DECLARATION := '0' *)

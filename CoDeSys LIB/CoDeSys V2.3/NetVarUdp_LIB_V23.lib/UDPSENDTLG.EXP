@@ -1,0 +1,37 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/Udp specific' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '0' *)
+PROGRAM UdpSendTlg
+(* Function to send data via UDP protocol.
+	Return:	Number of bytes realy sent
+*)	
+VAR_INPUT
+	stIPAddress		: STRING;(* IP-address or name *)
+	sTelegramm		: NetVarTelegramm_UDP;
+END_VAR
+VAR_OUTPUT
+	bReady			: BOOL;
+	dwResult		: DWORD;
+END_VAR
+VAR
+	sa				:SOCKADDRESS;
+	length: INT;
+END_VAR
+(* @END_DECLARATION := '0' *)
+(* @TEXT_IMPLEMENTATION := 'ST' *)
+sa.sin_family:=SOCKET_AF_INET;
+IF stIPAddress <> '' THEN
+	sa.sin_addr:=GetIPAddress(stIPAddress);
+ELSE
+	sa.sin_addr:=SOCKET_INADDR_BROADCAST;
+END_IF
+sa.sin_port := SysSockHtons(NetVarManager_Udp.iPort);
+
+length := sTelegramm.Header.nLen;
+Swap(ADR(length),SIZEOF(length));
+
+dwResult := SysSockSendTo(NetVarManager_Udp.diSoketTx, ADR(sTelegramm), length, 0, ADR(sa), SIZEOF(sa));
+bReady := (dwResult = length);
+END_PROGRAM

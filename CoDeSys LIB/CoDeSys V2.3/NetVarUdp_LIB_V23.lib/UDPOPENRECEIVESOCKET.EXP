@@ -1,0 +1,29 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/Udp specific' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '0' *)
+FUNCTION UdpOpenReceiveSocket : DINT
+VAR_INPUT
+	iPort:INT;
+END_VAR
+VAR
+	diSocket:DINT;
+	bOption:BOOL;
+	bResult:BOOL;
+	sa:SOCKADDRESS;
+END_VAR
+(* @END_DECLARATION := '0' *)
+(* @TEXT_IMPLEMENTATION := 'ST' *)
+diSocket:=SysSockCreate(SOCKET_AF_INET, SOCKET_DGRAM, 0);
+bOption:=TRUE;
+(*SysSockSetOption(diSocket, SOCKET_SOL, SOCKET_SO_BROADCAST, ADR(bOption), SIZEOF(bOption));*)
+sa.sin_family:=SOCKET_AF_INET;
+sa.sin_addr:=SOCKET_INADDR_ANY;
+sa.sin_port:=SysSockHtons(iPort);
+bResult:=SysSockBind(diSocket, ADR(sa), SIZEOF(sa));
+IF bResult = FALSE THEN
+	diSocket:=SOCKET_INVALID;
+END_IF
+UdpOpenReceiveSocket:=diSocket;
+END_FUNCTION

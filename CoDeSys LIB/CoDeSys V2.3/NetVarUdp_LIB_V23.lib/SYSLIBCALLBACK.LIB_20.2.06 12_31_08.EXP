@@ -1,0 +1,8 @@
+LIBRARY
+SysLibCallback.lib 20.2.06 12:31:08
+(* @LIBRARYSYMFILEINFO := '0' *)
+NumOfPOUs: 2
+SysCallbackRegister: 0
+SysCallbackUnregister: 0
+NumOfGVLs: 0
+END_LIBRARY

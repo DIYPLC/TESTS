@@ -1,0 +1,242 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/NetVar POUs' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '0' *)
+FUNCTION_BLOCK NetVarPDO_Rx_Udp
+VAR_INPUT
+	sNetTelegramm		: NetVarTelegramm_UDP;
+	TimeOut				: TON := (PT := t#500ms);
+	bNewMessage		: BOOL;
+	nIndex					: INT := -1;
+	diBytesSend			: DINT;
+	bReceived				: BOOL := FALSE;
+	bActive					: BOOL := TRUE;
+END_VAR
+VAR_OUTPUT
+	nStatus				: INT;
+	bDataNew			: BOOL;
+END_VAR
+(* Variablen, die bei der Initialaisierung übergeben werden müssen *)
+VAR_INPUT
+	pDataItems			: POINTER TO ARRAY[0..10000] OF NetVarDataItem_UDP;
+	wDrvNr				: WORD;
+	nDataItems			: INT := -1;
+	bySignature			:BYTE;
+	bRequestAtBootup	: BOOL;
+	stIPAddressTransmitter: 	STRING(20);
+	stIPAddressBroadcast:	STRING(20);
+END_VAR
+VAR	(* Interne Variablen, die zur Laufzeit bearbeitet werden  *)
+	pPtrToPDO_TxData	: POINTER TO ARRAY[0..127] OF BYTE;
+	pPtrToData			: POINTER TO ARRAY[0..127] OF BYTE;
+	DataItem			: NetVarDataItem_UDP;
+	i, n, nLen			: INT;
+	nDestIx			: INT;
+	nDestOrder		: INT;
+	iDataIx				: INT;
+	nLastRxCounter	: INT;
+	bInit				: BOOL := TRUE;
+	nInitStatus:		 INT;
+	bChecksumValid : BOOL := TRUE;
+END_VAR
+(* @END_DECLARATION := '0' *)
+(* @TEXT_IMPLEMENTATION := 'ST' *)
+IF (bInit) THEN
+	IF nInitStatus = 0 THEN
+		nLen :=	SIZEOF(sNetTelegramm.Header);
+
+		FOR n := 0 TO (nDataItems - 1) DO
+			IF (pDataItems^[n].nDataLen > 0) THEN
+				(* für alle Numerische zahlen wird die Länge in BYTE konfiguriert ... *)
+				nLen := nLen + pDataItems^[n].nDataLen;
+			ELSE
+				(* ... nur für die Strings wird die Länge negiert konfiguriert *)
+				nLen := nLen - pDataItems^[n].nDataLen;
+			END_IF
+		END_FOR
+		sNetTelegramm.Header.nLen := nLen;
+		nInitStatus := 1;
+		RETURN;
+	ELSIF nInitStatus = 1 THEN
+		(* Erweiterung CS 13.09.2001 Empfangs PDO's suchen zugehörige Sende PDO's,
+			damit über den Bus empfangenen Daten nicht gespiegelt werden.
+			hierfür werden die Empfangenendaten zusätzlich in den Speicherbereich
+			der Sende PDO's kopiert, so dass die Daten nur dann versendet werden,
+			wenn sie sich durch das Programm verändert haben. *)
+		pPtrToPDO_TxData := 0;
+		FOR n := 0 TO MAX_NetVarPDO_Tx_Udp DO
+			(* Suche nch zugehörigen Sende PDO's.
+				Das sind Sende-PDO's die zu diesem Empfangs PDO erzeugt werden,
+				wenn in der Netzwerk Verbindung LESEN und SCHREIBEN aktiviert wurde *)
+			IF ((sNetTelegramm.Header.dwID = pNetVarPDO_Tx_Udp[n].sNetTelegramm.Header.dwID) AND
+				(sNetTelegramm.Header.nIndex = pNetVarPDO_Tx_Udp[n].sNetTelegramm.Header.nIndex) AND
+				(sNetTelegramm.Header.nSubIndex = pNetVarPDO_Tx_Udp[n].sNetTelegramm.Header.nSubIndex) AND
+				(sNetTelegramm.Header.nItems = pNetVarPDO_Tx_Udp[n].sNetTelegramm.Header.nItems) AND
+				(sNetTelegramm.Header.nLen = pNetVarPDO_Tx_Udp[n].sNetTelegramm.Header.nLen) ) THEN
+				pPtrToPDO_TxData := ADR(pNetVarPDO_Tx_Udp[n].sNetTelegramm.pData);
+				EXIT;
+			END_IF
+		END_FOR
+
+		bInit := FALSE;
+		RETURN;
+	END_IF
+END_IF
+
+IF (bRequestAtBootup AND (NOT bInit) AND (NetVarManager_Udp.nStatus = 5)) THEN
+
+	(*Bootup Request senden*)
+	UdpSendTlg.sTelegramm.Header  := sNetTelegramm.Header;
+	UdpSendTlg.sTelegramm.Header.dwID := ODBootUpRequest;
+	UdpSendTlg.sTelegramm.Header.nLen := SIZEOF(UdpSendTlg.sTelegramm.Header);
+	UdpSendTlg.sTelegramm.Header.nCounter := 0;
+	UdpSendTlg.sTelegramm.Header.byFlags := 0;
+	UdpSendTlg.sTelegramm.Header.byChecksum := 0;
+
+	Swap(ADR(UdpSendTlg.sTelegramm.Header.dwIdentity), SIZEOF(UdpSendTlg.sTelegramm.Header.dwIdentity));
+	Swap(ADR(UdpSendTlg.sTelegramm.Header.dwID), SIZEOF(UdpSendTlg.sTelegramm.Header.dwID));
+	Swap(ADR(UdpSendTlg.sTelegramm.Header.nIndex), SIZEOF(UdpSendTlg.sTelegramm.Header.nIndex));
+	Swap(ADR(UdpSendTlg.sTelegramm.Header.nSubIndex), SIZEOF(UdpSendTlg.sTelegramm.Header.nSubIndex));
+	Swap(ADR(UdpSendTlg.sTelegramm.Header.nLen), SIZEOF(UdpSendTlg.sTelegramm.Header.nLen));
+	Swap(ADR(UdpSendTlg.sTelegramm.Header.nItems), SIZEOF(UdpSendTlg.sTelegramm.Header.nItems));
+	Swap(ADR(UdpSendTlg.sTelegramm.Header.nCounter), SIZEOF(UdpSendTlg.sTelegramm.Header.nCounter));
+
+	UdpSendTlg(stIPAddress := stIPAddressBroadcast);
+	IF (nIndex >= 0 AND (NOT UdpSendTlg.bReady)) THEN
+		pNetVarPDO_Rx_Diagnosis_UDP[nIndex].sLastError := NetVarUDPError_UDPSENDBOOTUPREQUEST;
+		pNetVarPDO_Rx_Diagnosis_UDP[nIndex].tLastError := TIME();
+		pNetVarPDO_Rx_Diagnosis_UDP[nIndex].nErrorCount := pNetVarPDO_Rx_Diagnosis_UDP[nIndex].nErrorCount + 1;
+	END_IF
+
+	bRequestAtBootup := FALSE;
+END_IF
+
+IF (bReceived) THEN
+	bChecksumValid := TRUE;
+
+	(* Checksumme prüfen  wenn erwünscht *)
+	IF (sNetTelegramm.Header.byFlags.1 AND sNetTelegramm.Header.byChecksum <> bySignature) THEN
+		IF (nIndex >= 0) THEN
+			pNetVarPDO_Rx_Diagnosis_UDP[nIndex].sLastError := NetVarUDPError_CHECKSUM;
+			pNetVarPDO_Rx_Diagnosis_UDP[nIndex].tLastError := TIME();
+			pNetVarPDO_Rx_Diagnosis_UDP[nIndex].nErrorCount := pNetVarPDO_Rx_Diagnosis_UDP[nIndex].nErrorCount + 1;
+		END_IF
+
+		bChecksumValid := FALSE;
+	END_IF
+
+	IF (nIndex >= 0) THEN (*Empfangszähler erhöhen und letzten Empfangszeitpunkt setzen*)
+		pNetVarPDO_Rx_Diagnosis_UDP[nIndex].nReceiveCount := pNetVarPDO_Rx_Diagnosis_UDP[nIndex].nReceiveCount + 1;
+		pNetVarPDO_Rx_Diagnosis_UDP[nIndex].tLastReceive := TIME();
+	END_IF
+
+	(* Bestätigung senden wenn erwünscht *)
+	IF (sNetTelegramm.Header.byFlags.0  AND stIPAddressTransmitter <> '') THEN
+		UdpSendTlg.sTelegramm.Header  := sNetTelegramm.Header;
+		UdpSendTlg.sTelegramm.Header.dwID := ODAcknowledgement;
+		UdpSendTlg.sTelegramm.Header.nLen := SIZEOF(UdpSendTlg.sTelegramm.Header);
+		IF (bChecksumValid) THEN
+			UdpSendTlg.sTelegramm.Header.byFlags.2 := TRUE;
+		ELSE
+			UdpSendTlg.sTelegramm.Header.byFlags.2 := FALSE;
+		END_IF
+
+		Swap(ADR(UdpSendTlg.sTelegramm.Header.dwIdentity), SIZEOF(UdpSendTlg.sTelegramm.Header.dwIdentity));
+		Swap(ADR(UdpSendTlg.sTelegramm.Header.dwID), SIZEOF(UdpSendTlg.sTelegramm.Header.dwID));
+		Swap(ADR(UdpSendTlg.sTelegramm.Header.nIndex), SIZEOF(UdpSendTlg.sTelegramm.Header.nIndex));
+		Swap(ADR(UdpSendTlg.sTelegramm.Header.nSubIndex), SIZEOF(UdpSendTlg.sTelegramm.Header.nSubIndex));
+		Swap(ADR(UdpSendTlg.sTelegramm.Header.nLen), SIZEOF(UdpSendTlg.sTelegramm.Header.nLen));
+		Swap(ADR(UdpSendTlg.sTelegramm.Header.nItems), SIZEOF(UdpSendTlg.sTelegramm.Header.nItems));
+		Swap(ADR(UdpSendTlg.sTelegramm.Header.nCounter), SIZEOF(UdpSendTlg.sTelegramm.Header.nCounter));
+
+		UdpSendTlg(stIPAddress := stIPAddressTransmitter);
+
+		IF (nIndex >= 0) THEN
+			IF (UdpSendTlg.bReady) THEN
+				pNetVarPDO_Rx_Diagnosis_UDP[nIndex].nAcknowledges := pNetVarPDO_Rx_Diagnosis_UDP[nIndex].nAcknowledges + 1;
+			ELSE
+				pNetVarPDO_Rx_Diagnosis_UDP[nIndex].sLastError := NetVarUDPError_UDPSENDACKN;
+				pNetVarPDO_Rx_Diagnosis_UDP[nIndex].tLastError := TIME();
+				pNetVarPDO_Rx_Diagnosis_UDP[nIndex].nErrorCount := pNetVarPDO_Rx_Diagnosis_UDP[nIndex].nErrorCount + 1;
+			END_IF
+		END_IF
+
+	END_IF
+
+	IF (bChecksumValid) THEN
+		bNewMessage := TRUE;
+	END_IF
+
+	bReceived := FALSE;
+	bChecksumValid := TRUE;
+	RETURN;
+END_IF
+
+TimeOut(IN := TRUE);
+
+IF (bNewMessage) THEN
+	TimeOut(IN := FALSE);
+	iDataIx := 0;
+	(* Übertragung des Empfangs-/Sendebuffer in die IEC-Variablen *)
+	FOR n := 0 TO (nDataItems-1) DO
+		DataItem := pDataItems^[n];
+		nDestOrder := SEL(NetVarManager_Udp.bByteSwap, 1, -1);
+		nLen := DataItem.nDataLen;
+
+		CASE (nLen) OF
+			OD_TYPE_8BIT_UDP:
+				DataItem.pAdress^[0] := sNetTelegramm.pData[iDataIx];
+				iDataIx := iDataIx + 1;
+
+			OD_TYPE_16BIT_UDP, OD_TYPE_32BIT_UDP, OD_TYPE_64BIT_UDP:
+				nLen := nLen - 1; (* wegen FOR-Schleife *)
+				nDestIx := SEL(NetVarManager_Udp.bByteSwap, iDataIx, (iDataIx + nLen));
+				FOR i := 0 TO nLen DO
+					DataItem.pAdress^[i] := sNetTelegramm.pData[nDestIx];
+					nDestIx := nDestIx + nDestOrder;
+				END_FOR
+				iDataIx := iDataIx + i;
+
+			ELSE
+				IF (nLen < -1) THEN
+					(* für Strings wird einfach ein negativer Wert
+					bei den DatenTypen eingetragen und dieser wird dann 
+					als String länge interpretiert *)
+					nLen := -1 - nLen;
+					FOR i := 0 TO nLen DO
+						DataItem.pAdress^[i] := sNetTelegramm.pData[iDataIx + i];
+					END_FOR
+					iDataIx := iDataIx + i;
+				END_IF
+		END_CASE
+	END_FOR
+
+	(* Erweiterung CS 13.09.2001 Daten von Empfangs PDO's werden zusätzlich
+		in die zugehörige Sende PDO's, kopiert,	damit über den Bus empfangenen
+		Daten nicht gespiegelt werden. *)
+	IF (pPtrToPDO_TxData <> 0) THEN
+		pPtrToData := ADR(sNetTelegramm.pData);
+		pPtrToPDO_TxData^ := pPtrToData^;
+	END_IF
+
+	IF (nIndex >= 0) THEN (*Schreibzähler erhöhen*)
+		pNetVarPDO_Rx_Diagnosis_UDP[nIndex].nWriteCount := pNetVarPDO_Rx_Diagnosis_UDP[nIndex].nWriteCount + 1;
+	END_IF
+
+	bNewMessage := FALSE;
+END_IF
+
+IF (TimeOut.Q AND TimeOut.PT <> T#0s) THEN
+	nStatus := -1;
+ELSE
+	nStatus := 0;
+END_IF
+
+END_FUNCTION_BLOCK
+ACTION	NewDataRec:
+(* @TEXT_IMPLEMENTATION := 'ST' *)
+bNewMessage := (nLastRxCounter <> sNetTelegramm.Header.nCounter);
+nLastRxCounter := sNetTelegramm.Header.nCounter;
+END_ACTION
+

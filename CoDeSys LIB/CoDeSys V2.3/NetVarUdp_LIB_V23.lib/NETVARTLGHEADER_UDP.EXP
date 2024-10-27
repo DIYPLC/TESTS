@@ -1,0 +1,19 @@
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+TYPE NetVarTlgHeader_Udp :
+STRUCT
+	dwIdentity	: DWORD := TELEGRAM_IDENT; (* Kennung für Art der UDP Message BYTE 0 = '3', 1 = 'S', 2 = '-' , 3 = Nummer der Version *)
+	dwID		: DWORD;
+	nIndex		: INT;
+	nSubIndex	: INT;
+	nItems		: INT;
+	nLen		: INT;
+	nCounter	: INT;
+	byFlags 	: BYTE; (*Bit 0: Sende Bestätigung erwünscht*)
+						 (*Bit 1: Checksumme prüfen*)
+						 (*Bit 2: Ungültige Checksumme*)
+	byChecksum: BYTE;
+END_STRUCT
+END_TYPE
+(* @END_DECLARATION := '0' *)

@@ -1,0 +1,22 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '0' *)
+FUNCTION CheckBounds : DINT
+VAR_INPUT
+	index, lower, upper: DINT;
+END_VAR
+VAR
+END_VAR
+(* @END_DECLARATION := '0' *)
+(* @TEXT_IMPLEMENTATION := 'ST' *)
+IF index < lower THEN
+	CheckBounds := lower;
+ELSIF index > upper THEN
+	CheckBounds := upper;
+ELSE CheckBounds := index;
+END_IF
+
+
+END_FUNCTION

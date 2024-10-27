@@ -1,0 +1,10 @@
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+TYPE NetVarDataItem_Udp :
+STRUCT
+	pAdress		: POINTER TO ARRAY[0..255] OF BYTE;
+	nDataLen	: NetVarDataLen_Udp;
+END_STRUCT
+END_TYPE
+(* @END_DECLARATION := '0' *)

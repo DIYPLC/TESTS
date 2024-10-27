@@ -1,0 +1,441 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/NetVar POUs' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '0' *)
+FUNCTION_BLOCK NetVarSDO_Udp
+VAR_INPUT
+	bReadData			: BOOL;
+	bWriteData			: BOOL;
+	nIndex				: INT;
+	nSubIndex			: INT;
+	pData				: POINTER TO ARRAY[0..255] OF BYTE;
+	nLen				: INT;
+	nItems				: INT;
+	stIPAddressClient	: STRING(20);
+	TimeOut				: TIME := t#500ms;
+
+END_VAR
+VAR_OUTPUT
+	nStatus				: NetVarOD_Service_Udp;
+END_VAR
+VAR
+	(* Variablen, die bei der Initialaisierung übergeben werden *)
+	byAttrib			: BYTE;
+	byAccess			: NetVarOD_Access_Udp := ODReadWrite;
+
+	(* For initializing swapping mechanisms. Is initialzed by CoDeSys for instances, only called on  *)
+	nElementSize		: INT;
+
+	(* Interne Variablen, die zur Laufzeit bearbeitet werden  *)
+	bInit				: BOOL := TRUE;
+	bMsgMatch			: BOOL;
+	bMR, bMW			: BOOL;
+	n					: INT;
+	nTabIndex			: INT;
+	nCounter			: INT;
+	Timer				: TON;
+	pPtr				: POINTER TO DWORD;
+	bAccept: BOOL;
+END_VAR
+(* @END_DECLARATION := '0' *)
+(* @TEXT_IMPLEMENTATION := 'ST' *)
+IF (bInit) THEN
+	bInit := FALSE;
+	nStatus := 0;
+	RETURN;
+END_IF
+
+IF ((nStatus <> ODReadRequest) AND (nStatus <> ODWriteRequest)) THEN
+	IF (bReadData AND (NOT bMR)) THEN
+		IF (pData <> 0) AND (nLen <> 0) THEN
+
+			(*On starting an read request, the elementsize can now be computed from the inputs:*)
+			IF nItems > 0 THEN
+				nElementSize := nLen / nItems;
+			END_IF
+
+			nStatus := ODReadRequest;
+			Timer(In := FALSE);
+			Timer(In := TRUE, PT := TimeOut);
+
+			nTabIndex := 0;
+			FOR n := 1 TO 16 DO
+				IF ((NetVarManager_Udp.ppUserSdo[n] = 0) AND (nTabIndex = 0)) THEN
+					nTabIndex := n; (* erste freie Position in der User SDO-Tabelle *)
+				END_IF
+			END_FOR
+			IF (nTabIndex <> 0) THEN
+				pPtr := ADR(NetVarManager_Udp.ppUserSdo[nTabIndex]);
+				pPtr^ := ADR(byAttrib);
+				(* Datentelegramm vorbereiten *)
+				nCounter := nCounter + 1;
+				UdpSendTlg.sTelegramm.Header.dwIdentity	:= TELEGRAM_IDENT; (* Kennung für Art der UDP Message BYTE 0 = '3', 1 = 'S', 2 = '-' , 3 = Nummer der Version *)
+				UdpSendTlg.sTelegramm.Header.nIndex		:= nIndex;
+				UdpSendTlg.sTelegramm.Header.nSubIndex	:= nSubIndex;
+				UdpSendTlg.sTelegramm.Header.nItems		:= nItems;
+				UdpSendTlg.sTelegramm.Header.nCounter	:= nCounter;
+				UdpSendTlg.sTelegramm.Header.dwID 		:= ODReadRequest;
+				UdpSendTlg.sTelegramm.Header.nLen 		:= SIZEOF(UdpSendTlg.sTelegramm.Header);
+
+				Swap(ADR(UdpSendTlg.sTelegramm.Header.dwIdentity),SIZEOF(UdpSendTlg.sTelegramm.Header.dwIdentity));
+				Swap(ADR(UdpSendTlg.sTelegramm.Header.dwID),SIZEOF(UdpSendTlg.sTelegramm.Header.dwID));
+				Swap(ADR(UdpSendTlg.sTelegramm.Header.nIndex),SIZEOF(UdpSendTlg.sTelegramm.Header.nIndex));
+				Swap(ADR(UdpSendTlg.sTelegramm.Header.nSubIndex),SIZEOF(UdpSendTlg.sTelegramm.Header.nSubIndex));
+				Swap(ADR(UdpSendTlg.sTelegramm.Header.nLen),SIZEOF(UdpSendTlg.sTelegramm.Header.nLen));
+				Swap(ADR(UdpSendTlg.sTelegramm.Header.nItems),SIZEOF(UdpSendTlg.sTelegramm.Header.nItems));
+				Swap(ADR(UdpSendTlg.sTelegramm.Header.nCounter),SIZEOF(UdpSendTlg.sTelegramm.Header.nCounter));
+				UdpSendTlg(stIPAddress := stIPAddressClient);
+
+			END_IF
+		END_IF
+	ELSIF (bWriteData AND (NOT bMW)) THEN
+		IF (pData <> 0) AND (nLen <> 0) THEN
+
+			(*On starting a write request, the elementsize can now be computed from the inputs:*)
+			IF nItems > 0 THEN
+				nElementSize := nLen / nItems;
+			END_IF
+
+			nStatus := ODWriteRequest;
+			Timer(In := FALSE);
+			Timer(In := TRUE, PT := TimeOut);
+
+			nTabIndex := 0;
+			FOR n := 1 TO 16 DO
+				IF ((NetVarManager_Udp.ppUserSdo[n] = 0) AND (nTabIndex = 0)) THEN
+					nTabIndex := n; (* erste freie Position in der User SDO-Tabelle *)
+				END_IF
+			END_FOR
+			IF (nTabIndex <> 0) THEN
+				pPtr := ADR(NetVarManager_Udp.ppUserSdo[nTabIndex]);
+				pPtr^ := ADR(byAttrib);
+				(* Datentelegramm vorbereiten *)
+				nCounter := nCounter + 1;
+				UdpSendTlg.sTelegramm.Header.dwIdentity	:= TELEGRAM_IDENT; (* Kennung für Art der UDP Message BYTE 0 = '3', 1 = 'S', 2 = '-' , 3 = Nummer der Version *)
+				UdpSendTlg.sTelegramm.Header.nIndex		:= nIndex;
+				UdpSendTlg.sTelegramm.Header.nSubIndex	:= nSubIndex;
+				UdpSendTlg.sTelegramm.Header.nItems		:= nItems;
+				UdpSendTlg.sTelegramm.Header.nCounter	:= nCounter;
+				UdpSendTlg.sTelegramm.Header.dwID 		:= ODWriteRequest;
+				UdpSendTlg.sTelegramm.Header.nLen 		:= SIZEOF(UdpSendTlg.sTelegramm.Header) + nLen;
+
+				IF (nElementSize >= 2) AND (NetVarManager_Udp.bByteSwap) THEN
+					(* Daten Swapen *)
+					n := 0;
+					REPEAT
+						CASE (nElementSize) OF
+							1:
+								UdpSendTlg.sTelegramm.pData[n] := pData^[n];
+								n := n + 1;
+							2:
+								UdpSendTlg.sTelegramm.pData[n+1] := pData^[n];
+								UdpSendTlg.sTelegramm.pData[n]   := pData^[n+1];
+								n := n + 2;
+							4:
+								UdpSendTlg.sTelegramm.pData[n+3] := pData^[n];
+								UdpSendTlg.sTelegramm.pData[n+2] := pData^[n+1];
+								UdpSendTlg.sTelegramm.pData[n+1] := pData^[n+2];
+								UdpSendTlg.sTelegramm.pData[n]   := pData^[n+3];
+								n := n + 4;
+							8:
+								UdpSendTlg.sTelegramm.pData[n+7] := pData^[n];
+								UdpSendTlg.sTelegramm.pData[n+6] := pData^[n+1];
+								UdpSendTlg.sTelegramm.pData[n+5] := pData^[n+2];
+								UdpSendTlg.sTelegramm.pData[n+4] := pData^[n+3];
+								UdpSendTlg.sTelegramm.pData[n+3] := pData^[n+4];
+								UdpSendTlg.sTelegramm.pData[n+2] := pData^[n+5];
+								UdpSendTlg.sTelegramm.pData[n+1] := pData^[n+6];
+								UdpSendTlg.sTelegramm.pData[n]   := pData^[n+7];
+								n := n + 8;
+						END_CASE
+					UNTIL (n >= nLen) END_REPEAT
+				ELSE
+					(* Daten nicht swapen *)
+					FOR n := 0 TO nLen DO
+						UdpSendTlg.sTelegramm.pData[n] := pData^[n];
+					END_FOR
+				END_IF
+
+				Swap(ADR(UdpSendTlg.sTelegramm.Header.dwIdentity),SIZEOF(UdpSendTlg.sTelegramm.Header.dwIdentity));
+				Swap(ADR(UdpSendTlg.sTelegramm.Header.dwID),SIZEOF(UdpSendTlg.sTelegramm.Header.dwID));
+				Swap(ADR(UdpSendTlg.sTelegramm.Header.nIndex),SIZEOF(UdpSendTlg.sTelegramm.Header.nIndex));
+				Swap(ADR(UdpSendTlg.sTelegramm.Header.nSubIndex),SIZEOF(UdpSendTlg.sTelegramm.Header.nSubIndex));
+				Swap(ADR(UdpSendTlg.sTelegramm.Header.nLen),SIZEOF(UdpSendTlg.sTelegramm.Header.nLen));
+				Swap(ADR(UdpSendTlg.sTelegramm.Header.nItems),SIZEOF(UdpSendTlg.sTelegramm.Header.nItems));
+				Swap(ADR(UdpSendTlg.sTelegramm.Header.nCounter),SIZEOF(UdpSendTlg.sTelegramm.Header.nCounter));
+
+				UdpSendTlg(stIPAddress := stIPAddressClient);
+			END_IF
+		END_IF
+	END_IF
+ELSE
+	Timer();
+	IF (Timer.Q) THEN
+		IF (nTabIndex <> 0) THEN
+			pPtr := ADR(NetVarManager_Udp.ppUserSdo[nTabIndex]);
+			pPtr^ := 0;
+			nTabIndex := 0;
+		END_IF
+		nStatus := ODErrorTimeOut;
+	END_IF
+END_IF
+
+bMR := bReadData;
+bMW := bWriteData;
+
+IF NOT bReadData AND NOT bWriteData THEN
+	nStatus := ODStateFree;
+END_IF
+
+END_FUNCTION_BLOCK
+ACTION	CheckMsg:
+(* @TEXT_IMPLEMENTATION := 'ST' *)
+IF ((NetVarManager_Udp.Tlg.Header.nIndex = nIndex) AND
+	(NetVarManager_Udp.Tlg.Header.nSubIndex = nSubIndex)) THEN
+
+	(* Only accept messages if this instance is in the rigt state *)
+	bAccept := FALSE;
+
+	IF (nStatus = ODReadRequest OR nStatus = ODWriteRequest) AND
+		(  NetVarManager_Udp.Tlg.Header.dwID = ODErrorReplyIdx OR
+		  NetVarManager_Udp.Tlg.Header.dwID = ODErrorReplyAccess OR
+		  NetVarManager_Udp.Tlg.Header.dwID = ODErrorReplyItems OR
+		  NetVarManager_Udp.Tlg.Header.dwID = ODErrorReplyLen  OR
+		 NetVarManager_Udp.Tlg.Header.dwID = ODErrorReplyCPUStopped  ) THEN
+		nStatus := DWORD_TO_INT(NetVarManager_Udp.Tlg.Header.dwID);
+		bMsgMatch := TRUE;
+		RETURN;
+	END_IF
+
+	IF nStatus = ODStateFree  AND (NetVarManager_Udp.Tlg.Header.dwID = ODReadRequest OR NetVarManager_Udp.Tlg.Header.dwID = ODWriteRequest) THEN
+		bAccept := TRUE;
+	END_IF
+	IF nStatus = ODReadRequest  AND NetVarManager_Udp.Tlg.Header.dwID = ODReadRequestReply THEN
+		bAccept := TRUE;
+	END_IF
+	IF nStatus = ODWriteRequest  AND NetVarManager_Udp.Tlg.Header.dwID = ODWriteRequestReply THEN
+		bAccept := TRUE;
+	END_IF
+
+	IF NOT bAccept THEN
+		bMsgMatch := FALSE;
+		RETURN;
+	END_IF
+
+	bMsgMatch := TRUE;
+	nCounter := NetVarManager_Udp.Tlg.Header.nCounter + 1;
+	Timer(In := FALSE);
+
+(*
+	IF (nTabIndex <> 0) THEN
+		pPtr := ADR(NetVarManager_Udp.ppUserSdo[nTabIndex]);
+		pPtr^ := 0;
+		nTabIndex := 0;
+	END_IF
+*)
+
+	(* Antwortdaten vorbereiten *)
+	UdpSendTlg.sTelegramm.Header.dwIdentity	:= TELEGRAM_IDENT; (* Kennung für Art der UDP Message BYTE 0 = '3', 1 = 'S', 2 = '-' , 3 = Nummer der Version *)
+	UdpSendTlg.sTelegramm.Header.nIndex		:= nIndex;
+	UdpSendTlg.sTelegramm.Header.nSubIndex	:= nSubIndex;
+	UdpSendTlg.sTelegramm.Header.nItems		:= nItems;
+	UdpSendTlg.sTelegramm.Header.nLen		:= SIZEOF(UdpSendTlg.sTelegramm.Header);
+	UdpSendTlg.sTelegramm.Header.nCounter	:= nCounter;
+
+	(*************************************************************************************)
+	(*************************************************************************************)
+	(* *  * * * * * * * * READ Telegramm erhalten. Telegramm beantworten * * * * * * * * *)
+	(*************************************************************************************)
+	(*************************************************************************************)
+	IF (NetVarManager_Udp.Tlg.Header.dwID = ODReadRequest) THEN
+		nStatus := ODReadRequestReply;
+
+		IF g_bCPUStopNetVar THEN
+			(* CPU is not running, always return this error. *)
+			UdpSendTlg.sTelegramm.Header.dwID := ODErrorReplyCPUStopped;
+			UdpSendTlg(stIPAddress := NetVarManager_Udp.Read.stIPAddressTransmitter);
+			nStatus := ODStateFree;
+			RETURN;
+		END_IF
+
+		IF (byAccess = ODWriteOnly) THEN
+			(* Kein lesender Zugriff *)
+			UdpSendTlg.sTelegramm.Header.dwID := ODErrorReplyAccess;
+			UdpSendTlg(stIPAddress := NetVarManager_Udp.Read.stIPAddressTransmitter);
+			nStatus := ODStateFree;
+			RETURN;
+		END_IF
+
+		IF (NetVarManager_Udp.Tlg.Header.nItems <> nItems) THEN
+			(* Falsche Datenanzahl *)
+			UdpSendTlg.sTelegramm.Header.dwID := ODErrorReplyItems;
+			UdpSendTlg(stIPAddress := NetVarManager_Udp.Read.stIPAddressTransmitter);
+			nStatus := ODStateFree;
+			RETURN;
+		END_IF
+
+		IF (NetVarManager_Udp.Tlg.Header.nLen <> 20) THEN
+			(* Falsche Datenlänge *)
+			UdpSendTlg.sTelegramm.Header.dwID := ODErrorReplyLen;
+			UdpSendTlg(stIPAddress := NetVarManager_Udp.Read.stIPAddressTransmitter);
+			nStatus := ODStateFree;
+			RETURN;
+		END_IF
+
+		(* Anfrage Ok, Daten zurück senden *)
+		UdpSendTlg.sTelegramm.Header.dwID := ODReadRequestReply;
+		UdpSendTlg.sTelegramm.Header.nLen := SIZEOF(UdpSendTlg.sTelegramm.Header) + nLen;
+
+		IF (nElementSize >= 2) AND (NetVarManager_Udp.bByteSwap) THEN
+			(* Daten Swapen *)
+			n := 0;
+			REPEAT
+				CASE (nElementSize) OF
+					1:
+						UdpSendTlg.sTelegramm.pData[n] := pData^[n];
+						n := n + 1;
+					2:
+						UdpSendTlg.sTelegramm.pData[n+1] := pData^[n];
+						UdpSendTlg.sTelegramm.pData[n]   := pData^[n+1];
+						n := n + 2;
+					4:
+						UdpSendTlg.sTelegramm.pData[n+3] := pData^[n];
+						UdpSendTlg.sTelegramm.pData[n+2] := pData^[n+1];
+						UdpSendTlg.sTelegramm.pData[n+1] := pData^[n+2];
+						UdpSendTlg.sTelegramm.pData[n]   := pData^[n+3];
+						n := n + 4;
+					8:
+						UdpSendTlg.sTelegramm.pData[n+7] := pData^[n];
+						UdpSendTlg.sTelegramm.pData[n+6] := pData^[n+1];
+						UdpSendTlg.sTelegramm.pData[n+5] := pData^[n+2];
+						UdpSendTlg.sTelegramm.pData[n+4] := pData^[n+3];
+						UdpSendTlg.sTelegramm.pData[n+3] := pData^[n+4];
+						UdpSendTlg.sTelegramm.pData[n+2] := pData^[n+5];
+						UdpSendTlg.sTelegramm.pData[n+1] := pData^[n+6];
+						UdpSendTlg.sTelegramm.pData[n]   := pData^[n+7];
+						n := n + 8;
+				END_CASE
+			UNTIL (n >= nLen) END_REPEAT
+		ELSE
+			(* Daten nicht swapen *)
+			FOR n := 0 TO nLen-1 DO
+				UdpSendTlg.sTelegramm.pData[n] := pData^[n];
+			END_FOR
+		END_IF
+
+		Swap(ADR(UdpSendTlg.sTelegramm.Header.dwIdentity), SIZEOF(UdpSendTlg.sTelegramm.Header.dwIdentity));
+		Swap(ADR(UdpSendTlg.sTelegramm.Header.dwID), SIZEOF(UdpSendTlg.sTelegramm.Header.dwID));
+		Swap(ADR(UdpSendTlg.sTelegramm.Header.nIndex), SIZEOF(UdpSendTlg.sTelegramm.Header.nIndex));
+		Swap(ADR(UdpSendTlg.sTelegramm.Header.nSubIndex), SIZEOF(UdpSendTlg.sTelegramm.Header.nSubIndex));
+		Swap(ADR(UdpSendTlg.sTelegramm.Header.nLen), SIZEOF(UdpSendTlg.sTelegramm.Header.nLen));
+		Swap(ADR(UdpSendTlg.sTelegramm.Header.nItems), SIZEOF(UdpSendTlg.sTelegramm.Header.nItems));
+		Swap(ADR(UdpSendTlg.sTelegramm.Header.nCounter), SIZEOF(UdpSendTlg.sTelegramm.Header.nCounter));
+
+		UdpSendTlg(stIPAddress := NetVarManager_Udp.Read.stIPAddressTransmitter);
+		nStatus := ODStateFree;
+
+	(**************************************************************************************)
+	(**************************************************************************************)
+	(* *  * * * * * * * * WRITE Telegramm erhalten. Telegramm beantworten * * * * * * * * *)
+	(**************************************************************************************)
+	(**************************************************************************************)
+	ELSIF (NetVarManager_Udp.Tlg.Header.dwID = ODWriteRequest OR
+			NetVarManager_Udp.Tlg.Header.dwID = ODReadRequestReply) THEN
+
+		nStatus := DWORD_TO_INT(NetVarManager_Udp.Tlg.Header.dwID);
+
+		IF g_bCPUStopNetVar THEN
+			(* CPU is not running, always return this error. *)
+			UdpSendTlg.sTelegramm.Header.dwID := ODErrorReplyCPUStopped;
+			UdpSendTlg(stIPAddress := NetVarManager_Udp.Read.stIPAddressTransmitter);
+			nStatus := ODStateFree;
+			RETURN;
+		END_IF
+
+		IF (byAccess = ODReadOnly) THEN
+			(* Kein schreibender Zugriff *)
+			UdpSendTlg.sTelegramm.Header.dwID := ODErrorReplyAccess;
+			UdpSendTlg(stIPAddress := NetVarManager_Udp.Read.stIPAddressTransmitter);
+			nStatus := ODStateFree;
+			RETURN;
+		END_IF
+
+		IF (NetVarManager_Udp.Tlg.Header.nItems <> nItems) THEN
+			(* Falsche Datenanzahl *)
+			UdpSendTlg.sTelegramm.Header.dwID := ODErrorReplyItems;
+			UdpSendTlg(stIPAddress := NetVarManager_Udp.Read.stIPAddressTransmitter);
+			nStatus := ODStateFree;
+			RETURN;
+		END_IF
+
+		IF (NetVarManager_Udp.Tlg.Header.nLen <> (nLen + 20)) THEN
+			(* Falsche Datenlänge *)
+			UdpSendTlg.sTelegramm.Header.dwID := ODErrorReplyLen;
+			UdpSendTlg(stIPAddress := NetVarManager_Udp.Read.stIPAddressTransmitter);
+			nStatus := ODStateFree;
+			RETURN;
+		END_IF
+
+		(* Anfrage Ok, Daten zurück senden *)
+		IF (nElementSize >= 2) AND (NetVarManager_Udp.bByteSwap) THEN
+			(* Daten Swapen *)
+			n := 0;
+			REPEAT
+				CASE (nElementSize) OF
+					1:
+						pData^[n] := NetVarManager_Udp.Tlg.pData[n];
+						n := n + 1;
+					2:
+						pData^[n] := NetVarManager_Udp.Tlg.pData[n+1];
+						pData^[n+1] := NetVarManager_Udp.Tlg.pData[n];
+						n := n + 2;
+					4:
+						pData^[n] := NetVarManager_Udp.Tlg.pData[n+3];
+						pData^[n+1] := NetVarManager_Udp.Tlg.pData[n+2];
+						pData^[n+2] := NetVarManager_Udp.Tlg.pData[n+1];
+						pData^[n+3] := NetVarManager_Udp.Tlg.pData[n];
+						n := n + 4;
+					8:
+						pData^[n] := NetVarManager_Udp.Tlg.pData[n+7];
+						pData^[n+1] := NetVarManager_Udp.Tlg.pData[n+6];
+						pData^[n+2] := NetVarManager_Udp.Tlg.pData[n+5];
+						pData^[n+3] := NetVarManager_Udp.Tlg.pData[n+4];
+						pData^[n+4] := NetVarManager_Udp.Tlg.pData[n+3];
+						pData^[n+5] := NetVarManager_Udp.Tlg.pData[n+2];
+						pData^[n+6] := NetVarManager_Udp.Tlg.pData[n+1];
+						pData^[n+7] := NetVarManager_Udp.Tlg.pData[n];
+						n := n + 8;
+				END_CASE
+			UNTIL (n >= nLen) END_REPEAT
+		ELSE
+			(* Daten nicht swapen *)
+			FOR n := 0 TO nLen-1 DO
+				pData^[n] := NetVarManager_Udp.Tlg.pData[n];
+			END_FOR
+		END_IF
+
+		IF (NetVarManager_Udp.Tlg.Header.dwID = ODWriteRequest) THEN
+			(* Schreibauftrag quittieren *)
+			UdpSendTlg.sTelegramm.Header.dwID := ODWriteRequestReply;
+
+			Swap(ADR(UdpSendTlg.sTelegramm.Header.dwIdentity), SIZEOF(UdpSendTlg.sTelegramm.Header.dwIdentity));
+			Swap(ADR(UdpSendTlg.sTelegramm.Header.dwID), SIZEOF(UdpSendTlg.sTelegramm.Header.dwID));
+			Swap(ADR(UdpSendTlg.sTelegramm.Header.nIndex), SIZEOF(UdpSendTlg.sTelegramm.Header.nIndex));
+			Swap(ADR(UdpSendTlg.sTelegramm.Header.nSubIndex), SIZEOF(UdpSendTlg.sTelegramm.Header.nSubIndex));
+			Swap(ADR(UdpSendTlg.sTelegramm.Header.nLen), SIZEOF(UdpSendTlg.sTelegramm.Header.nLen));
+			Swap(ADR(UdpSendTlg.sTelegramm.Header.nItems), SIZEOF(UdpSendTlg.sTelegramm.Header.nItems));
+			Swap(ADR(UdpSendTlg.sTelegramm.Header.nCounter), SIZEOF(UdpSendTlg.sTelegramm.Header.nCounter));
+
+			UdpSendTlg(stIPAddress := NetVarManager_Udp.Read.stIPAddressTransmitter);
+			nStatus := ODStateFree;
+		END_IF
+	ELSE
+		nStatus := DWORD_TO_INT(NetVarManager_Udp.Tlg.Header.dwID);
+	END_IF
+ELSE
+	bMsgMatch := FALSE;
+END_IF
+
+END_ACTION
+

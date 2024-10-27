@@ -1,0 +1,17 @@
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+TYPE NetVarUDPDiagStruct :
+STRUCT
+	nSendCount		: UDINT;
+	tLastSend			: TIME;
+	nReceiveCount	: UDINT;
+	tLastReceive		: TIME;
+	nWriteCount		: UDINT;
+	sLastError			: NetVarUDPError;
+	tLastError			: TIME;
+	nErrorCount		: UINT;
+	nAcknowledges	: UINT;
+END_STRUCT
+END_TYPE
+(* @END_DECLARATION := '0' *)

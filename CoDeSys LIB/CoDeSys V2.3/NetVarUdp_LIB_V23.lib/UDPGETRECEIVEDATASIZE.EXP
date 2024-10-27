@@ -1,0 +1,27 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/Udp specific' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '0' *)
+FUNCTION UdpGetReceiveDataSize : DINT
+(* Function to receive data via UDP protocol.
+	Return:	diBytesReceived:Number of bytes received
+				stIPAddressTransmitter: IP-address of client, that sent the data
+ *)	
+VAR_INPUT
+	diSocket	: DINT;		(* Socket Id *)
+END_VAR
+VAR
+	diParameter	:DINT;
+END_VAR
+(* @END_DECLARATION := '0' *)
+(* @TEXT_IMPLEMENTATION := 'ST' *)
+diParameter:=0;
+IF SysSockIoctl(diSocket, SOCKET_FIONREAD, ADR(diParameter)) <> 0 THEN
+	UdpGetReceiveDataSize := diParameter;
+ELSE
+	UdpGetReceiveDataSize := 0;
+END_IF
+
+
+END_FUNCTION

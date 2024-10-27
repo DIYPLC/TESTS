@@ -1,0 +1,23 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '\/Udp specific' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '0' *)
+FUNCTION UdpOpenSendSocket : DINT
+VAR_INPUT
+	iPort:INT;
+END_VAR
+VAR
+	diSocket:DINT;
+	diOption:DINT;
+END_VAR
+(* @END_DECLARATION := '0' *)
+(* @TEXT_IMPLEMENTATION := 'ST' *)
+diSocket:=SysSockCreate(SOCKET_AF_INET, SOCKET_DGRAM, 0);
+diOption:=1;
+IF SysSockSetOption(diSocket, SOCKET_SOL, SOCKET_SO_BROADCAST, ADR(diOption), SIZEOF(diOption)) = FALSE THEN
+	UdpOpenSendSocket:=SOCKET_INVALID;
+ELSE
+	UdpOpenSendSocket:=diSocket;
+END_IF
+END_FUNCTION

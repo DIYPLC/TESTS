@@ -1,0 +1,59 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '0' *)
+FUNCTION Swap : BOOL
+VAR_INPUT
+	pi: DWORD;
+	nSize: INT;
+END_VAR
+VAR
+	pw: POINTER TO WORD;
+	PD: POINTER TO DWORD;
+	pb,pbo:POINTER TO BYTE;
+	hdw, dpb,dpbo : DWORD;
+	hw : WORD;
+	v1: DWORD := 1;
+	pbo1, pbo2, pbo3: POINTER TO BYTE;
+	pb1, pb2, pb3: POINTER TO BYTE;
+END_VAR
+(* @END_DECLARATION := '0' *)
+(* @TEXT_IMPLEMENTATION := 'ST' *)
+IF NOT NetVarManager_Udp.bByteSwap THEN
+	RETURN;
+END_IF
+
+IF nSize = 2 THEN
+	pw:=pi;
+	pbo:=pi;
+(*Swap the inputword to helpword*)
+	pb := ADR(hw);
+	pbo1 := pbo + 1;
+	pb1 := pb + 1;
+	pb^ := pbo1^;
+	pb1^ := pbo^;
+(*Write the helpword to output*)
+	pw^:= hw;
+ELSE
+	pd:=pi;
+	pbo:=pi;
+(*Swap the inputword to helpword*)
+	pb := ADR(hdw);
+	pbo3 := pbo + 3;
+	pbo2 := pbo + 2;
+	pbo1 := pbo + 1;
+	pb3 := pb + 3;
+	pb2 := pb + 2;
+	pb1 := pb + 1;
+
+	pb^ := pbo3^;
+	pb1^ := pbo2^;
+	pb2^ := pbo1^;
+	pb3^ := pbo^;
+(*Write the helpword to output*)
+	pd^:= hdw;
+
+END_IF
+
+END_FUNCTION

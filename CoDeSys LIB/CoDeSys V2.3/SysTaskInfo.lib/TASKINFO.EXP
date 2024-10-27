@@ -1,0 +1,62 @@
+
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+(* @SYMFILEFLAGS := '0' *)
+FUNCTION_BLOCK taskinfo
+VAR_INPUT
+	bReset: BOOL;
+	bBeginCycle: BOOL;
+	tCycleTime: DWORD;
+END_VAR
+VAR_OUTPUT
+	tMin: DWORD;
+	tMax: DWORD;
+	tLast: DWORD;
+	tCycleReal: DWORD;
+	tJitterMax: DWORD;
+	tJitterLast: DWORD;
+END_VAR
+VAR
+	ct: CurTime;
+	systime: SysTime64;
+	tCycleStart: DWORD;
+END_VAR
+(* @END_DECLARATION := '0' *)
+(* @TEXT_IMPLEMENTATION := 'ST' *)
+IF bReset THEN
+	tMin := 0;
+	tMax := 0;
+	tLast := 0;
+	tJitterMax := 0;
+	tJitterLast := 0;
+	tCycleStart := 0;
+	bReset := FALSE;
+	RETURN;
+END_IF
+
+ct(SystemTime := systime);
+
+IF bBeginCycle THEN
+	IF (tCycleStart > 0)THEN
+		tCycleReal := systime.ulLow - tCycleStart;
+		tJitterLast := ABS(DWORD_TO_DINT(tCycleReal - tCycleTime));
+		IF (tJitterLast > tJitterMax) THEN
+			tJitterMax := tJitterLast;
+		END_IF
+	END_IF
+	tCycleStart := systime.ulLow;
+ELSE
+	IF tCycleStart > 0 THEN
+		tLast := systime.ulLow - tCycleStart;
+		IF (tLast < tMin OR tMin = 0) THEN
+			tMin := tLast;
+		END_IF
+		IF (tLast >= tMax) THEN
+			tMax := tLast;
+		END_IF
+	END_IF
+END_IF
+
+
+END_FUNCTION_BLOCK

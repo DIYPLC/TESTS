@@ -1,0 +1,16 @@
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+TYPE NetVarOD_UDP :
+STRUCT
+	(* Variablen, die bei der Initialaisierung übergeben werden *)
+	pPtr				: POINTER TO ARRAY[0..255] OF BYTE;
+	nIndex				: INT;
+	nSubIndex			: INT;
+	nItems				: INT;
+	nItemLen			: INT;
+	byAccess			: BYTE;
+	byAttrib			: BYTE;
+END_STRUCT
+END_TYPE
+(* @END_DECLARATION := '0' *)

@@ -1,0 +1,11 @@
+(* @NESTEDCOMMENTS := 'Yes' *)
+(* @PATH := '' *)
+(* @OBJECTFLAGS := '0, 8' *)
+TYPE CLIENT_REPLY :
+STRUCT
+	diBytesReceived			: DINT;
+	dwIPAddress				: DWORD;
+	stIPAddressTransmitter	: STRING(20);
+END_STRUCT
+END_TYPE
+(* @END_DECLARATION := '0' *)
