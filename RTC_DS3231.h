@@ -26,7 +26,11 @@
 // DbRtc1.AgingOffset = 0;
 // FbRtcWrite(&DbRtc1);
 
-// Last modified date: 09-dec-2024
+// Last modified date: 21-dec-2024
+
+#define RTC_DS3231_EN (1)
+
+#if (RTC_DS3231_EN > 0)
 
 #pragma once
 
@@ -35,10 +39,8 @@ extern "C"
 {
 #endif
 
-// Привязка порту I2C номер 1.
-#define I2C_HANDLE hi2c1
-// Привязка порту I2C номер 2.
-// #define I2C_HANDLE hi2c2
+#define I2C_HANDLE hi2c1 // Привязка порту I2C номер 1.
+//#define I2C_HANDLE hi2c2 // Привязка порту I2C номер 2.
 
 struct DbRtc {
 	uint8_t Seconds; // Секунда 0...59
@@ -50,7 +52,8 @@ struct DbRtc {
 	uint16_t Year; // Год 2000...2099
 	int8_t AgingOffset; // Константа для подстройки хода часов.
 	float TemperatureCelsius; // Temperature deg C
-	bool RtcError;
+	bool Error; // Ошибка часов.
+	bool Blink; // Мигание по секундам от часов.
 };
 
 void FbRtcRead(struct DbRtc *p);
@@ -60,22 +63,12 @@ void FbRtcWrite(struct DbRtc *p);
 }
 #endif
 
-//  +---------+
-//  | GNU GPL |
-//  +---------+
-//  |
-//  |
-//  .= .-_-. =.
-// ((_/)o o(\_))
-//  `-'(. .)`-'
-//  |/| \_/ |\
-//  ( |     | )
-//  /"\_____/"\
-//  \__)   (__/
+#endif
+
 // @COPYLEFT ALL WRONGS RESERVED :)
 // Author: VA
 // Contacts: DIY.PLC.314@gmail.com
-// Date of foundation of the library LIB_PLC: 2014
+// Date foundation library LIB_PLC: 2014
 // License: GNU GPL-2.0-or-later
 // https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
 // https://www.youtube.com/watch?v=n1F_MfLRlX0
