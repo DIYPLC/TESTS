@@ -20,9 +20,9 @@
 #define SD3_PROFIBUS_DP (0xA2) // Стартовый байт.
 #define ED_PROFIBUS_DP (0x16) // Стоповый байт.
 #define BROADCAST_SLAVE_ADR (0xFF)// Адрес 255 зарезервирован для групповой чаписи без ответа.
-#define FUN_READ_8_BYTES (1) // Код функции- Прочитать 64 байта из ПЛК.
-#define FUN_WRITE_8_BYTES (2) // Код функции- Записать 64 байта в ПЛК.
-#define FUN_READ10_WRITE8_BYTES (3) // Код функции- Записать 64 байта в ПЛК и считать 64 байта из ПЛК.
+#define FUN_READ_8_BYTES (1) // Код функции- Прочитать из ПЛК.
+#define FUN_WRITE_8_BYTES (2) // Код функции- Записать в ПЛК.
+#define FUN_READ10_WRITE8_BYTES (3) // Код функции- Записать в ПЛК и считать из ПЛК.
 #define FUN_START_PLC (10) // Код функции- Останов ПЛК.
 #define FUN_STOP_PLC (11) // Код функции- Останов ПЛК.
 #define UDP_PORT_NUMBER (5002)
