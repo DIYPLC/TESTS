@@ -7,7 +7,7 @@
 // Фиксированный размер кадра для совместимости с библиокекой HAL от STM32.
 // Передаем массив байт а потом интерпретируем их как любой необходимый тип данных.
 // Передача пакета старшим байтом вперед.
-// Дата последней ревизии 24-dec-2024
+// Дата последней ревизии 25-dec-2024
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -22,7 +22,7 @@
 #define BROADCAST_SLAVE_ADR (0xFF)// Адрес 255 зарезервирован для групповой чаписи без ответа.
 #define FUN_READ_8_BYTES (1) // Код функции- Прочитать 64 байта из ПЛК.
 #define FUN_WRITE_8_BYTES (2) // Код функции- Записать 64 байта в ПЛК.
-#define FUN_READ_WRITE_8_BYTES (3) // Код функции- Записать 64 байта в ПЛК и считать 64 байта из ПЛК.
+#define FUN_READ10_WRITE8_BYTES (3) // Код функции- Записать 64 байта в ПЛК и считать 64 байта из ПЛК.
 #define FUN_START_PLC (10) // Код функции- Останов ПЛК.
 #define FUN_STOP_PLC (11) // Код функции- Останов ПЛК.
 #define UDP_PORT_NUMBER (5002)
@@ -40,6 +40,8 @@
 #define KEY_RX_BYTE08 (0x00)
 #define KEY_RX_BYTE09 (0x00)
 #define KEY_RX_BYTE10 (0x00)
+#define KEY_RX_INIT_ADD (0x00)
+#define KEY_RX_INIT_XOR (0x00)
 #define KEY_TX_BYTE00 (0x00)
 #define KEY_TX_BYTE01 (0x00)
 #define KEY_TX_BYTE02 (0x00)
@@ -51,6 +53,10 @@
 #define KEY_TX_BYTE08 (0x00)
 #define KEY_TX_BYTE09 (0x00)
 #define KEY_TX_BYTE10 (0x00)
+#define KEY_TX_BYTE11 (0x00)
+#define KEY_TX_BYTE12 (0x00)
+#define KEY_TX_INIT_ADD (0x00)
+#define KEY_TX_INIT_XOR (0x00)
 #else
 #define KEY_RX_BYTE00 (0x4a)
 #define KEY_RX_BYTE01 (0xef)
@@ -63,6 +69,8 @@
 #define KEY_RX_BYTE08 (0xfe)
 #define KEY_RX_BYTE09 (0xda)
 #define KEY_RX_BYTE10 (0xed)
+#define KEY_RX_INIT_ADD (0x09)
+#define KEY_RX_INIT_XOR (0x0d)
 #define KEY_TX_BYTE00 (0x77)
 #define KEY_TX_BYTE01 (0x23)
 #define KEY_TX_BYTE02 (0x55)
@@ -74,6 +82,10 @@
 #define KEY_TX_BYTE08 (0x94)
 #define KEY_TX_BYTE09 (0xf8)
 #define KEY_TX_BYTE10 (0x1a)
+#define KEY_TX_BYTE11 (0xf2)
+#define KEY_TX_BYTE12 (0x5a)
+#define KEY_TX_INIT_ADD (0x03)
+#define KEY_TX_INIT_XOR (0x87)
 #endif
 
 #define Rx_Start_byte      (p->Message[0])
@@ -103,9 +115,11 @@
 #define Tx_Data_value5     (p->Message[9])
 #define Tx_Data_value6     (p->Message[10])
 #define Tx_Data_value7     (p->Message[11])
-#define Tx_Control_sum_add (p->Message[12])
-#define Tx_Control_sum_xor (p->Message[13])
-#define Tx_Stop_byte       (p->Message[14])
+#define Tx_Data_value8     (p->Message[12])
+#define Tx_Data_value9     (p->Message[13])
+#define Tx_Control_sum_add (p->Message[14])
+#define Tx_Control_sum_xor (p->Message[15])
+#define Tx_Stop_byte       (p->Message[16])
 
 void FbNet_init(struct DbNet *p) {
 	p->State1 = 0;
@@ -128,7 +142,7 @@ void FbNet_call(struct DbNet *p) {
 void FbNet_call_it_rx_end(struct DbNet *p) {
 	// Обработка принятого пакета от HMI.
 	// Проверка контрольной суммы до дешифрации методом add uint8.
-	uint8_t Sum_add = 0;
+	uint8_t Sum_add = KEY_RX_INIT_ADD;
 	Sum_add = (Sum_add + Rx_Message_counter) bitand 0xFF;
 	Sum_add = (Sum_add + Rx_Adress_slave) bitand 0xFF;
 	Sum_add = (Sum_add + Rx_Function_code) bitand 0xFF;
@@ -141,7 +155,7 @@ void FbNet_call_it_rx_end(struct DbNet *p) {
 	Sum_add = (Sum_add + Rx_Data_value6) bitand 0xFF;
 	Sum_add = (Sum_add + Rx_Data_value7) bitand 0xFF;
 	// Проверка контрольной суммы до дешифрации методом xor uint8.
-	uint8_t Sum_xor = 0;
+	uint8_t Sum_xor = KEY_RX_INIT_XOR;
 	Sum_xor = (Sum_xor xor Rx_Message_counter) bitand 0xFF;
 	Sum_xor = (Sum_xor xor Rx_Adress_slave) bitand 0xFF;
 	Sum_xor = (Sum_xor xor Rx_Function_code) bitand 0xFF;
@@ -167,7 +181,8 @@ void FbNet_call_it_rx_end(struct DbNet *p) {
 	Rx_Data_value7 = Rx_Data_value7 xor KEY_RX_BYTE10;
 	// Проверка сообщения.
 	p->ErrorFlag = p->ErrorFlag or (Rx_Start_byte != SD3_PROFIBUS_DP);
-	p->ErrorFlag = p->ErrorFlag or (Rx_Function_code != FUN_READ_WRITE_8_BYTES);
+	p->ErrorFlag = p->ErrorFlag
+			or (Rx_Function_code != FUN_READ10_WRITE8_BYTES);
 	p->ErrorFlag = p->ErrorFlag or (Rx_Control_sum_add != Sum_add);
 	p->ErrorFlag = p->ErrorFlag or (Rx_Control_sum_xor != Sum_xor);
 	p->ErrorFlag = p->ErrorFlag or (Rx_Stop_byte != ED_PROFIBUS_DP);
@@ -176,7 +191,7 @@ void FbNet_call_it_rx_end(struct DbNet *p) {
 		if (Rx_Start_byte != SD3_PROFIBUS_DP) {
 			p->ErrorCode = p->ErrorCode or 0b0000000000000001;
 		}
-		if (Rx_Function_code != FUN_READ_WRITE_8_BYTES) {
+		if (Rx_Function_code != FUN_READ10_WRITE8_BYTES) {
 			p->ErrorCode = p->ErrorCode or 0b0000000000000010;
 		}
 		if (Rx_Control_sum_add != Sum_add) {
@@ -208,7 +223,7 @@ void FbNet_call_it_tx_end(struct DbNet *p) {
 	Tx_Start_byte = SD3_PROFIBUS_DP;
 	Tx_Message_counter = Rx_Message_counter;
 	Tx_Adress_slave = p->Adress_slave;
-	Tx_Function_code = FUN_READ_WRITE_8_BYTES;
+	Tx_Function_code = FUN_READ10_WRITE8_BYTES;
 	Tx_Data_value0 = p->RegOutput[0];
 	Tx_Data_value1 = p->RegOutput[1];
 	Tx_Data_value2 = p->RegOutput[2];
@@ -217,6 +232,8 @@ void FbNet_call_it_tx_end(struct DbNet *p) {
 	Tx_Data_value5 = p->RegOutput[5];
 	Tx_Data_value6 = p->RegOutput[6];
 	Tx_Data_value7 = p->RegOutput[7];
+	Tx_Data_value8 = p->RegOutput[8];
+	Tx_Data_value9 = p->RegOutput[9];
 	// Шифрование сообщения.
 	Tx_Message_counter = Tx_Message_counter xor KEY_TX_BYTE00;
 	Tx_Adress_slave = Tx_Adress_slave xor KEY_TX_BYTE01;
@@ -229,8 +246,10 @@ void FbNet_call_it_tx_end(struct DbNet *p) {
 	Tx_Data_value5 = Tx_Data_value5 xor KEY_TX_BYTE08;
 	Tx_Data_value6 = Tx_Data_value6 xor KEY_TX_BYTE09;
 	Tx_Data_value7 = Tx_Data_value7 xor KEY_TX_BYTE10;
+	Tx_Data_value8 = Tx_Data_value8 xor KEY_TX_BYTE11;
+	Tx_Data_value9 = Tx_Data_value9 xor KEY_TX_BYTE12;
 	// Проверка контрольной суммы до дешифрации методом add uint8.
-	uint8_t Sum_add = 0;
+	uint8_t Sum_add = KEY_TX_INIT_ADD;
 	Sum_add = (Sum_add + Tx_Message_counter) bitand 0xFF;
 	Sum_add = (Sum_add + Tx_Adress_slave) bitand 0xFF;
 	Sum_add = (Sum_add + Tx_Function_code) bitand 0xFF;
@@ -242,8 +261,10 @@ void FbNet_call_it_tx_end(struct DbNet *p) {
 	Sum_add = (Sum_add + Tx_Data_value5) bitand 0xFF;
 	Sum_add = (Sum_add + Tx_Data_value6) bitand 0xFF;
 	Sum_add = (Sum_add + Tx_Data_value7) bitand 0xFF;
+	Sum_add = (Sum_add + Tx_Data_value8) bitand 0xFF;
+	Sum_add = (Sum_add + Tx_Data_value9) bitand 0xFF;
 	// Проверка контрольной суммы до дешифрации методом xor uint8.
-	uint8_t Sum_xor = 0;
+	uint8_t Sum_xor = KEY_TX_INIT_XOR;
 	Sum_xor = (Sum_xor xor Tx_Message_counter) bitand 0xFF;
 	Sum_xor = (Sum_xor xor Tx_Adress_slave) bitand 0xFF;
 	Sum_xor = (Sum_xor xor Tx_Function_code) bitand 0xFF;
@@ -255,6 +276,8 @@ void FbNet_call_it_tx_end(struct DbNet *p) {
 	Sum_xor = (Sum_xor xor Tx_Data_value5) bitand 0xFF;
 	Sum_xor = (Sum_xor xor Tx_Data_value6) bitand 0xFF;
 	Sum_xor = (Sum_xor xor Tx_Data_value7) bitand 0xFF;
+	Sum_xor = (Sum_xor xor Tx_Data_value8) bitand 0xFF;
+	Sum_xor = (Sum_xor xor Tx_Data_value9) bitand 0xFF;
 	Tx_Control_sum_add = Sum_add;
 	Tx_Control_sum_xor = Sum_xor;
 	Tx_Stop_byte = ED_PROFIBUS_DP;

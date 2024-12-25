@@ -10,7 +10,7 @@ extern "C"
 #if (NET_PLC_EN > 0)
 
 #define SIZE_INPUT_DATA_BYTES (8) // Размер данных для записи в ПЛК
-#define SIZE_OUTPUT_DATA_BYTES (8) // Размер данных для чтения из ПЛК
+#define SIZE_OUTPUT_DATA_BYTES (10) // Размер данных для чтения из ПЛК (обычно их больше)
 #define SIZE_MSG_BYTES (SIZE_OUTPUT_DATA_BYTES+7)
 struct DbNet {
 	// Входные переменные, сохраняемые.
@@ -44,8 +44,8 @@ struct DbNet {
 
 void FbNet_init(struct DbNet *p); // setup()
 void FbNet_call(struct DbNet *p); // loop()
-void FbNet_call_it_rx_end(struct DbNet *p); // HAL_UART_Receive_IT()
-void FbNet_call_it_tx_end(struct DbNet *p); // HAL_UART_Transmit_IT()
+void FbNet_call_it_rx_end(struct DbNet *p); // HAL_UART_Receive( &huart3, &DbNet1.Message, (SIZE_INPUT_DATA_BYTES+7), 1000);
+void FbNet_call_it_tx_end(struct DbNet *p); // HAL_UART_Transmit( &huart3, &DbNet1.Message, (SIZE_OUTPUT_DATA_BYTES+7), 1000);
 
 // Конвертор массива байт в необходимый тип данных и обратно.
 void FbNet_ui8_x2_to_ui16(struct DbNet *p);
