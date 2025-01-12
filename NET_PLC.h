@@ -76,11 +76,10 @@ void FbNet_f64_to_uint8_x8(struct DbNet *p);
 // @COPYLEFT ALL WRONGS RESERVED :)
 // Author: VA
 // Contacts: DIY.PLC.314@gmail.com
-// Date of foundation of the library LIB_PLC: 2014
+// Date start LIB_PLC: 2014
 // License: GNU GPL-2.0-or-later
 // https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
 // https://www.youtube.com/watch?v=n1F_MfLRlX0
-// See also:
 // https://www.youtube.com/@DIY_PLC
 // https://github.com/DIYPLC/LIB_PLC
 // https://oshwlab.com/diy.plc.314/PLC_HW1_SW1

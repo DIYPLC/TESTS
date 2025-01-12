@@ -17,6 +17,7 @@ sudo apt-get install htop
 sudo apt-get install cmatrix
 sudo apt-get install mc
 sudo apt-get install tmux
+#sudo apt install qbittorrent-nox
 #sudo apt-get install dosbox
 
 echo "ubuntu software"
