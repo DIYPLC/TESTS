@@ -42,6 +42,7 @@ echo "ubuntu software"
 #Jami
 #nano
 #sublime-text
+#emax
 #geany
 #Eclipse
 #chromium
@@ -49,7 +50,7 @@ echo "ubuntu software"
 #uget
 #putty
 #Jupyter Notebook
-#pycharm
+#pycharm communiti edition
 #7Zip
 
 echo "example"

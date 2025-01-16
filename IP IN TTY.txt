@@ -1,0 +1,21 @@
+Как открыть портал в матрицу через UART.
+Те. Прокинуть трафик IP через (uart, rs232, rs485, lora)
+Те. как вариант получить слабый интернет через радиоканал.
+Или как прокинуть uart с компа на комп через интернет uart -> IP -> uart
+
+https://www.debian.org/releases/stable/i386/apds04.ru.html
+https://en.wikipedia.org/wiki/Parallel_Line_Internet_Protocol
+https://en.wikipedia.org/wiki/Point-to-Point_Protocol
+
+SLIP / slattach
+https://ru.wikipedia.org/wiki/SLIP
+https://datatracker.ietf.org/doc/html/rfc1055
+https://en.wikibooks.org/wiki/Linux_Networking/SLIP_client
+http://rsusu1.rnd.runnet.ru/unix/unixadmin/slip.htm
+https://unix1.jinr.ru/oss/linux/lig/node350.html
+
+socat + virtual uart
+https://superuser.com/questions/1764202/tcp-to-virtual-serial-port-with-socat
+https://stackoverflow.com/questions/5890505/socat-tunnel-ip-through-tty
+https://habr.com/ru/articles/547292/
+https://we.easyelectronics.ru/electro-and-pc/rabota-s-som-portom-na-si-v-linux.html
