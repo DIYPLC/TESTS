@@ -8,6 +8,7 @@ sudo apt-get install gcc
 sudo apt-get install g++
 sudo apt-get install make
 sudo apt-get install python3-pip
+sudo apt install python3-tk
 sudo apt-get install arduino
 sudo apt-get install git
 sudo apt-get install vim
