@@ -2,26 +2,26 @@
 
 echo "install software"
 #sudo apt-get update && sudo apt-get dist-upgrade
-sudo apt-get update
-sudo apt-get upgrade
-sudo apt install gcc g++ make git vim htop cmatrix mc tmux python3-pip python3-tk
-sudo apt-get install arduino
-#sudo apt-get install gcc g++ make python3-pip python3-tk git vim htop cmatrix mc tmux #_del_me_
-#sudo apt-get install gcc
-#sudo apt-get install g++
-#sudo apt-get install make
-#sudo apt-get install python3-pip
-#sudo apt install python3-tk
-#sudo apt-get install git
-#sudo apt-get install vim
-#sudo apt-get install nmap
-#sudo apt-get install net-tools
-#sudo apt-get install htop
-#sudo apt-get install cmatrix
-#sudo apt-get install mc
-#sudo apt-get install tmux
-#sudo apt install qbittorrent-nox
-#sudo apt-get install dosbox
+sudo apt update
+sudo apt upgrade
+sudo apt install gcc g++ make git vim htop cmatrix mc tmux python3-pip
+sudo apt install arduino
+sudo apt install gcc g++ make python3-pip python3-tk git vim htop cmatrix mc tmux #_del_me_
+sudo apt install gcc
+sudo apt install g++
+sudo apt install make
+sudo apt install python3-pip
+sudo apt install python3-tk
+sudo apt install git
+sudo apt install vim
+sudo apt install nmap
+sudo apt install net-tools
+sudo apt install htop
+sudo apt install cmatrix
+sudo apt install mc
+sudo apt install tmux
+sudo apt install qbittorrent-nox
+sudo apt install dosbox
 
 git clone https://github.com/DIYPLC/LIB_PLC.git
 git clone https://github.com/DIYPLC/DIY_PLC.git
@@ -62,6 +62,7 @@ echo "ubuntu software"
 #Jupyter Notebook
 #pycharm communiti edition
 #7Zip
+#wifite
 
 echo "example"
 #python3 -m youtube_dl 'https://youtu.be/M379y0op1WM'
