@@ -1,0 +1,101 @@
+- ПЛАН ЛЕКЦИЙ -
+
+***
+Зачем?
+***
+- Turing Bombe 1940
+Для взлома кодов шифровальной машины Энигма
+Электромеханическая.
+- Z3 1940
+Для расчёта вибрационных характеристик крыльев и оперения в проектируемых военных летательных аппаратах.
+В качестве основы элементной базы применялись механические реле.
+https://ru.wikipedia.org/wiki/Z3
+- ENIAC 1943
+Для расчётов по математическому моделированию термоядерного взрыва.
+Для расчётов таблиц стрельбы артиллеристам.
+В качестве основы элементной базы применялись электронные лампы.
+https://ru.wikipedia.org/wiki/%D0%AD%D0%9D%D0%98%D0%90%D0%9A
+- Бортовой управляющий компьютер «Аполлона» 1960
+https://ru.wikipedia.org/wiki/%D0%91%D0%BE%D1%80%D1%82%D0%BE%D0%B2%D0%BE%D0%B9_%D1%83%D0%BF%D1%80%D0%B0%D0%B2%D0%BB%D1%8F%D1%8E%D1%89%D0%B8%D0%B9_%D0%BA%D0%BE%D0%BC%D0%BF%D1%8C%D1%8E%D1%82%D0%B5%D1%80_%C2%AB%D0%90%D0%BF%D0%BE%D0%BB%D0%BB%D0%BE%D0%BD%D0%B0%C2%BB
+- PDP-11 (UNIX C) 1970
+https://ru.wikipedia.org/wiki/PDP-11
+- Intel 4004 1971
+https://ru.wikipedia.org/wiki/Intel_4004
+- Intel 8008 1972
+https://ru.wikipedia.org/wiki/Intel_8008
+- Intel 8080 (Z80) 1974
+https://ru.wikipedia.org/wiki/Intel_8080
+- Intel 8086 1978
+https://ru.wikipedia.org/wiki/Intel_8086
+- Intel 80386 (linux kernel) 1985
+https://ru.wikipedia.org/wiki/Intel_80386
+- Intel 80486 1989
+https://ru.wikipedia.org/wiki/Intel_80486
+- Pentium 1993
+https://ru.wikipedia.org/wiki/Pentium
+- AMD64
+https://ru.wikipedia.org/wiki/X86-64
+- ARM
+https://ru.wikipedia.org/wiki/ARM_(%D0%B0%D1%80%D1%85%D0%B8%D1%82%D0%B5%D0%BA%D1%82%D1%83%D1%80%D0%B0)
+- RISC-V
+https://ru.wikipedia.org/wiki/RISC-V
+***
+- История вопроса.
+Аналоговый компьютер
+https://ru.wikipedia.org/wiki/%D0%90%D0%BD%D0%B0%D0%BB%D0%BE%D0%B3%D0%BE%D0%B2%D1%8B%D0%B9_%D0%BA%D0%BE%D0%BC%D0%BF%D1%8C%D1%8E%D1%82%D0%B5%D1%80
+***
+- Различная физика переключателей.
+Струйные вентили.
+https://habr.com/ru/articles/374309/
+Электромагнитное реле
+https://ru.wikipedia.org/wiki/%D0%AD%D0%BB%D0%B5%D0%BA%D1%82%D1%80%D0%BE%D0%BC%D0%B0%D0%B3%D0%BD%D0%B8%D1%82%D0%BD%D0%BE%D0%B5_%D1%80%D0%B5%D0%BB%D0%B5
+Электронная лампа
+https://ru.wikipedia.org/wiki/%D0%A2%D1%80%D0%B8%D0%BE%D0%B4
+Биполярный транзистор
+https://ru.wikipedia.org/wiki/%D0%91%D0%B8%D0%BF%D0%BE%D0%BB%D1%8F%D1%80%D0%BD%D1%8B%D0%B9_%D1%82%D1%80%D0%B0%D0%BD%D0%B7%D0%B8%D1%81%D1%82%D0%BE%D1%80
+Полевой транзистор
+https://ru.wikipedia.org/wiki/%D0%9F%D0%BE%D0%BB%D0%B5%D0%B2%D0%BE%D0%B9_%D1%82%D1%80%D0%B0%D0%BD%D0%B7%D0%B8%D1%81%D1%82%D0%BE%D1%80
+***
+- Схемотехника.
+Logic family
+https://en.wikipedia.org/wiki/Logic_family?ysclid=mel1edxhdi723761564
+РТЛ
+https://ru.wikipedia.org/wiki/%D0%A0%D0%B5%D0%B7%D0%B8%D1%81%D1%82%D0%BE%D1%80%D0%BD%D0%BE-%D1%82%D1%80%D0%B0%D0%BD%D0%B7%D0%B8%D1%81%D1%82%D0%BE%D1%80%D0%BD%D0%B0%D1%8F_%D0%BB%D0%BE%D0%B3%D0%B8%D0%BA%D0%B0
+ДТЛ
+https://ru.wikipedia.org/wiki/%D0%94%D0%B8%D0%BE%D0%B4%D0%BD%D0%BE-%D1%82%D1%80%D0%B0%D0%BD%D0%B7%D0%B8%D1%81%D1%82%D0%BE%D1%80%D0%BD%D0%B0%D1%8F_%D0%BB%D0%BE%D0%B3%D0%B8%D0%BA%D0%B0
+ТТЛ
+https://ru.wikipedia.org/wiki/%D0%A2%D1%80%D0%B0%D0%BD%D0%B7%D0%B8%D1%81%D1%82%D0%BE%D1%80%D0%BD%D0%BE-%D1%82%D1%80%D0%B0%D0%BD%D0%B7%D0%B8%D1%81%D1%82%D0%BE%D1%80%D0%BD%D0%B0%D1%8F_%D0%BB%D0%BE%D0%B3%D0%B8%D0%BA%D0%B0
+ЭСЛ
+https://ru.wikipedia.org/wiki/%D0%AD%D0%BC%D0%B8%D1%82%D1%82%D0%B5%D1%80%D0%BD%D0%BE-%D1%81%D0%B2%D1%8F%D0%B7%D0%B0%D0%BD%D0%BD%D0%B0%D1%8F_%D0%BB%D0%BE%D0%B3%D0%B8%D0%BA%D0%B0
+КМОП
+https://ru.wikipedia.org/wiki/%D0%9A%D0%9C%D0%9E%D0%9F
+***
+БЛЭ
+И-ИЛИ-НЕ 2И-НЕ
+***
+Сумматор
++ - * /
+RS RG RAM
+T SHL * /
+TIM/CT 
+***
+- Типы АЛУ
+Аккумуляторный Intel 8080 (Z80)
+Регистровый ATMega328p
+Стековый S7-300
+***
+Цифровая схемотехника и архитектура компьютера
+https://habr.com/ru/articles/306982/
+Язык программирования Си
+https://ru.wikipedia.org/wiki/%D0%AF%D0%B7%D1%8B%D0%BA_%D0%BF%D1%80%D0%BE%D0%B3%D1%80%D0%B0%D0%BC%D0%BC%D0%B8%D1%80%D0%BE%D0%B2%D0%B0%D0%BD%D0%B8%D1%8F_%D0%A1%D0%B8_(%D0%BA%D0%BD%D0%B8%D0%B3%D0%B0)
+Время UNIX. A History and a Memoir
+https://habr.com/ru/companies/piter/articles/525422/
+Компиляторы: принципы, технологии и инструменты
+https://ru.wikipedia.org/wiki/%D0%9A%D0%BE%D0%BC%D0%BF%D0%B8%D0%BB%D1%8F%D1%82%D0%BE%D1%80%D1%8B:_%D0%BF%D1%80%D0%B8%D0%BD%D1%86%D0%B8%D0%BF%D1%8B,_%D1%82%D0%B5%D1%85%D0%BD%D0%BE%D0%BB%D0%BE%D0%B3%D0%B8%D0%B8_%D0%B8_%D0%B8%D0%BD%D1%81%D1%82%D1%80%D1%83%D0%BC%D0%B5%D0%BD%D1%82%D1%8B
+LINUX
+https://www.youtube.com/watch?v=n1F_MfLRlX0
+GNU
+https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
+python3
+https://uneex.org/LecturesCMC
+***
