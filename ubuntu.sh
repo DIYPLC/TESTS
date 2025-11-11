@@ -22,6 +22,10 @@ sudo apt install net-tools
 #sudo apt install dosbox
 #sudo apt install arduino
 #sudo apt install freecad
+#sudo apt install p7zip-full
+# apt install gnupg
+#sudo apt install vlc
+#sudo apt install wine
 
 git clone https://github.com/DIYPLC/LIB_PLC.git
 git clone https://github.com/DIYPLC/DIY_PLC.git
@@ -77,3 +81,14 @@ echo "ubuntu software"
 #ifconfig
 #iwconfig
 #pstree #see process tree
+
+# gpg для шифрования
+# apt install gnupg
+
+# сжатие с шифрованием
+# sudo apt install p7zip-full
+# 7z a arxiv1.7z ./folder1
+# 7z a -p1234567890 -mhe=on LIB_PLC.7z ./LIB_PLC/
+
+# Скачать сайт самым простым способом.
+# wget -r -k -l 99 -p -E -nc -e robots=off --no-check-certificate https://www.felser.ch/profibus-manual/index.html
