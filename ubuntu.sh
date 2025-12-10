@@ -92,3 +92,7 @@ echo "ubuntu software"
 
 # Скачать сайт самым простым способом.
 # wget -r -k -l 99 -p -E -nc -e robots=off --no-check-certificate https://www.felser.ch/profibus-manual/index.html
+
+# python ftp server
+# pip3 install pyftpdlib
+# python -m pyftpdlib --interface 0.0.0.0 --port 21021 --username=usr --password=pwd --directory=C:\xyz

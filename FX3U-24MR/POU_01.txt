@@ -1,0 +1,85 @@
+(*
+Example PLC PID control project
+FX3U-24MR clone PLC
+GX Works2 v1.x
+14DI 10DO 6AI 2AO
+RS232 - 38400bod
+RS485 - 38400bod
+RS232 DIRECT CABLE:
+DB9_MALE.PIN2 <-> DB9_FEMALE.PIN2
+DB9_MALE.PIN3 <-> DB9_FEMALE.PIN3
+DB9_MALE.PIN5 <-> DB9_FEMALE.PIN5
+WRITE PLC SPEED WTF
+≈ÒÎË ‚ÍÎ˛˜ËÚ¸ Ò‡ÁÛ ‚ÒÂ ‚˚ıÓ‰˚ Y0-Y11ÚÓ ULN2003 „ÂÂÚÒˇ Ë ÂÎÂ „ÂÂÚÒˇ.
+TODO:
+LIB_PLC
+NPN DI -> DO + AI  -> AO
+RS485 MODBUS
+*)
+
+Do0 := NOT(Di0); (* I/O UNIT TESTS *)
+Do1 := Di1;
+Do2 := Di2;
+Do3 := Di3;
+Do4 := Di4;
+Do5 := Di5;
+Do6 := Di6 OR Di7;
+Do7 := Di10 OR Di11;
+Do10 := Di12 OR Di13;
+Do11 := Di14 AND Di15;
+
+PlcRunMeandr := NOT(PlcRunMeandr); (* FAST BLINK RUN PLC TEST *)
+M5 := M8000; (* RUN PLC TRUE *)
+M6 := M6 OR M8002; (* FIRST SCAN *)
+M7 := M8011; (* MEANDR PERIOD 10 ms *)
+M8 := M8012; (* MEANDR PERIOD 100 ms *)
+M9 := M8013; (* MEANDR PERIOD 1 s *)
+M10 := M8014; (* MEANDR PERIOD 60 s *)
+
+RD3A(TRUE, 0, 0, D0); (* EN, SLOT-0, AI-0, TO 0...10V -> 0...4000?ADC *)
+RD3A(TRUE, 0, 1, D1); (* EN, SLOT-0, AI-1, TO 0...10V -> 0...4000?ADC *)
+RD3A(TRUE, 0, 2, D2); (* EN, SLOT-0, AI-2, TO 0...10V -> 0...4000?ADC *)
+RD3A(TRUE, 0, 3, D3); (* EN, SLOT-0, AI-3, TO 0...20mA -> 0...4000?ADC *)
+RD3A(TRUE, 0, 4, D4); (* EN, SLOT-0, AI-4, TO 0...20mA -> 0...4000?ADC *)
+RD3A(TRUE, 0, 5, D5); (* EN, SLOT-0, AI-5, TO 0...20mA -> 0...4000?ADC *)
+
+WR3A( TRUE, 0, 0, D6);  (*EN, SLOT-0, AO-0, FROM 0...4000?DAC -> 0...10V *)
+WR3A( TRUE, 0, 1, D7);  (*EN, SLOT-0, AO-1, FROM 0...4000?DAC -> 0...10V *)
+
+D9 := D9 + D8010; (* SCAN TIME X0.1ms *)
+D10 := D8012; (* SCAN TIME MAX x0.1ms *)
+D11 := D8013; (* RTC SEC 0...59 *)
+D12 := D8014; (* RTC MIN 0...59 *)
+D13 := D8015; (* RTC HOUR 0...23 *)
+D14 := D8016; (* RTC DAY 1...31 *)
+D15 := D8017; (* RTC MOTH 1...12 *)
+D16 := D8018; (* RTC YEAR 2025 WTF *)
+D17 := D8019; (* RTC WEAK DAY 0...6 *)
+D18 := D8030; (* œŒ“≈Õ÷»ŒÃ≈“– VR1 0...4096 WTF *)
+D19 := D8031; (* œŒ“≈Õ÷»ŒÃ≈“– VR2 0...4096 WTF *)
+
+D200 := D201; (* RETAIN *)
+M500 := M501; (* RETAIN WTF *)
+
+Flag100ms := Flag100ms_prev AND NOT(Blink100ms);
+Flag100ms_prev := Blink100ms;
+
+IF ( Flag100ms ) THEN
+
+Ts := 0.1;
+Integrator1:= Integrator1 + Ts;
+
+Ts_ms := 100;
+Timer1 := Timer1 + Ts_ms;  (* WTF RT *)
+
+Kp := 0.1;
+Ki := 0.1;
+SP := 50.0;
+PV := MW;
+
+ER := SP - PV;
+Ppart := ER * Kp;
+Ipart := Ipart + ER * Ts * Ki;
+MW := Ppart + Ipart;
+
+END_IF;
