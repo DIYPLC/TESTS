@@ -31,6 +31,9 @@ git clone https://github.com/DIYPLC/LIB_PLC.git
 git clone https://github.com/DIYPLC/DIY_PLC.git
 git clone https://github.com/DIYPLC/HMI_PLC.git
 git clone https://github.com/DIYPLC/Tests.git
+Просмотр содержимого ранее удаленных файлов в репозитории.
+usr@pc:~/DIY_PLC/.git$ git log --graph --decorate
+usr@pc:~/DIY_PLC/.git$ git show 488865d3cc94cd5eb2cfd2cb01c0ff261f4502cd
 
 echo "ubuntu software"
 dpkg менеджер пакетов
