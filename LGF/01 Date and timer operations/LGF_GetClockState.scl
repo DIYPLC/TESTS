@@ -1,0 +1,121 @@
+﻿TYPE "LGF_typeDiagnostics"
+TITLE = LGF_typeDiagnostics
+VERSION : 0.1
+//Diagnostic structure to store and transfer diagnostic information from blocks through the interface.
+   STRUCT
+      status { ExternalVisible := 'False'; ExternalWritable := 'False'} : Word;   // Status of the Block or error identification when error occurred
+      subfunctionStatus { ExternalVisible := 'False'; ExternalWritable := 'False'} : Word;   // Status or return value of called FB's, FC's and system blocks
+      stateNumber { ExternalVisible := 'False'; ExternalWritable := 'False'} : DInt;   // State in the state machine of the block where the error occurred
+   END_STRUCT;
+
+END_TYPE
+
+FUNCTION_BLOCK "LGF_GetClockState"
+TITLE = LGF_GetClockState
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : 'Simatic Systems Support'
+FAMILY : LGF
+NAME : LGF_GetClockState
+//This function reads the local time, the system time and returns the NTP status.
+   VAR_OUTPUT 
+      localTime {InstructionName := 'DTL'; LibVersion := '1.0'; ExternalWritable := 'False'} : DTL;   // Local time
+      systemTime {InstructionName := 'DTL'; LibVersion := '1.0'; ExternalWritable := 'False'} : DTL;   // System time (UTC)
+      isDaylightSavingTime { ExternalWritable := 'False'} : Bool;   // Daylight saving time active
+      ntpActivated { ExternalWritable := 'False'} : Bool;   // NTP Client activated
+      error { ExternalWritable := 'False'} : Bool;   // TRUE: An error occurred during the execution of the FB
+      status { ExternalWritable := 'False'} : Word;   // 16#0000 - 16#7FFF: Status of the FB, 16#8000 - 16#FFFF: Error identification
+      diagnostics { ExternalWritable := 'False'} : "LGF_typeDiagnostics";   // Diagnostics information of FB
+   END_VAR
+
+   VAR 
+      statEmptyDiagnostics { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'; S7_SetPoint := 'False'} : "LGF_typeDiagnostics" := (#STATUS_FINISHED_NO_ERROR, (), ());   // Empty diagnostics information (for initialization purposes only)
+   END_VAR
+
+   VAR_TEMP 
+      tempResult : Word;   // Temp value for function results
+      tempClockStatus : Word;   // Temp value for clock status
+   END_VAR
+
+   VAR CONSTANT 
+      IS_DAYLIGHT_SAVING : Word := 16#0001;   // Daylight saving time active
+      IS_NTP_ACTIVATED : Word := 16#0002;   // NTP Client activated
+      IS_NTP_SYNC_MISSED : Word := 16#0003;   // NTP Client sync missing synchronization while active
+      IS_NTP_SYNC_DAYLIGHT_SAVING : Word := 16#0006;   // NTP Client - Daylight saving time active
+      STATUS_FINISHED_NO_ERROR : Word := 16#0000;   // NO error occurred in function call
+      ERR_NTP_SERVER_SYNC_MISSING : Word := 16#8401;   // Error: NTP Client missing time synchronization
+      ERR_READ_LOCAL_TIME : Word := 16#8601;   // Error: Read local time
+      ERR_READ_SYSTEM_TIME : Word := 16#8602;   // Error: Read system time
+      ERR_READ_CLOCK_STATE : Word := 16#8610;   // Error: Read clock state
+   END_VAR
+
+
+BEGIN
+	REGION BLOCK INFO HEADER
+	  //================================================================================
+	  // (C)Copyright Siemens 2025
+	  //--------------------------------------------------------------------------------
+	  // Library:       LGF (Library General Functions) 
+	  // Tested with:   S7-1510SP-F
+	  // Engineering:   TIA Portal V15
+	  // Restrictions:  ---
+	  // Requirements:  S7-1500/S7-1500T FW 2.5
+	  // Functionality: This function reads the local time, the system time and returns the NTP status.
+	  //--------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge        | Changes applied
+	  //----------|------------|-------------------------|------------------------------
+	  // 01.00.00 | 06.05.2025 | Simatic Systems Support | First released version
+	  //================================================================================
+	END_REGION
+	
+	REGION DESCRIPTION
+	  (/*
+	NOTE
+	:    If NTP time synchronization is activated in the hardware configuration, make sure that the time zone settings are correctly set to your local time zone!
+	*/)
+	END_REGION DESCRIPTION
+	
+	REGION INITIALISATION
+	  #diagnostics := #statEmptyDiagnostics;
+	  
+	  #isDaylightSavingTime := FALSE;
+	  #ntpActivated := FALSE;
+	END_REGION INITIALISATION  
+	
+	REGION PROGRAM LOGIC
+	  #tempResult := INT_TO_WORD(RD_LOC_T(#localTime));
+	  IF #tempResult.%X15 THEN
+	    #diagnostics.status := #ERR_READ_LOCAL_TIME;
+	    #diagnostics.subfunctionStatus := #tempResult;
+	  ELSE
+	    #isDaylightSavingTime := (#tempResult = #IS_DAYLIGHT_SAVING);
+	  END_IF;
+	  
+	  #tempResult := INT_TO_WORD(RD_SYS_T(#systemTime));
+	  IF #tempResult.%X15 THEN
+	    #diagnostics.status := #ERR_READ_SYSTEM_TIME;
+	    #diagnostics.subfunctionStatus := #tempResult;
+	  END_IF;
+	  
+	  #tempResult := INT_TO_WORD(GetClockStatus(#tempClockStatus));
+	  IF #tempResult.%X15 THEN
+	    #diagnostics.status := #ERR_READ_CLOCK_STATE;
+	    #diagnostics.subfunctionStatus := #tempResult;
+	    
+	  ELSIF (#tempClockStatus AND #IS_NTP_SYNC_MISSED) = #IS_NTP_SYNC_MISSED THEN
+	    #diagnostics.status := #ERR_NTP_SERVER_SYNC_MISSING;
+	    #diagnostics.subfunctionStatus := #tempClockStatus;
+	  END_IF;
+	  
+	  #ntpActivated := (#tempClockStatus AND #IS_NTP_ACTIVATED) = #IS_NTP_ACTIVATED;
+	  #isDaylightSavingTime := #isDaylightSavingTime OR ((#tempClockStatus AND #IS_NTP_SYNC_DAYLIGHT_SAVING) = #IS_NTP_SYNC_DAYLIGHT_SAVING);
+	END_REGION PROGRAM LOGIC
+	
+	REGION OUTPUTS
+	  #error := #diagnostics.status.%X15;
+	  #status := #diagnostics.status;
+	  ENO := NOT #diagnostics.status.%X15;
+	END_REGION OUTPUTS
+	
+END_FUNCTION_BLOCK
+

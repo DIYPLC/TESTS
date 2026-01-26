@@ -1,0 +1,688 @@
+﻿TYPE "LGF_typeDataLogParameter"
+TITLE = LGF_typeDataLogParameter
+VERSION : 0.1
+//This UDT belongs to the Module `LGF_DataLogC` and lists all possible parameter to configure its behaviour.
+   STRUCT
+      header { S7_SetPoint := 'True'} : String := '';   // Headline of datalog, string of all data fields, separated by a comma: "field1,field2,field3,..."
+      maxNumberOfEntries { S7_SetPoint := 'True'} : UDInt := 1000;   // Maximum number of entries in datalog
+      timestampFormat { S7_SetPoint := 'True'} : USInt := 0;   // Timestamp format - see manual in "DataLogCreate" for used PLC Type (S7-1200 or S7-1500)
+      clearOnOpen { S7_SetPoint := 'True'} : Bool := FALSE;   // Clear datalog during opening datalog while enabling block
+      deleteFile { S7_SetPoint := 'True'} : Bool := FALSE;   // Delete as well datalog file during datalog delete
+      enableRingBuffer { S7_SetPoint := 'True'} : Bool := FALSE;   // TRUE: Overwrite old values and start from the beginning if datalog reaches its maximum entries  FALSE: Stop logging if `maxNumberOfEntries` entries reached
+      loggingByInterval { S7_SetPoint := 'True'} : Bool := FALSE;   // TRUE: Log on interval time parameter  FALSE: log on "triggerEntry"
+      loggingInterval { S7_SetPoint := 'True'} : Time := T#1M;   // Time for automatic logging interval
+   END_STRUCT;
+
+END_TYPE
+
+TYPE "LGF_typeDiagnostics"
+TITLE = LGF_typeDiagnostics
+VERSION : 0.1
+//Diagnostic structure to store and transfer diagnostic information from blocks through the interface.
+   STRUCT
+      status { ExternalVisible := 'False'; ExternalWritable := 'False'} : Word;   // Status of the Block or error identification when error occurred
+      subfunctionStatus { ExternalVisible := 'False'; ExternalWritable := 'False'} : Word;   // Status or return value of called FB's, FC's and system blocks
+      stateNumber { ExternalVisible := 'False'; ExternalWritable := 'False'} : DInt;   // State in the state machine of the block where the error occurred
+   END_STRUCT;
+
+END_TYPE
+
+FUNCTION_BLOCK "LGF_DataLogC"
+TITLE = LGF_DataLogC
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_Industry_Support
+FAMILY : LGF
+NAME : LGF_DataLogC
+//LGF_DataLogC (C -> Compact) function integrates all the datalog system functions and can be used as standalone data logger.
+   VAR_INPUT 
+      enable : Bool;   // TRUE: Enable functionality of FB
+      "name" : String := 'DefaultDataLog';   // Name of datalog, also used as file name
+      triggerLogEntry : Bool;   // Rising edge trigger one entry in data log (only if `parameter.isLoggingByInterval` := FALSE)
+      clearLog : Bool;   // Rising edge triggering clearing of datalog file
+      deleteLog : Bool;   // Rising edge triggering deletion of datalog file if exist
+      parameter { S7_HiddenAssignment := 'Hide'} : "LGF_typeDataLogParameter";
+   END_VAR
+
+   VAR_OUTPUT 
+      valid { ExternalWritable := 'False'} : Bool;   // TRUE: Valid set of output values available at the FB
+      busy { ExternalWritable := 'False'} : Bool;   // TRUE: FB is not finished and new output values can be expected
+      error { ExternalWritable := 'False'} : Bool;   // TRUE: An error occurred during the execution of the FB
+      status { ExternalWritable := 'False'} : Word := #STATUS_NO_CALL;   // 16#0000 - 16#7FFF: Status of the FB, 16#8000 - 16#FFFF: Error identification
+      writeEntryDone { ExternalWritable := 'False'} : Bool;   // TRUE: DataLog write done successfully
+      clearLogDone { ExternalWritable := 'False'} : Bool;   // TRUE: DataLog clear done successfully
+      deleteLogDone { ExternalWritable := 'False'} : Bool;   // TRUE: DataLog delete done successfully
+      lastEntryReached { ExternalWritable := 'False'} : Bool;   // TRUE: Last entry of datalog reached, if `enableRingBuffer` is set, start from beginning, otherwise block ends here
+      noOfEntries { ExternalWritable := 'False'} : UDInt;   // Number of entries in datalog
+      diagnostics { ExternalWritable := 'False'} : "LGF_typeDiagnostics";
+   END_VAR
+
+   VAR_IN_OUT 
+      data : Variant;   // Data structure to log in datalog file
+   END_VAR
+
+   VAR 
+      statDataLogCommands { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Struct   // Static parameters for additional settings
+         "name" { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : String;   // Name of datalog, also used as file name
+         header { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : String;   // Headline of datalog, string of all data fields, separated by a comma: "field1,field2,field3,..."
+         id { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : DWord;   // Internal id used by the system functions as reference to used datalog
+         noOfRecords { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : UDInt;   // Number of entries in datalog
+         timestampFormat { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : USInt;   // Timestamp format - see manual in `DataLogCreate`
+         loggingInterval { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Time;   // Time for automatic logging interval
+         clearOnOpen { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : UInt;   // Clear datalog during open datalog
+         enableRingBuffer { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // TRUE := Overwrite old values and start from the beginning if datalog reaches its maximum entries
+         isLoggingByInterval { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // TRUE := Log on interval time parameter, otherwise log on `triggerEntry`
+         edgeOnTriggerLogEntry { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Store edge on  `triggerEntry` to do execute just once an edge occurs
+         clearLogPrevious { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Store edge on `clear` to do execute just once an edge occurs
+         deleteLogPrevious { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Store edge on `delete` to do execute just once an edge occurs
+      END_STRUCT;
+      instIntervalTimer {InstructionName := 'IEC_TIMER'; LibVersion := '1.0'; ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'; S7_SetPoint := 'False'} : IEC_TIMER;   // Instance for datalog: timer for Cyclic Write by using a timer instance
+      instDataLogCreate {InstructionName := 'DataLogCreate'; LibVersion := '1.0'; ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'; S7_SetPoint := 'False'} : DataLogCreate;   // Instance for datalog: create datalog (if not exist)
+      instDataLogOpen {InstructionName := 'DataLogOpen'; LibVersion := '1.1'; ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'; S7_SetPoint := 'False'} : DataLogOpen;   // Instance for datalog: open datalog (if exist)
+      instDataLogClose {InstructionName := 'DataLogClose'; LibVersion := '1.0'; ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'; S7_SetPoint := 'False'} : DataLogClose;   // Instance for datalog: close datalog
+      instDataLogWrite {InstructionName := 'DataLogWrite'; LibVersion := '1.0'; ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'; S7_SetPoint := 'False'} : DataLogWrite;   // Instance for datalog: write entry to datalog
+      instDataLogClear {InstructionName := 'DataLogClear'; LibVersion := '1.1'; ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'; S7_SetPoint := 'False'} : DataLogClear;   // Instance for datalog: clear the opened datalog
+      instDataLogDelete {InstructionName := 'DataLogDelete'; LibVersion := '1.1'; ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'; S7_SetPoint := 'False'} : DataLogDelete;   // Instance for datalog: delete an opened datalog
+      statInternal { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Struct   // Internal function flags
+         enablePrevious { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Old value of 'enable' input for edge detection
+         valid { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Static value for output 'valid'
+         busy { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Static value for output 'busy'
+         error { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Static value for output 'error'
+         errorUserCleared { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Error occurred that can only be solved by user; rising edge at enable input necessary
+         errorAutoCleared { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Error occurred that can be acknowledged by FB
+         disablingCompleted { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // TRUE: Disabling has been completed
+         diagnostics { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'; S7_SetPoint := 'False'} : "LGF_typeDiagnostics" := (#STATUS_NO_CALL, (), ());
+         emptyDiagnostics { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'; S7_SetPoint := 'False'} : "LGF_typeDiagnostics";   // Empty diagnostics information (for initialization purposes only)
+      END_STRUCT;
+      statMainState { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : DInt := #FB_STATE_NO_PROCESSING;   // State in the state machine of the FB
+   END_VAR
+   VAR RETAIN
+      statNoOfEntries { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : UDInt := 0;   // Number of entries in datalog
+      statLlastEntryReached { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // TRUE: Last entry of datalog reached, if `enableRingBuffer` is set, start from beginning, otherwise block ends here
+   END_VAR
+   VAR 
+      statWriteEntryDone { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // TRUE: write call finished for output 'writeEntryDone'
+   END_VAR
+
+   VAR_TEMP 
+      tempEnable : Bool;   // Temporary value for input 'enable'
+      tempExitStateLoop : Bool;   // set to TRUE: leave loop from state machine after run trough
+   END_VAR
+
+   VAR CONSTANT 
+      FB_STATE_NO_PROCESSING : DInt := 0;   // FB state: No processing
+      FB_STATE_DL_OPEN : DInt := 20;   // FB state: Datalog open existing
+      FB_STATE_DL_CREATE : DInt := 21;   // FB state: Datalog create new
+      FB_STATE_DL_NEW : DInt := 22;   // FB state: Datalog create new one
+      FB_STATE_DL_WAIT_FOR_TRIGGER : DInt := 30;   // FB state: Datalog wait for trigger edge before write to datalog
+      FB_STATE_DL_WAIT_FOR_WRITE_CYCLE : DInt := 31;   // FB state: Datalog wait for write request
+      FB_STATE_DL_WRITE : DInt := 40;   // FB state: Datalog write into existing and opened
+      FB_STATE_DL_CLEAR : DInt := 51;   // FB state: Datalog clear
+      FB_STATE_DL_CLEAR_DONE : DInt := 52;   // FB state: Datalog clear done
+      FB_STATE_DL_DELETE : DInt := 53;   // FB state: Datalog delete
+      FB_STATE_DL_DELETE_DONE : DInt := 54;   // FB state: Datalog delete done
+      FB_STATE_DISABLING : DInt := 90;   // FB state: Disabling
+      FB_STATE_DISABLING_COMPLETED : DInt := 91;   // FB state: Disabling
+      STATUS_NO_CALL : Word := 16#7000;   // No job being currently processed
+      STATUS_FIRST_CALL : Word := 16#7001;   // First call after incoming new job (rising edge `enable`)
+      STATUS_SUBSEQUENT_CALL : Word := 16#7002;   // Subsequent call during active processing without further details
+      STATUS_MAX_ENTRIES_REACHED : Word := 16#7010;   // maximum Number of entries reached
+      STATUS_FINISHED_NO_ERROR : Word := 16#0000;   // NO error occurred during call / Active processing
+      SUB_STATUS_NO_ERROR : Word := 16#0000;   // NO error occurred in subfunction call
+      ERR_UNDEFINED_STATE : Word := 16#8600;   // Error due to an undefined state in state machine
+      ERR_WRONG_COMMAND_CALL_ORDER : Word := 16#8401;   // Error: wrong command call order - `deleteLog` or `clearLog` must be false during startup / enabling the block
+      ERR_DATALOG_OPEN : Word := 16#8601;   // Error: `DataLogOpen` throws an error, please see `diagnostics.subFunctionStatus` in diagnostic structure for more detailed information
+      ERR_DATALOG_CREATE : Word := 16#8602;   // Error: `DataLogCreate` throws an error, please see `diagnostics.subFunctionStatus` in diagnostic structure for more detailed information
+      ERR_DATALOG_CLOSE : Word := 16#8603;   // Error: `DataLogClose` throws an error, please see `diagnostics.subFunctionStatus` in diagnostic structure for more detailed information
+      ERR_DATALOG_WRITE : Word := 16#8604;   // Error: `DataLogWrite` throws an error, please see `diagnostics.subFunctionStatus` in diagnostic structure for more detailed information
+      ERR_DATALOG_CLEAR : Word := 16#8605;   // Error: `DataLogClear` throws an error, please see `diagnostics.subFunctionStatus` in diagnostic structure for more detailed information
+      ERR_DATALOG_DELETE : Word := 16#8605;   // Error: `DataLogDelete` throws an error, please see `diagnostics.subFunctionStatus` in diagnostic structure for more detailed information
+      "//- internal Error codes from sub functions" : Word;
+      SUB_ERR_DATALOG_DOSE_NOT_EXIST : Word := 16#8092;   // Datalog doesn't exist will try to open
+      "//- internal constants" : Word;
+      DATALOG_DEFAULT_ID : Word := 16#0000;   // Default id is zero, datalog open or create will use this id and write the read id into the tag
+      DATALOG_NO_TIMESTAMP_FORMAT : USInt := 0;   // Datalog created without timestamp
+      DATALOG_LAST_ENTRY_WRITTEN : Word := 16#0001;   // Datalog has reached its maximum number of entries
+      DATALOG_DELETE_OLD_ENTRIES : UInt := 1;   // Datalog old entries would be deleted during open datalog
+      DATALOG_KEEP_OLD_ENTRIES : UInt := 0;   // Datalog keep old entries while open datalog
+   END_VAR
+
+
+BEGIN
+	REGION BLOCK INFO HEADER
+	  //===============================================================================
+	  // Siemens / (c)Copyright 2019
+	  //-------------------------------------------------------------------------------
+	  // Title:            LGF_DataLogC
+	  // Comment/Function: LGF_DataLogC function integrates all the datalog system functions and can be used as standalone data logger (C -> Compact). 
+	  // Library/Family:   LGF - library of general functions
+	  // Author:           Simatic Systems Support
+	  // Tested with:      S7-1200 V4.3 / S7-1500 V2.8
+	  // Engineering:      TIA Portal (V16)
+	  // Restrictions:     Just one datalog is possible, after the log is full, a new one has to be created
+	  //                   or using the log as ringbuffer and overwrite the oldest entries
+	  //                   ENO not active because of Error and Status output
+	  // Requirements:     -
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge        | Changes applied
+	  //----------|------------|-------------------------|------------------------------
+	  // 01.00.00 | 19.02.2022 | Simatic Systems Support | First released version
+	  //===============================================================================
+	END_REGION
+	
+	REGION DESCRIPTION
+	  (/*
+	The function `LGF_DataLogC` combines the system functions for creating and writing data logs in one block.
+	
+	The procedure provides that an existing Datalog is opened on the basis of the name (`name`), if it was not created before, this is recognized and the function creates the Datalog.
+	
+	Afterwards, depending on the parameterization, the data is written from `data` in an adjustable interval or only on request to `triggerLogEntry`.
+	
+	---
+	
+	ReadMe
+	The functionality of Datalogs can be found in the user manual:  
+	* `DataLogCreate`
+	* `DataLogOpen`
+	* `DataLogClose`
+	* `DataLogWrite`
+	* `DataLogClear`
+	* `DataLogDelete`
+	
+	---
+	
+	NOTICE
+	:    The following parameters are only effective when creating a data log:
+	* `parameter.header`
+	* `parameter.maxNumberOfEntries`
+	* `parameter.timestampFormat` (S7-1200 and the S7-1500 support different formats, see the manual `DataLogCreate`)
+	
+	---
+	
+	NOTICE
+	:    When logging data by interval (`isLoggingByInterval`) time variances occur, which are caused by a fluctuating cycle time.
+	:    Therefore it is recommended to call the function in a time interrupt OB besides the call in the cyclic program and to set the trigger for writing in this interrupt OB.
+	
+	---
+	
+	NOTICE
+	:    A data log which is deleted by the function without deleting the file cannot be created again as long as the file exists, it must first be deleted manually in the system.
+	:    Please also note the parameter `parameter.deleteFile` which also deletes the file next to the data in case of a delete command `deleteLog`.
+	*/)
+	END_REGION DESCRIPTION
+	
+	REGION ENABLING/DISABLING
+	  #tempEnable := #enable; // Work with temporary value / create process image
+	  IF TRUE // wrong command call order during enabled
+	    AND #tempEnable
+	    AND (#statInternal.diagnostics.status = #STATUS_NO_CALL)
+	    AND (#deleteLog OR #clearLog)
+	  THEN
+	    // set error in case of wrong command call order....
+	    #statInternal.diagnostics.status := #ERR_WRONG_COMMAND_CALL_ORDER;
+	    #statInternal.diagnostics.subfunctionStatus := #SUB_STATUS_NO_ERROR;
+	    #statInternal.diagnostics.stateNumber := #statMainState;
+	    #statInternal.errorAutoCleared := TRUE;
+	    #statInternal.disablingCompleted := FALSE;
+	    
+	  ELSIF #tempEnable AND NOT #statInternal.enablePrevious AND (#statInternal.diagnostics.status = #STATUS_NO_CALL) THEN // Enable FB
+	    // First call; initialize FB
+	    #statInternal.valid := TRUE;
+	    #statInternal.busy := TRUE;
+	    #statInternal.error := FALSE;
+	    #statInternal.errorUserCleared := FALSE;
+	    #statInternal.errorAutoCleared := FALSE;
+	    #statInternal.diagnostics.status := #STATUS_FIRST_CALL;
+	    #statInternal.diagnostics.subfunctionStatus := #SUB_STATUS_NO_ERROR;
+	    #statInternal.diagnostics.stateNumber := 0;
+	    #diagnostics := #statInternal.emptyDiagnostics;
+	    #statInternal.disablingCompleted := FALSE;
+	    // State machine - start functionality
+	    #statMainState := #FB_STATE_DL_OPEN;
+	    
+	    REGION Init block parameter
+	      // Initialize functionality: reset of variables, diagnostics, etc.
+	      // check all parameter if valid or not
+	      #statWriteEntryDone := FALSE;
+	      #statDataLogCommands.name := #name;
+	      #statDataLogCommands.header := #parameter.header;
+	      #statDataLogCommands.noOfRecords := #parameter.maxNumberOfEntries;
+	      #statDataLogCommands.loggingInterval := #parameter.loggingInterval;
+	      #statDataLogCommands.isLoggingByInterval := #parameter.loggingByInterval;
+	      
+	      // reset internal parameter
+	      #statDataLogCommands.id := #DATALOG_DEFAULT_ID;
+	      
+	      #statDataLogCommands.timestampFormat := #parameter.timestampFormat;
+	      //#statDataLogCommands.timestampFormat := #DATALOG_NO_TIMESTAMP_FORMAT;
+	      
+	      // check if datalog entries should be deleted on open file
+	      IF #parameter.clearOnOpen THEN
+	        #statDataLogCommands.clearOnOpen := #DATALOG_DELETE_OLD_ENTRIES;
+	        // if Datalog has to be cleared, DataLogFull has to be reset as well
+	        #statLlastEntryReached := FALSE;
+	        #statNoOfEntries := 0;
+	      ELSE
+	        #statDataLogCommands.clearOnOpen := #DATALOG_KEEP_OLD_ENTRIES;
+	      END_IF;
+	      
+	      #statDataLogCommands.enableRingBuffer := #parameter.enableRingBuffer;
+	      // check if ringbuffer is deactivated and buffer is full
+	      // if that is the case, do not overwrite and leave function here...
+	      IF NOT #parameter.enableRingBuffer AND #statLlastEntryReached THEN
+	        // set flag
+	        #statInternal.diagnostics.status := #STATUS_MAX_ENTRIES_REACHED;
+	        #statMainState := #FB_STATE_NO_PROCESSING;
+	      END_IF;
+	    END_REGION Init block parameter
+	    
+	    REGION Init subFunction calls
+	      // just if previous parameter-check was successful
+	      IF (#statMainState <> #FB_STATE_NO_PROCESSING) THEN
+	        #instDataLogCreate(REQ := FALSE);
+	        #instDataLogOpen(REQ := FALSE);
+	        #instDataLogClose(REQ := FALSE);
+	        #instDataLogWrite(REQ := FALSE);
+	        #instDataLogClear(REQ := FALSE);
+	        #instDataLogDelete(REQ := FALSE);
+	      END_IF;
+	    END_REGION Init subFunction calls
+	    
+	  ELSIF (#tempEnable = FALSE) AND (#statInternal.enablePrevious = TRUE) THEN // Disable FB 
+	    #statMainState := #FB_STATE_DISABLING;
+	    
+	  ELSIF (#statInternal.diagnostics.status = #STATUS_FIRST_CALL) THEN // Set status identifier of subsequent call
+	    #statInternal.diagnostics.status := #STATUS_SUBSEQUENT_CALL;
+	  END_IF;
+	  
+	  // Edge detection 'enable' input
+	  #statInternal.enablePrevious := #tempEnable;
+	END_REGION ENABLING/DISABLING
+	
+	IF (#statInternal.diagnostics.status = #STATUS_NO_CALL) THEN // Nothing to do -> End here to reduce "system load"
+	  RETURN;
+	END_IF;
+	
+	REGION Command evaluation
+	  IF FALSE
+	    OR #statMainState = #FB_STATE_NO_PROCESSING
+	    OR (TRUE
+	    AND #statMainState > #FB_STATE_DL_CREATE
+	    AND #statMainState < #FB_STATE_DL_DELETE
+	    )
+	  THEN
+	    // clear datalog requested
+	    IF #clearLog AND NOT #statDataLogCommands.clearLogPrevious THEN
+	      #statMainState := #FB_STATE_DL_CLEAR;
+	      #statInternal.errorUserCleared := FALSE;
+	      // delete datalog requested
+	    ELSIF #deleteLog AND NOT #statDataLogCommands.deleteLogPrevious THEN
+	      #statMainState := #FB_STATE_DL_DELETE;
+	      #statInternal.errorAutoCleared := FALSE;
+	    END_IF;
+	  END_IF;
+	END_REGION
+	
+	REGION STATE_MACHINE
+	  
+	  // if one ore more runs in the same cycle are necessary, set #tempStateChangeActive := TRUE;
+	  REPEAT
+	    // reset #tempExitStateLoop := TRUE; as its defined state to prevent endless loop
+	    #tempExitStateLoop := TRUE;
+	    
+	    CASE #statMainState OF // State machine of FB
+	      #FB_STATE_NO_PROCESSING:
+	        REGION NO Processing
+	          ; // No processing active (Note: this state must always be present and left empty)
+	        END_REGION NO Processing
+	        
+	      #FB_STATE_DL_OPEN:
+	        REGION DataLog open
+	          #instDataLogOpen(REQ  := TRUE,
+	                           MODE := #statDataLogCommands.clearOnOpen,
+	                           NAME := #statDataLogCommands.name,
+	                           ID   := #statDataLogCommands.id);
+	          
+	          // check if open DL is done successfully - goto write
+	          IF #instDataLogOpen.DONE THEN
+	            IF #statDataLogCommands.isLoggingByInterval THEN
+	              #statMainState := #FB_STATE_DL_WRITE;
+	            ELSE // is logging by trigger
+	              #statMainState := #FB_STATE_DL_WAIT_FOR_TRIGGER;
+	            END_IF;
+	            // reset instance
+	            #instDataLogOpen(REQ := FALSE);
+	            
+	            // check if error occurred
+	          ELSIF #instDataLogOpen.ERROR THEN
+	            // datalog do not exist --> Create
+	            IF (#instDataLogOpen.STATUS = #SUB_ERR_DATALOG_DOSE_NOT_EXIST) THEN
+	              #statMainState := #FB_STATE_DL_CREATE;
+	              
+	            ELSE // error not known, user have to act - leave block
+	              #statInternal.diagnostics.status := #ERR_DATALOG_OPEN;
+	              #statInternal.diagnostics.subfunctionStatus := #instDataLogOpen.STATUS;
+	              #statInternal.diagnostics.stateNumber := #FB_STATE_DL_OPEN;
+	              #statInternal.errorUserCleared := TRUE;
+	            END_IF;
+	            // reset instance
+	            #instDataLogOpen(REQ := FALSE);
+	          END_IF;
+	        END_REGION DataLog open
+	        
+	      #FB_STATE_DL_CREATE:
+	        REGION DataLog create
+	          #instDataLogCreate(REQ       := TRUE,
+	                             RECORDS   := #statDataLogCommands.noOfRecords,
+	                             TIMESTAMP := #statDataLogCommands.timestampFormat,
+	                             NAME      := #statDataLogCommands.name,
+	                             ID        := #statDataLogCommands.id,
+	                             HEADER    := #statDataLogCommands.header,
+	                             DATA      := #data);
+	          
+	          // check if creating and opening DL is done successfully - goto write
+	          IF #instDataLogCreate.DONE THEN
+	            IF (#statDataLogCommands.isLoggingByInterval = TRUE) THEN
+	              #statMainState := #FB_STATE_DL_WRITE;
+	            ELSE // is logging by trigger
+	              #statMainState := #FB_STATE_DL_WAIT_FOR_TRIGGER;
+	            END_IF;
+	            // reset instance
+	            #instDataLogCreate(REQ := FALSE);
+	            
+	            // check if error occurred
+	          ELSIF #instDataLogCreate.ERROR THEN
+	            // error not known, user have to act
+	            #statInternal.diagnostics.status := #ERR_DATALOG_CREATE;
+	            #statInternal.diagnostics.subfunctionStatus := #instDataLogCreate.STATUS;
+	            #statInternal.diagnostics.stateNumber := #FB_STATE_DL_OPEN;
+	            #statInternal.errorUserCleared := TRUE;
+	            // reset instance
+	            #instDataLogCreate(REQ := FALSE);
+	          END_IF;
+	        END_REGION DataLog create
+	        
+	      #FB_STATE_DL_WAIT_FOR_TRIGGER,
+	      #FB_STATE_DL_WAIT_FOR_WRITE_CYCLE:
+	        REGION Wait for trigger
+	          // reset flags
+	          #statLlastEntryReached := FALSE;
+	          #statInternal.diagnostics.status := #STATUS_SUBSEQUENT_CALL;
+	          
+	          IF TRUE // if trigger has a rising edge
+	            AND (#triggerLogEntry AND NOT #statDataLogCommands.edgeOnTriggerLogEntry)
+	            AND (#statMainState = #FB_STATE_DL_WAIT_FOR_TRIGGER)
+	          THEN
+	            #statMainState := #FB_STATE_DL_WRITE;
+	            
+	          ELSIF TRUE // if interval is over
+	            AND #instIntervalTimer.Q
+	            AND (#statMainState = #FB_STATE_DL_WAIT_FOR_WRITE_CYCLE)
+	          THEN
+	            #statMainState := #FB_STATE_DL_WRITE;
+	          END_IF;
+	        END_REGION Wait for trigger 
+	        
+	      #FB_STATE_DL_WRITE:
+	        REGION DataLog write
+	          #instDataLogWrite(REQ := TRUE,
+	                            ID  := #statDataLogCommands.id);
+	          
+	          // check if datalog is at its last entry
+	          IF (#instDataLogWrite.STATUS = #DATALOG_LAST_ENTRY_WRITTEN) THEN
+	            // set flag
+	            #statLlastEntryReached := TRUE;
+	            #statInternal.diagnostics.status := #STATUS_MAX_ENTRIES_REACHED;
+	            // increment counter
+	            #statNoOfEntries += 1;
+	            #statWriteEntryDone := TRUE;
+	            
+	            // check if datalog should be overwritten or not
+	            IF #statDataLogCommands.enableRingBuffer THEN
+	              // is logging by interval
+	              IF #statDataLogCommands.isLoggingByInterval THEN
+	                #statMainState := #FB_STATE_DL_WAIT_FOR_WRITE_CYCLE;
+	                
+	              ELSE // is logging by trigger
+	                #statMainState := #FB_STATE_DL_WAIT_FOR_TRIGGER;
+	              END_IF;
+	              
+	            ELSE // do not overwrite - disable and leave block
+	              #statMainState := #FB_STATE_NO_PROCESSING;
+	            END_IF;
+	            // reset instance
+	            #instDataLogWrite(REQ := FALSE);
+	            #tempExitStateLoop := FALSE;
+	            
+	            // check if open DL is done successfully - goto write
+	          ELSIF #instDataLogWrite.DONE THEN
+	            // increment counter
+	            #statNoOfEntries += 1;
+	            #statWriteEntryDone := TRUE;
+	            
+	            IF #statDataLogCommands.isLoggingByInterval = TRUE THEN
+	              #statMainState := #FB_STATE_DL_WAIT_FOR_WRITE_CYCLE;
+	            ELSE // is logging by trigger
+	              #statMainState := #FB_STATE_DL_WAIT_FOR_TRIGGER;
+	            END_IF;
+	            // reset instance
+	            #instDataLogWrite(REQ := FALSE);
+	            #tempExitStateLoop := FALSE;
+	            
+	            // check if error occurred
+	          ELSIF #instDataLogWrite.ERROR THEN
+	            // error not known, user have to act
+	            #statInternal.diagnostics.status := #ERR_DATALOG_WRITE;
+	            #statInternal.diagnostics.subfunctionStatus := #instDataLogWrite.STATUS;
+	            #statInternal.diagnostics.stateNumber := #FB_STATE_DL_WRITE;
+	            #statInternal.errorAutoCleared := TRUE;
+	            #statMainState := #FB_STATE_NO_PROCESSING;
+	            // reset instance
+	            #instDataLogWrite(REQ := FALSE);
+	          END_IF;
+	        END_REGION DataLog write
+	        
+	      #FB_STATE_DL_CLEAR:
+	        REGION DataLog clear
+	          #instDataLogClear(REQ := TRUE,
+	                            ID  := #statDataLogCommands.id);
+	          
+	          // check if open DL is done successfully - goto write
+	          IF #instDataLogClear.DONE THEN
+	            #statMainState := #FB_STATE_DL_CLEAR_DONE;
+	            // reset flag
+	            #statLlastEntryReached := FALSE;
+	            #statNoOfEntries := 0;
+	            // reset instance
+	            #instDataLogClear(REQ := FALSE);
+	            
+	            // check if error occurred
+	          ELSIF #instDataLogClear.ERROR THEN
+	            // error not known, user have to act
+	            #statInternal.diagnostics.status := #ERR_DATALOG_CLEAR;
+	            #statInternal.diagnostics.subfunctionStatus := #instDataLogClear.STATUS;
+	            #statInternal.diagnostics.stateNumber := #FB_STATE_DL_CLEAR;
+	            #statInternal.errorAutoCleared := TRUE;
+	            #statMainState := #FB_STATE_NO_PROCESSING;
+	            // reset instance
+	            #instDataLogWrite(REQ := FALSE);
+	          END_IF;
+	        END_REGION DataLog clear
+	        
+	      #FB_STATE_DL_CLEAR_DONE:
+	        REGION DataLog clear done
+	          IF NOT #clearLog THEN
+	            IF #statDataLogCommands.isLoggingByInterval THEN
+	              #statMainState := #FB_STATE_DL_WRITE;
+	            ELSE
+	              #statMainState := #FB_STATE_DL_WAIT_FOR_TRIGGER;
+	            END_IF;
+	          END_IF;
+	        END_REGION DataLog clear
+	        
+	      #FB_STATE_DL_DELETE:
+	        REGION DataLog delete
+	          #instDataLogDelete(REQ     := TRUE,
+	                             NAME    := #statDataLogCommands.name,
+	                             DelFile := #parameter.deleteFile,
+	                             ID      := #statDataLogCommands.id);
+	          
+	          // check if delete DL is done successfully - goto disable completed
+	          IF #instDataLogDelete.DONE THEN
+	            #statMainState := #FB_STATE_DL_DELETE_DONE;
+	            // reset flag
+	            #statLlastEntryReached := FALSE;
+	            #statNoOfEntries := 0;
+	            // reset instance
+	            #instDataLogDelete(REQ := FALSE);
+	            
+	            // check if error occurred
+	          ELSIF #instDataLogDelete.ERROR THEN
+	            // error not known, user have to act
+	            #statInternal.diagnostics.status := #ERR_DATALOG_DELETE;
+	            #statInternal.diagnostics.subfunctionStatus := #instDataLogDelete.STATUS;
+	            #statInternal.diagnostics.stateNumber := #FB_STATE_DL_DELETE;
+	            #statInternal.errorAutoCleared := TRUE;
+	            #statMainState := #FB_STATE_NO_PROCESSING;
+	            // reset instance
+	            #instDataLogDelete(REQ := FALSE);
+	          END_IF;
+	        END_REGION DataLog delete
+	        
+	      #FB_STATE_DL_DELETE_DONE:
+	        REGION DataLog delete done
+	          IF NOT #deleteLog THEN
+	            #statMainState := #FB_STATE_DISABLING_COMPLETED;
+	          END_IF;
+	        END_REGION DataLog delete
+	        
+	      #FB_STATE_DISABLING: // Disabling active
+	        REGION Disabling
+	          // closing DataLog
+	          #instDataLogClose(REQ := TRUE,
+	                            ID  := #statDataLogCommands.id);
+	          
+	          // check if datalog is closed
+	          IF FALSE
+	            OR #instDataLogClose.DONE
+	            OR #instDataLogClose.STATUS = #SUB_ERR_DATALOG_DOSE_NOT_EXIST
+	          THEN
+	            #statMainState := #FB_STATE_DISABLING_COMPLETED;
+	            #statInternal.diagnostics.status := #STATUS_FINISHED_NO_ERROR;
+	            
+	            // if closing ends with error - report this as well
+	          ELSIF #instDataLogClose.ERROR THEN
+	            // error occurred - copy to outputs
+	            #statInternal.diagnostics.status := #ERR_DATALOG_CLOSE;
+	            #statInternal.diagnostics.subfunctionStatus := #instDataLogClose.STATUS;
+	            #statInternal.diagnostics.stateNumber := #FB_STATE_DISABLING;
+	            #statInternal.errorAutoCleared := TRUE;// next state
+	            #statMainState := #FB_STATE_DISABLING_COMPLETED;
+	          END_IF;
+	        END_REGION Disabling
+	        
+	      #FB_STATE_DISABLING_COMPLETED:
+	        REGION Disabling completed
+	          // reset instance
+	          #instDataLogClose(REQ := FALSE);
+	          // When disabling is complete the bit #statDisablingCompleted must be set
+	          #statInternal.disablingCompleted := TRUE;
+	        END_REGION Disabling completed
+	        
+	      ELSE // Undefined state in state machine reached
+	        REGION Undefined state        
+	          #statInternal.diagnostics.status := #ERR_UNDEFINED_STATE;
+	          #statInternal.diagnostics.subfunctionStatus := #SUB_STATUS_NO_ERROR;
+	          #statInternal.diagnostics.stateNumber := #statMainState;
+	          #statInternal.errorUserCleared := TRUE;
+	        END_REGION Undefined state
+	    END_CASE;
+	    
+	    // call interval timer
+	    #instIntervalTimer.TON(IN := (#statMainState = #FB_STATE_DL_WAIT_FOR_WRITE_CYCLE),
+	                           PT := #statDataLogCommands.loggingInterval);    // if one ore more runs in the same cycle are necessary, set #tempExitStateLoop := FALSE;
+	    // check state, if condition = TRUE --> #tempExitStateLoop = TRUE --> LEAVE LOOP
+	  UNTIL (TRUE = #tempExitStateLoop)
+	  END_REPEAT;
+	END_REGION STATE_MACHINE
+	
+	REGION Edge memory
+	  // store/ reset edge memory
+	  #statDataLogCommands.edgeOnTriggerLogEntry := #triggerLogEntry;
+	  #statDataLogCommands.clearLogPrevious := #clearLog;
+	  #statDataLogCommands.deleteLogPrevious := #deleteLog;
+	END_REGION
+	
+	REGION OUTPUTS
+	  // Write outputs
+	  IF (#statInternal.disablingCompleted = TRUE) THEN
+	    REGION disabling
+	      // Reset outputs if disabling completed
+	      #statInternal.valid := FALSE;
+	      #statInternal.busy := FALSE;
+	      #statInternal.error := FALSE;
+	      #statInternal.errorUserCleared := FALSE;
+	      #statInternal.errorAutoCleared := FALSE;
+	      #statInternal.diagnostics.status := #STATUS_NO_CALL;
+	      // Reset application specific outputs
+	      #statWriteEntryDone := FALSE;
+	    END_REGION disabling
+	    
+	  ELSIF (#statInternal.errorUserCleared = TRUE) AND (#statInternal.error = FALSE) THEN
+	    REGION error user cleared
+	      // Error can only be cleared by user; rising edge at enable input is needed to continue 
+	      #statInternal.valid := FALSE;
+	      #statInternal.busy := FALSE;
+	      #statInternal.error := TRUE;
+	      // Write diagnostics
+	      #diagnostics := #statInternal.diagnostics;
+	      // Reset application specific outputs
+	      #statWriteEntryDone := FALSE;
+	      // execution aborted --> set state no processing
+	      #statMainState := #FB_STATE_NO_PROCESSING;
+	    END_REGION error user cleared
+	    
+	  ELSIF (#statInternal.errorAutoCleared = TRUE) AND (#statInternal.error = FALSE) THEN
+	    REGION error auto cleared
+	      // Error can be reset by FB automatically
+	      #statInternal.valid := FALSE;
+	      #statInternal.busy := TRUE;
+	      #statInternal.error := TRUE;
+	      // Write diagnostics
+	      #diagnostics := #statInternal.diagnostics;
+	      // Reset application specific outputs
+	      #statWriteEntryDone := FALSE;
+	    END_REGION error auto cleared
+	    
+	  ELSIF (#statInternal.errorAutoCleared = FALSE) AND (#statInternal.errorUserCleared = FALSE) AND (#statInternal.error = TRUE) THEN
+	    REGION after user/auto cleared
+	      // If autocleared error is acknowledged
+	      #statInternal.valid := TRUE;
+	      #statInternal.busy := TRUE;
+	      #statInternal.error := FALSE;
+	      // remove this line if more detailed status information is used instead of "#STATUS_SUBSEQUENT_CALL"
+	      #statInternal.diagnostics.status := #STATUS_SUBSEQUENT_CALL;
+	    END_REGION after user/auto cleared
+	  END_IF;
+	  
+	  REGION Write static values to outputs
+	    #valid := #statInternal.valid;
+	    #busy := #statInternal.busy;
+	    #error := #statInternal.error;
+	    #status := #statInternal.diagnostics.status;
+	    // if ENO mechanism is not used / not wanted replace the following line by --> ENO := TRUE;
+	    ENO := NOT #statInternal.error;
+	    // Write application specific static values to outputs
+	    #lastEntryReached := #statLlastEntryReached;
+	    #noOfEntries := #statNoOfEntries;
+	    
+	    #writeEntryDone := #statWriteEntryDone;
+	    #statWriteEntryDone := FALSE;
+	    
+	    #clearLogDone := #statMainState = #FB_STATE_DL_CLEAR_DONE;
+	    #deleteLogDone := #statMainState = #FB_STATE_DL_DELETE_DONE;
+	  END_REGION Write static values to outputs
+	END_REGION OUTPUTS
+	
+END_FUNCTION_BLOCK
+

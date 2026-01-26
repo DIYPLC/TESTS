@@ -1,0 +1,65 @@
+﻿FUNCTION "LGF_BitSetTo" : DWord
+TITLE = LGF_BitSetTo
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_SIMATIC_Systems_Support
+FAMILY : LGF
+NAME : LGF_BitSetTo
+//This block sets a bit to TRUE or FALSE at a predefined position in a variable of the data type DWORD.  
+//Alternatively, Word and Byte can be used instead of DWord by converting the passed parameter with, for example, BYTE_TO_DWORD and the result with DWORD_TO_BYTE.
+   VAR_INPUT 
+      value : DWord;   // Tag where the bit has to be set / reset
+      bitNo : USInt;   // Bit number to set in "value" parameter
+      setTo : Bool;   // Set bit to FALSE / TRUE
+   END_VAR
+
+   VAR CONSTANT 
+      BINARY_ONES : DWord := 16#FFFFFFFF;   // Binary ones - all bits are true to concatenate shifted result
+      TRUE_BOOL_BIT : DWord := 16#0001;   // Just one bit which is true, to shift in Dword for masking
+      MAX_NO_OF_BITS : USInt := 32;   // Maximum bits in a DWord = 32
+   END_VAR
+
+
+BEGIN
+	REGION BLOCK INFO HEADER
+	  //===============================================================================
+	  // SIEMENS AG / (c)Copyright 2019
+	  //-------------------------------------------------------------------------------
+	  // Title:            LGF_BitSetTo
+	  // Comment/Function: Set bit in elemtary datatype DWord to FALSE or TRUE,
+	  //                   along to the given value in "setTo" parameter
+	  //                   can be used for Word and Byte as well, by convert
+	  //                   the passed paramter and the result using for e.g. Dword_to_Byte
+	  // Library/Family:   LGF (Library General Functions)
+	  // Author:           Siemens Digital Industry
+	  // Tested with:      CPU1212C DC/DC/DC FW:V4.2
+	  // Engineering:      TIA Portal V15.1
+	  // Restrictions:     ENO not in use, set to true, no error handling
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge         | Changes applied
+	  // 01.00.00 | 06.06.2015 | Siemens Industry Support | first release
+	  // 03.00.00 | 23.04.2020 | Siemens Industry Support | Set version to V3.0.0
+	  //                         harmonize the version of the whole library
+	  // 03.00.01 | 19.01.2021 | Simatic Systems Support
+	  //                         Insert documentation
+	  //===============================================================================
+	END_REGION
+	
+	REGION logic
+	  // check th value we wont TO use - TRUE / FALSE
+	  IF #setTo THEN
+	    // set the bit in tag
+	    // shift one true bit into given position
+	    // concatenate value then with OR will result in the previous value and the set bit in position
+	    #LGF_BitSetTo := #value OR SHL(IN := #TRUE_BOOL_BIT, N := (#bitNo MOD #MAX_NO_OF_BITS));
+	  ELSE
+	    // reset the bit in tag
+	    // shift one true bit into given position
+	    // concatenate value then with XOR and biary ones
+	    // using this result with AND and value will result in the previous value and the reseted bit in position
+	    #LGF_BitSetTo := #value AND (#BINARY_ONES XOR SHL(IN := #TRUE_BOOL_BIT, N := (#bitNo MOD #MAX_NO_OF_BITS)));
+	  END_IF;
+	END_REGION
+END_FUNCTION
+

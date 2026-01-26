@@ -1,0 +1,50 @@
+﻿FUNCTION "LGF_BinaryMaskCompare" : Bool
+TITLE = LGF_BinaryMaskCompare
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_Simatic_Systems_Support
+FAMILY : LGF
+NAME : LGF_BinaryMaskCompare
+//This function compares two binary Values `source` and `compare` by a given `mask`.  
+//Both given values are masked (input AND `mask`), and the results is than compared and returned.  
+//Can be used for Word and Byte as well, by convert the passed parameter using for e.g. `Byte_to_DWord(...)`.
+   VAR_INPUT 
+      source : DWord;   // Source value to compare
+      compare : DWord;   // Value to compare against
+      mask { S7_PredefinedAssignment := '16#FFFFFFFF'; S7_HiddenAssignment := 'Show'; S7_ShowAssignmentIfParamsNotIdentical := 'false'} : DWord;   // Mask the data - bits will pass if TRUE or block if FALSE
+   END_VAR
+
+   VAR CONSTANT 
+      ALL_BITS_ARE_FALSE : DWord := 16#00000000;   // All bits have to be zero if input values match
+   END_VAR
+
+
+BEGIN
+	REGION BLOCK INFO HEADER
+	  //===============================================================================
+	  // SIEMENS AG / (c)Copyright 2019
+	  //-------------------------------------------------------------------------------
+	  // Title:            LGF_BinaryMaskCompare
+	  // Comment/Function: Comparing two binary Values `source` and `compare` by a given `mask`.  
+	  //                   Both given values are masked, and the results is than compared and returned
+	  //                   Can be used for Word and Byte as well, by convert the passed parameter using for e.g. Byte_to_DWord(...)
+	  // Library/Family:   LGF (Library General Functions)
+	  // Author:           Siemens Simatic Systems Support
+	  // Tested with:      1516F FW2.8 / S7-PLCSIM Advanced V3.0
+	  // Engineering:      TIA Portal V16 Update 4
+	  // Restrictions:     ENO not in use, set to true, no error handling
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge        | Changes applied
+	  // 01.00.00 | 19.01.2021 | Simatic Systems Support | First released version
+	  //===============================================================================
+	END_REGION BLOCK INFO HEADER
+	
+	//Mask Compare Equal DWord
+	#LGF_BinaryMaskCompare := (((#source AND #mask) XOR (#compare AND #mask)) = #ALL_BITS_ARE_FALSE);
+	
+	// ENO is not used, forced to TRUE
+	ENO := TRUE;
+	
+END_FUNCTION
+

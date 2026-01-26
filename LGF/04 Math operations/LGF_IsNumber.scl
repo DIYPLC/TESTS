@@ -1,0 +1,57 @@
+﻿FUNCTION "LGF_IsNumber" : Bool
+TITLE = LGF_IsNumber
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_Digital_Industry
+FAMILY : LGF
+NAME : LGF_IsNumber
+//This function proves a LReal datatype for a valid number and numeric range.
+   VAR_INPUT 
+      number : LReal;   // Number to validate
+      validRangeMin { S7_HiddenAssignment := 'Hide'; S7_PredefinedAssignment := '-2.2250738585072014E-308'; S7_ShowAssignmentIfParamsNotIdentical := 'true'} : LReal;   // Minimum real number for valid range
+      validRangeMax { S7_HiddenAssignment := 'Hide'; S7_PredefinedAssignment := '+1.7976931348623157e+308'; S7_ShowAssignmentIfParamsNotIdentical := 'true'} : LReal;   // Maximum real number for valid range
+   END_VAR
+
+   VAR CONSTANT 
+      LREAL_ZERO : LReal := 0.0;   // Constant zero for real valid number
+   END_VAR
+
+
+BEGIN
+	REGION BLOCK INFO HEADER
+	  //=============================================================================
+	  // SIEMENS AG / (c)Copyright 2025
+	  //-----------------------------------------------------------------------------
+	  // Title:            LGF_IsNumber
+	  // Comment/Function: This function proves an LReal for a valid numeric range 
+	  // Library/Family:   LGF (Library General Functions)
+	  // Author:           Siemens Digital Industry Support
+	  // Tested with:      S7-PLCSIM Advanced V5.0
+	  // Engineering:      TIA Portal V17
+	  // Restrictions:     ENO mechanism is not used, Error handling done by error and status
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //-----------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge                | Changes applied
+	  // 
+	  // 01.00.00 | 29.07.2025 | Siemens SIMATIC Systems Support | First release version
+	  //=============================================================================
+	END_REGION BLOCK INFO HEADER
+	
+	REGION DESCRIPTION
+	  (/**/)
+	END_REGION DESCRIPTION
+	
+	REGION Calculation
+	  #LGF_IsNumber := TRUE
+	  AND (#number = #number)
+	  AND (FALSE
+	  // Proof if number is inbetween the limits
+	  OR ((#number <> #LREAL_ZERO) AND (#number >= #validRangeMin) AND (#number <= #validRangeMax))
+	  // If number is a real 0.0 and the limits spann over / includes the zero
+	  OR ((#number = #LREAL_ZERO) AND (#validRangeMin <= #LREAL_ZERO) AND (#LREAL_ZERO <= #validRangeMax))
+	  );
+	  ENO := TRUE;
+	END_REGION
+	
+END_FUNCTION
+

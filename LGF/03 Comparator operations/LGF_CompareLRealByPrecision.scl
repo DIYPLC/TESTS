@@ -1,0 +1,74 @@
+﻿FUNCTION "LGF_CompareLRealByPrecision" : Bool
+TITLE = LGF_CompareLRealByPrecision
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_Digital_Industry
+FAMILY : LGF
+NAME : LGF_CompareLRealByPrecision
+//This function checks floating point numbers for equality, by using an approximation formula
+//and a fixed precision by constant 1.0E-12 (pico)
+   VAR_INPUT 
+      valueA : LReal;   // First LREAL number to be compared.
+      valueB : LReal;   // Second LREAL number to be compared.
+      precision : LReal;   // Accuracy with which the two values are compared.
+   END_VAR
+
+
+BEGIN
+	REGION BLOCK INFO HEADER
+	  //===============================================================================
+	  // SIEMENS AG / (c)Copyright 2019
+	  //-------------------------------------------------------------------------------
+	  // Title:            LGF_CompareLRealByPrecision
+	  // Comment/Function: This function checks floating point numbers for equality
+	  //                   Using a given precision by parameter
+	  // Library/Family:   LGF (Library General Functions)
+	  // Author:           Siemens Digital Industry
+	  // Tested with:      CPU1212C DC/DC/DC FW:V4.2
+	  // Engineering:      TIA Portal V15.1
+	  // Restrictions:     ENO is not used, forced to TRUE, no error handling needed
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge       | Changes applied
+	  // 01.00.00 03.06.2019  Simatic Systems Support
+	  //                      First released version
+	  //                      function besad on `LGF_CompareLReal`
+	  // 03.00.00 23.04.2020  Simatic Systems Support
+	  //                      Set version to V3.0.0, harmonize the version of the whole library
+	  // 03.00.01 19.01.2020  Simatic Systems Support
+	  //                      Insert documentation
+	  // 03.00.02 21.12.2023  Simatic Systems Support
+	  //                      Fix compare error if one value is exactly zero
+	  //===============================================================================
+	END_REGION BLOCK INFO HEADER
+	
+	REGION DESCRIPTION
+	  (/*
+	The comparison of the LREAL numbers is based on an given accuracy at the parameter `precision`. The difference between the two input values must be smaller than the `precision` accuracy value multiplied by one of the two input values.
+	
+	Equation:
+	
+	$$
+	  result := FALSE
+	  OR ((#valueA = 0.0) AND (ABS(#valueB) <= #precision))
+	  OR ((#valueB = 0.0) AND (ABS(#valueA) <= #precision))
+	  OR (ABS(#valueA - #valueB) <= (#precision * ABS(#valueA)));
+	$$
+	*/)
+	END_REGION DESCRIPTION
+	
+	REGION Approximation
+	  // the compare of fLoating point numbers is based on a given precison, for e.g. 1.0E-6
+	  // difference of the input values A and B has to be smaller than
+	  // the precision multiplied with one of the two given inputs
+	  #LGF_CompareLRealByPrecision := FALSE
+	  OR ((#valueA = 0.0) AND (ABS(#valueB) <= #precision))
+	  OR ((#valueB = 0.0) AND (ABS(#valueA) <= #precision))
+	  OR (ABS(#valueA - #valueB) <= (#precision * ABS(#valueA)));
+	  
+	  // ENO is not used, forced to TRUE, no error handling needed
+	  ENO := TRUE;
+	END_REGION
+	
+END_FUNCTION
+

@@ -1,0 +1,220 @@
+﻿FUNCTION "LGF_MatrixInverse" : Void
+TITLE = LGF_MatrixInverse
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_Digital_Industry
+FAMILY : LGF
+NAME : LGF_MatrixInverse
+//This function inverts a square matrix of the data type `ARRAY[*,*] of LREAL`.  
+//The square matrix of any size will be inverted according to the Shipley-Coleman method.
+//
+//$$
+//   matrixResult = matrix^{-1}
+//$$
+//
+//Note
+//:    Note that the input matrix must be square. This means that the number of rows must be equal to the number of columns. The output matrix must be the same size and have the same array boundaries as the input matrix.
+//
+   VAR_OUTPUT 
+      error : Bool;   // FALSE: No error  TRUE: An error occurred during the execution of the FB
+      status : Word;   // 16#0000-16#7FFF: Status of the FB  16#8000-16#FFFF: Error identification (see following Table)
+   END_VAR
+
+   VAR_IN_OUT 
+      matrix : Array[*, *] of LReal;   // Square input matrix that will be inversed (Array[0..x, 0..x] of REAL)
+      matrixResult : Array[*, *] of LReal;   // Inverted matrix
+   END_VAR
+
+   VAR_TEMP 
+      tempMatrix1LowerBoundRows : DInt;   // Matrix1 lower bound for the rows (Dimension 1)
+      tempMatrix1LowerBoundColumns : DInt;   // Matrix1 lower bound for the columns (Dimension 2)
+      tempMatrix1UpperBoundRows : DInt;   // Matrix1 upper bound for the rows (Dimension 1)
+      tempMatrix1UpperBoundColumns : DInt;   // Matrix1 upper bound for the columns (Dimension 2)
+      tempResultMatrixLowerBoundRows : DInt;   // Result matrix lower bound for the rows (Dimension 1)
+      tempResultMatrixLowerBoundColumns : DInt;   // Result matrix lower bound for the columns (Dimension 2)
+      tempResultMatrixUpperBoundRows : DInt;   // Result matrix upper bound for the rows (Dimension 1)
+      tempResultMatrixUpperBoundColumns : DInt;   // Result matrix upper bound for the columns (Dimension 2)
+      tempCounterRows : DInt;   // Index counter for traversiong trough rows (Dimension 1)
+      tempCounterColumns : DInt;   // Index counter for traversiong trough columns (Dimension 2)
+      tempColumns : DInt;   // Number of columns
+      tempRows : DInt;   // Number of rows
+      tempK : DInt;   // Index K - element for calculating formula and iteration trough matrix
+      tempI : DInt;   // Index I - element for calculating formula and iteration trough matrix
+      tempJ : DInt;   // Index J - element for calculating formula and iteration trough matrix
+      tempMatrixElement : LReal;   // Calculated matrix element
+   END_VAR
+
+   VAR CONSTANT 
+      PRECISION : LReal := 1.0E-10;   // Long real precision for compare
+      NEGATIVE_NUMERATOR : LReal := -1.0;   // Negative numerator part of formula (-1.0)
+      ZERO : UInt := 0;   // Constant for initialization and part of formula
+      ONE : UInt := 1;   // Constant One for indexing
+      ROWS : UInt := 1;   // Rows are the first dimention of the two dimentional array
+      COLUMNS : UInt := 2;   // Columns are the second dimension of the two dimensional array
+      STATUS_NO_ERROR : Word := 16#0000;   // Execution finished without errors
+      ERR_NOT_SQUARE_MATRIX : Word := 16#8200;   // Error: Matrix is not square (number of rows equals number of colums)
+      ERR_ALGORITHM_NOT_POSSIBLE : Word := 16#8201;   // Matrix determinant is zero. Inversion is not possible for this matrix
+      ERR_MATR1_LOWBOUND_ROWS_RESMATR_LOWBOUND_ROWS : Word := 16#8202;   // Error: Matrix1 lower bound rows(Dim1) size is different with Result Matrix lower bound rows(Dim1)
+      ERR_MATR1_LOWBOUND_COLUMNS_RESMATR_LOWBOUND_COLUMNS : Word := 16#8203;   // Error: Matrix1 lower bound columns(Dim2) size is different with Result Matrix lower bound columns(Dim2)
+      ERR_MATR1_UPPBOUND_ROWS_RESMATR_UPPBOUND_ROWS : Word := 16#8204;   // Error: Matrix1 upper bound rows(Dim1) size is different with Result Matrix upper bound rows(Dim1)
+      ERR_MATR1_UPPBOUND_COLUMNS_RESMATR_UPPBOUND_COLUMNS : Word := 16#8205;   // Error: Matrix1 upper bound columns(Dim2) size is different with Result Matrix upper bound columns(Dim2)
+   END_VAR
+
+
+BEGIN
+	REGION Block info header
+	  //=============================================================================
+	  // SIEMENS AG / (c)Copyright 2017
+	  //-------------------------------------------------------------------------------
+	  // Title:            LGF_MatrixInverse
+	  // Comment/Function: Caluclates an inverted version of a matrix
+	  // Library/Family:   LGF(Library General Functions)
+	  // Author:           Siemens Digital Industry Support
+	  // Tested with:      S7-PLCSIM Advanced V2.0 SP1
+	  // Engineering:      TIA Portal V15 Update 2
+	  // Restrictions:     ENO disabled - error handling done by error and status
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge       | Changes applied
+	  //----------|------------|------------------------|------------------------------
+	  // 01.00.00 19.08.2015  Siemens Industry Online Support
+	  //                      First released version
+	  // 01.00.01 02.01.2017  Siemens Industry Online Support
+	  //                      Upgrade: TIA Portal V14 Update 1
+	  // 02.00.00 06.02.2017  Siemens Industry Online Support
+	  //                      Functionality using Array[*,*]
+	  // 02.00.01 17.08.2018  Siemens Industry Online Support
+	  //                      Upgrade: TIA V15 Update 2
+	  // 02.00.02 23.11.2018  Siemens Industry Online Support
+	  //                      Upgrade: TIA V15.1
+	  // 02.00.05 13.11.2019  Simatic Systems Support
+	  //                      Regions, comments and constants are added
+	  //                      Moved matrices to IO field.
+	  // 03.00.00 23.04.2020  Simatic Systems Support
+	  //                      Set version to V3.0.0, harmonize the version of the whole library
+	  // 03.00.01 02.02.2020  Simatic Systems Support
+	  //                      Insert documentation
+	  //=================================================================================
+	END_REGION Block info header
+	
+	REGION Determine the size of the matrices
+	  // Lower bound rows
+	  #tempMatrix1LowerBoundRows := LOWER_BOUND(ARR := #matrix, DIM := #ROWS);
+	  #tempResultMatrixLowerBoundRows := LOWER_BOUND(ARR := #matrixResult, DIM := #ROWS);
+	  // Lower bound columns
+	  #tempMatrix1LowerBoundColumns := LOWER_BOUND(ARR := #matrix, DIM := #COLUMNS);
+	  #tempResultMatrixLowerBoundColumns := LOWER_BOUND(ARR := #matrixResult, DIM := #COLUMNS);
+	  // Upper bound rows
+	  #tempMatrix1UpperBoundRows := UPPER_BOUND(ARR := #matrix, DIM := #ROWS);
+	  #tempResultMatrixUpperBoundRows := UPPER_BOUND(ARR := #matrixResult, DIM := #ROWS);
+	  // Upper bound columns
+	  #tempMatrix1UpperBoundColumns := UPPER_BOUND(ARR := #matrix, DIM := #COLUMNS);
+	  #tempResultMatrixUpperBoundColumns := UPPER_BOUND(ARR := #matrixResult, DIM := #COLUMNS);
+	END_REGION
+	
+	REGION Count the columns and rows of input matrix
+	  // Count the columns
+	  IF #tempMatrix1LowerBoundColumns = #ZERO THEN
+	    #tempColumns := #tempMatrix1UpperBoundColumns + #ONE;
+	  ELSE
+	    #tempColumns := (#tempMatrix1UpperBoundColumns - #tempMatrix1LowerBoundColumns) + #ONE;
+	  END_IF;
+	  // Count the rows
+	  IF #tempMatrix1LowerBoundRows = #ZERO THEN
+	    #tempRows := #tempMatrix1UpperBoundRows + #ONE;
+	  ELSE
+	    #tempRows := (#tempMatrix1UpperBoundRows - #tempMatrix1LowerBoundRows) + #ONE;
+	  END_IF;
+	END_REGION
+	
+	REGION Error validation
+	  // Check whether input matrix is a square matrix
+	  IF #tempRows <> #tempColumns THEN
+	    #error := TRUE;
+	    #status := #ERR_NOT_SQUARE_MATRIX;
+	    RETURN;
+	  END_IF;
+	  
+	  // Output matrix must have same lower bounds as the input matrix. (Same array size)
+	  IF (#tempMatrix1LowerBoundRows <> #tempResultMatrixLowerBoundRows) THEN
+	    #error := TRUE;
+	    #status := #ERR_MATR1_LOWBOUND_ROWS_RESMATR_LOWBOUND_ROWS;
+	    RETURN;
+	  ELSIF (#tempMatrix1LowerBoundColumns <> #tempResultMatrixLowerBoundColumns) THEN
+	    #error := TRUE;
+	    #status := #ERR_MATR1_LOWBOUND_COLUMNS_RESMATR_LOWBOUND_COLUMNS;
+	    RETURN;
+	  END_IF;
+	  // Output matrix must have same upper bounds as the input matrix. (Same array size)
+	  IF (#tempMatrix1UpperBoundRows <> #tempResultMatrixUpperBoundRows) THEN
+	    #error := TRUE;
+	    #status := #ERR_MATR1_UPPBOUND_ROWS_RESMATR_UPPBOUND_ROWS;
+	    RETURN;
+	  ELSIF (#tempMatrix1UpperBoundColumns <> #tempResultMatrixUpperBoundColumns) THEN
+	    #error := TRUE;
+	    #status := #ERR_MATR1_UPPBOUND_COLUMNS_RESMATR_UPPBOUND_COLUMNS;
+	    RETURN;
+	  END_IF;
+	END_REGION
+	
+	REGION Calculation of the inversed matrix
+	  #matrixResult[#tempMatrix1LowerBoundRows, #tempMatrix1LowerBoundColumns] := #ZERO;
+	  // Negate the input matrix and copy to output matrix.
+	  FOR #tempCounterRows := #tempMatrix1LowerBoundRows TO #tempMatrix1UpperBoundRows DO
+	    FOR #tempCounterColumns := #tempMatrix1LowerBoundColumns TO #tempMatrix1UpperBoundColumns DO
+	      #matrixResult[#tempCounterRows, #tempCounterColumns] := - #matrix[#tempCounterRows, #tempCounterColumns];
+	    END_FOR;
+	  END_FOR;
+	  
+	  //Outside loop - relegation of "Main" diagonal
+	  FOR #tempK := #tempMatrix1LowerBoundColumns TO #tempMatrix1UpperBoundColumns DO
+	    // Avoid a division by zero --> Error: Algorithm does not work for the input matrix.
+	    
+	    #tempMatrixElement := #matrixResult[#tempK, #tempK];
+	    IF ABS(#tempMatrixElement - #ZERO) <= (#PRECISION * ABS(#tempMatrixElement)) THEN
+	      #error := TRUE;
+	      #status := #ERR_ALGORITHM_NOT_POSSIBLE;
+	      RETURN;
+	    END_IF;
+	    
+	    //Calculation of Pivot-element
+	    #tempMatrixElement := (#NEGATIVE_NUMERATOR / #tempMatrixElement);
+	    #matrixResult[#tempK, #tempK] := #tempMatrixElement;
+	    
+	    //Calculation of elemente in the Pivot-column.
+	    FOR #tempI := #tempMatrix1LowerBoundColumns TO #tempMatrix1UpperBoundColumns DO
+	      IF #tempI <> #tempK THEN
+	        #matrixResult[#tempI, #tempK] :=
+	        #matrixResult[#tempI, #tempK] * #matrixResult[#tempK, #tempK];
+	      END_IF;
+	    END_FOR;
+	    
+	    // Convert-calculation of elements, which are NOT in the Pivot-rolumn AND NOT in the Pivot-row.
+	    FOR #tempI := #tempMatrix1LowerBoundRows TO #tempMatrix1UpperBoundRows DO
+	      IF #tempI <> #tempK THEN
+	        FOR #tempJ := #tempMatrix1LowerBoundColumns TO #tempMatrix1UpperBoundColumns DO
+	          IF #tempJ <> #tempK THEN
+	            #matrixResult[#tempI, #tempJ] :=
+	            #matrixResult[#tempI, #tempJ] + #matrixResult[#tempI, #tempK] * #matrixResult[#tempK, #tempJ];
+	          END_IF;
+	        END_FOR;
+	      END_IF;
+	    END_FOR;
+	    
+	    //Calculation of elements in the Pivot-row.
+	    FOR #tempJ := #tempMatrix1LowerBoundColumns TO #tempMatrix1UpperBoundColumns DO
+	      IF #tempJ <> #tempK THEN
+	        #matrixResult[#tempK, #tempJ] :=
+	        #matrixResult[#tempK, #tempJ] * #matrixResult[#tempK, #tempK];
+	      END_IF;
+	    END_FOR;
+	  END_FOR;
+	  
+	  #error := false;
+	  #status := #STATUS_NO_ERROR;
+	  // ENO mechanism is not used
+	  ENO := TRUE;
+	END_REGION
+	
+END_FUNCTION
+

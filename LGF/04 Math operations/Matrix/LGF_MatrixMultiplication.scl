@@ -1,0 +1,192 @@
+﻿FUNCTION "LGF_MatrixMultiplication" : Void
+TITLE = LGF_MatrixMultiplication
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_Digital_Industries
+FAMILY : LGF
+NAME : LGF_MatrixMultiplication
+//This function multiplies two matrices of the data type `ARRAY[*,*] of LREAL`.
+//
+//Example for 2x2 matrix:
+//
+//$$
+//  result = 
+// 
+//\begin{bmatrix}
+//   a_{11} & a_{12} \\
+//   a_{21} & a_{22}
+//\end{bmatrix}
+//
+//*
+//
+//\begin{bmatrix}
+//   b_{11} & b_{12} \\
+//   b_{21} & b_{22}
+//\end{bmatrix}
+//
+//= 
+//
+//\begin{bmatrix}
+//   a_{11}*b_{11}+a_{12}*b_{21} & a_{11}*b_{12}+a_{12}*b_{22} \\
+//   a_{21}*b_{11}+a_{22}*b_{21} & a_{21}*b_{12}+a_{22}*b_{22}
+//\end{bmatrix}
+//$$
+//
+//The block multiplies two matrices of variable size. The individual elements of the two incoming matrices are read, multiplied, and then output in the `matrixResult` matrix.
+//
+//Note
+//:    Note that the number of columns in the first matrix must be equal to the number of rows in the second matrix.  
+//The size of the initial matrix (m * n) results from the number of rows (m) of `matrix1` and the number of columns (n) of `matrix2`.
+//
+   VAR_OUTPUT 
+      error : Bool;   // FALSE: No error  TRUE: An error occurred during the execution of the FB
+      status : Word;   // 16#0000-16#7FFF: Status of the FB  16#8000-16#FFFF: Error identification (see following Table)
+   END_VAR
+
+   VAR_IN_OUT 
+      matrix1 : Array[*, *] of LReal;   // First factor: Matrix to multiply
+      matrix2 : Array[*, *] of LReal;   // Second factor: Matrix to multiply
+      matrixResult : Array[*, *] of LReal;   // Product: The resulting matrix
+   END_VAR
+
+   VAR_TEMP 
+      tempMatrix1LowerBoundRows : DInt;   // Matrix1 lower bound for the rows (Dimension 1)
+      tempMatrix1LowerBoundColumns : DInt;   // Matrix1 lower bound for the columns (Dimension 2)
+      tempMatrix1UpperBoundRows : DInt;   // Matrix1 upper bound for the rows (Dimension 1)
+      tempMatrix1UpperBoundColumns : DInt;   // Matrix1 upper bound for the columns (Dimension 2)
+      tempMatrix2LowerBoundRows : DInt;   // Matrix2 lower bound for the rows (Dimension 1)
+      tempMatrix2LowerBoundColumns : DInt;   // Matrix2 lower bound for the columns (Dimension 2)
+      tempMatrix2UpperBoundRows : DInt;   // Matrix2 upper bound for the rows (Dimension 1)
+      tempMatrix2UpperBoundColumns : DInt;   // Matrix2 upper bound for the columns (Dimension 2)
+      tempResultMatrixLowerBoundRows : DInt;   // Result matrix lower bound for the rows (Dimension 1)
+      tempResultMatrixLowerBoundColumns : DInt;   // Result matrix lower bound for the columns (Dimension 2)
+      tempResultMatrixUpperBoundRows : DInt;   // Result matrix upper bound for the rows (Dimension 1)
+      tempResultMatrixUpperBoundColumns : DInt;   // Result matrix upper bound for the columns (Dimension 2)
+      tempJ : DInt;   // Index I - element for calculating formula and iteration trough matrix
+      tempK : DInt;   // Index J - element for calculating formula and iteration trough matrix
+      tempL : DInt;   // Index K - element for calculating formula and iteration trough matrix
+      tempResult : LReal;   // Sum of multiplication when new element is calculated
+   END_VAR
+
+   VAR CONSTANT 
+      ZERO : Real := 0.0;   // Set / Clearing temporary result variable with 0.0
+      ROWS : UInt := 1;   // Rows are the first dimention of the two dimentional array
+      COLUMNS : UInt := 2;   // Columns are the second dimension of the two dimensional array
+      STATUS_NO_ERROR : Word := 16#0000;   // Execution finished without errors
+      ERR_MATR1_LOWBOUND_COLUMNS_MATR2_LOWBOUND_ROWS : Word := 16#8200;   // Error: Matrix 1 lower bound columns(Dim2) size is different with Matrix2 lower bound rows(Dim1)
+      ERR_MATR1_UPPBOUND_COLUMNS_MATR2_UPPBOUND_ROWS : Word := 16#8201;   // Error: Matrix 1 upper bound columns(Dim2) size is different with Matrix 2 upper bound rows(Dim1)
+      ERR_MATR1_LOWBOUND_ROWS_RESMATR_LOWBOUND_ROWS : Word := 16#8202;   // Error: Matrix 1 lower bound rows(Dim1) size is different with Result Matrix lower bound rows(Dim1)
+      ERR_MATR2_LOWBOUND_COLUMNS_RESMATR_LOWBOUND_COLUMNS : Word := 16#8203;   // Error: Matrix 2 lower bound columns(Dim2) size is different with Result Matrix lower bound columns(Dim2)
+      ERR_MATR1_UPPBOUND_ROWS_RESMATR_UPPBOUND_ROWS : Word := 16#8204;   // Error: Matrix 1 upper bound rows(Dim1) size is different with Result Matrix upper bound rows(Dim1)
+      ERR_MATR2_UPPBOUND_COLUMNS_RESMATR_UPPBOUND_COLUMNS : Word := 16#8205;   // Error: Matrix 2 upper bound columns(Dim2) size is different with Result Matrix upper bound columns(Dim2)
+   END_VAR
+
+
+BEGIN
+	REGION Block info header
+	  //=============================================================================
+	  // SIEMENS AG / (c)Copyright 2017
+	  //-------------------------------------------------------------------------------
+	  // Title:            LGF_MatrixMultiplication
+	  // Comment/Function: Caluclates the multiplication of two matrices
+	  // Library/Family:   LGF(Library General Functions)
+	  // Author:           Siemens Digital Industry Support
+	  // Tested with:      S7-PLCSIM Advanced V2.0 SP1
+	  // Engineering:      TIA Portal V15 Update 2
+	  // Restrictions:     ENO disabled - error handling done by error and status
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge       | Changes applied
+	  //----------|------------|------------------------|------------------------------
+	  // 01.00.00 19.08.2015  Siemens Industry Online Support
+	  //                      First released version
+	  // 01.00.01 02.01.2017  Siemens Industry Online Support
+	  //                      Upgrade: TIA Portal V14 Update 1
+	  // 02.00.00 06.02.2017  Siemens Industry Online Support
+	  //                      Functionality using Array[*,*]
+	  // 02.00.01 17.08.2018  Siemens Industry Online Support
+	  //                      Upgrade: TIA V15 Update 2
+	  // 02.00.02 23.11.2018  Siemens Industry Online Support
+	  //                      Upgrade: TIA V15.1
+	  // 02.00.06 13.11.2019  Simatic Systems Support
+	  //                      Regions, comments and constants are added
+	  //                      Moved matrices to IO field.
+	  // 03.00.00 23.04.2020  Simatic Systems Support
+	  //                      Set version to V3.0.0, harmonize the version of the whole library
+	  // 03.00.01 02.02.2020  Simatic Systems Support
+	  //                      Insert documentation
+	  //=================================================================================
+	END_REGION Block info header
+	
+	REGION Getting matrices size
+	  //Determine the size of the matrices
+	  // Lower bound rows
+	  #tempMatrix1LowerBoundRows := LOWER_BOUND(ARR := #matrix1, DIM := #ROWS);
+	  #tempMatrix2LowerBoundRows := LOWER_BOUND(ARR := #matrix2, DIM := #ROWS);
+	  #tempResultMatrixLowerBoundRows := LOWER_BOUND(ARR := #matrixResult, DIM := #ROWS);
+	  // Lower bound columns
+	  #tempMatrix1LowerBoundColumns := LOWER_BOUND(ARR := #matrix1, DIM := #COLUMNS);
+	  #tempMatrix2LowerBoundColumns := LOWER_BOUND(ARR := #matrix2, DIM := #COLUMNS);
+	  #tempResultMatrixLowerBoundColumns := LOWER_BOUND(ARR := #matrixResult, DIM := #COLUMNS);
+	  
+	  // Upper bound rows
+	  #tempMatrix1UpperBoundRows := UPPER_BOUND(ARR := #matrix1, DIM := #ROWS);
+	  #tempMatrix2UpperBoundRows := UPPER_BOUND(ARR := #matrix2, DIM := #ROWS);
+	  #tempResultMatrixUpperBoundRows := UPPER_BOUND(ARR := #matrixResult, DIM := #ROWS);
+	  // Upper bound columns
+	  #tempMatrix1UpperBoundColumns := UPPER_BOUND(ARR := #matrix1, DIM := #COLUMNS);
+	  #tempMatrix2UpperBoundColumns := UPPER_BOUND(ARR := #matrix2, DIM := #COLUMNS);
+	  #tempResultMatrixUpperBoundColumns := UPPER_BOUND(ARR := #matrixResult, DIM := #COLUMNS);
+	END_REGION
+	
+	REGION Error evaluation of matrices dimentions
+	  // Matrix one must have the same count of rows as matrix two has columns. Else the multiplication is not possible.
+	  IF #tempMatrix1LowerBoundColumns <> #tempMatrix2LowerBoundRows THEN
+	    #error := true;
+	    #status := #ERR_MATR1_LOWBOUND_COLUMNS_MATR2_LOWBOUND_ROWS;
+	    RETURN;
+	  ELSIF #tempMatrix1UpperBoundColumns <> #tempMatrix2UpperBoundRows THEN
+	    #error := true;
+	    #status := #ERR_MATR1_UPPBOUND_COLUMNS_MATR2_UPPBOUND_ROWS;
+	    RETURN;
+	  END_IF;
+	  // Result matrix must have the same number of rows as matrix 1 and the same number of columns as the matrix 2.
+	  IF (#tempMatrix1LowerBoundRows <> #tempResultMatrixLowerBoundRows) THEN
+	    #error := true;
+	    #status := #ERR_MATR1_LOWBOUND_ROWS_RESMATR_LOWBOUND_ROWS;
+	    RETURN;
+	  ELSIF (#tempMatrix1UpperBoundRows <> #tempResultMatrixUpperBoundRows) THEN
+	    #error := true;
+	    #status := #ERR_MATR1_UPPBOUND_ROWS_RESMATR_UPPBOUND_ROWS;
+	    RETURN;
+	  ELSIF (#tempMatrix2LowerBoundColumns <> #tempResultMatrixLowerBoundColumns) THEN
+	    #error := true;
+	    #status := #ERR_MATR2_LOWBOUND_COLUMNS_RESMATR_LOWBOUND_COLUMNS;
+	    RETURN;
+	  ELSIF (#tempMatrix2UpperBoundColumns <> #tempResultMatrixUpperBoundColumns) THEN
+	    #error := true;
+	    #status := #ERR_MATR2_UPPBOUND_COLUMNS_RESMATR_UPPBOUND_COLUMNS;
+	    RETURN;
+	  END_IF;
+	END_REGION
+	
+	REGION Multiplication
+	  //Multiplies each row with each column
+	  FOR #tempJ := #tempMatrix1LowerBoundRows TO #tempMatrix1UpperBoundRows DO
+	    FOR #tempK := #tempMatrix2LowerBoundColumns TO #tempMatrix2UpperBoundColumns DO
+	      #tempResult := #ZERO;
+	      FOR #tempL := #tempMatrix1LowerBoundColumns TO #tempMatrix1UpperBoundColumns DO
+	        #tempResult := #tempResult + #matrix1[#tempJ, #tempL] * #matrix2[#tempL, #tempK];
+	      END_FOR;
+	      #matrixResult[#tempJ, #tempK] := #tempResult;
+	    END_FOR;
+	  END_FOR;
+	  
+	  #error := false;
+	  #status := #STATUS_NO_ERROR;
+	  // ENO mechanism is not used
+	  ENO := TRUE;
+	END_REGION
+	
+END_FUNCTION
+

@@ -1,0 +1,141 @@
+﻿FUNCTION_BLOCK "LGF_CountRisInDWord"
+TITLE = LGF_CountRisInDWord
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_Digital_Industry_Support
+FAMILY : LGF
+NAME : LGF_CountRisInDWord
+//The function analyzes a variable of the type DWORD and outputs how often a 0-1
+//sequence (rising edge) occurs in the variable.
+   VAR_INPUT 
+      value { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : DWord;   // Input Double word in which the rising edges are counted
+   END_VAR
+
+   VAR_OUTPUT 
+      numberOfEdges { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Int;   // Number of rising edges in the DWord
+   END_VAR
+
+   VAR 
+      statDWordPrevCycle { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : DWord;   // Double word from the previous cycle
+   END_VAR
+
+   VAR_TEMP 
+      tempCount : Int;   // Temp tag number of edges
+      tempDWord : DWord;   // Temp tag for process the shift operation on the process value
+      tempIndex : Int;   // Temp loop index
+   END_VAR
+
+   VAR CONSTANT 
+      ZERO_VALUE : Int := 0;   // Nummeric zero (0) value
+      INCREMENT_VALUE : Int := 1;   // Increment value "One"
+      LOOP_LOWER_BOUND : Int := 0;   // Loop lower bound value
+      LOOP_UPPER_BOUND : Int := 30;   // Loop upper bound value (= DWord range - 1)
+      SHIFT_BITS_NO : UInt := 1;   // Number of bits by which the DWord is shifted
+   END_VAR
+
+
+BEGIN
+	REGION Block info header
+	  //===============================================================================
+	  // SIEMENS AG / (c)Copyright 2019
+	  //-------------------------------------------------------------------------------
+	  // Title:            LGF_CountRisInDWord
+	  // Comment/Function: This function detects and counts rising edges in variables of type DWORD
+	  // Library/Family:   LGF (Library General Functions)
+	  // Author:           Siemens Digital Industry Support
+	  // Tested with:      CPU 1515F-2 PN FW:V2.6
+	  // Engineering:      TIA Portal V15.1 Update 2
+	  // Restrictions:     ENO not in use, no error handling needed
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge       | Changes applied
+	  //----------|------------|------------------------|------------------------------
+	  // 01.00.00 16.01.2019  Siemens Industry Online Support
+	  //                      First released version
+	  // 01.00.01 16.12.2019  Simatic Systems Support
+	  //                      Code refactoring - minimize used code memory
+	  // 03.00.00 23.04.2020  Simatic Systems Support
+	  //                      Set version to V3.0.0, harmonize the version of the whole library
+	  // 03.00.01 12.11.2020  Simatic Systems Support
+	  //                      Insert documentation
+	  //===============================================================================
+	END_REGION
+	
+	REGION DESCRIPTION
+	  (/*
+	In a variable of the data type DWORD, the block counts the rising edges (0-1 transitions) from left to right. The output `countRisInDWord` outputs the number of rising edges.
+	
+	So that rising edges at the variable limit are also detected, the input `value` is copied to the static variable `statDWordPrevCycle` at the end of the evaluation and evaluated in the next cycle.
+	
+	##### Example
+	
+	The following example illustrates the block’s functionality. In this case, it is assumed that a signal of unknown length is continuously sampled in the form of double words (DWORD) per cycle.
+	
+	Within this signal, the 0-1 sequences (rising edges) must be counted and output continuously.
+	
+	Table: Example
+	
+	{.pageWidth}
+	+:---------------------------------------:+:---------------------------------------:+
+	| DWord previous cycle                    | DWord actual cycle                      |
+	| `statDWordPrevCycle`                    | `value`                                 |
+	+=========================================+=========================================+
+	| 1001_0000_0001_1010_1001_0000_0001_1010 | 1010_1010_0001_1111_0100_0011_1000_0101 |
+	+-----------------------------------------+-----------------------------------------+
+	
+	Number of 0-1 sequences (rising edges): `Ret_Val` = 9
+	
+	------
+	
+	##### Application example:
+	
+	Excerpt from the manual of the technology module TM Timer DIDQ 16x24V:
+	
+	With the oversampling function, the technology module records the state of the respective digital input per application cycle (e.g. OB61) at 32 points in time with a uniform time interval. The 32 states are jointly returned as 32-bit values in the checkback interface.
+	
+	Figure: Example of an oversampling of DI0 on TM Timer DIDQ 16x24V
+	
+	![LGF_CountFalRiseInDWord - Example of an oversampling of DI0 on TM Timer DIDQ 16x24V](LGF_CountFalRiseInDWord.PNG "LGF_CountFalRiseInDWord - Example of an oversampling of DI0 on TM Timer DIDQ 16x24V")
+	
+	The block LGF_CountRisInDWordFB is used in this case to count how often a rising edge occurs.
+	
+	SIMATIC ET 200MP/S7-1500 Technology Module TM Timer DIDQ 16x24V  
+	(6ES7552-1AA00-0AB0)  
+	https://support.industry.siemens.com/cs/ww/en/view/95153313
+	*/)
+	END_REGION DESCRIPTION
+	
+	REGION Initialization
+	  #tempCount := #ZERO_VALUE;
+	  #tempDWord := #value;
+	END_REGION
+	
+	REGION Count edges through loop
+	  // Check LSB from previous value and MSB from actual value for rising edge
+	  IF ((#tempDWord.%X31 AND NOT #statDWordPrevCycle.%X0)) THEN
+	    #tempCount += #INCREMENT_VALUE;
+	  END_IF;
+	  
+	  // Loop through DWord
+	  FOR #tempIndex := #LOOP_LOWER_BOUND TO #LOOP_UPPER_BOUND DO
+	    // Check if there is an edge
+	    IF ((NOT #tempDWord.%X1 AND #tempDWord.%X0)) THEN
+	      #tempCount += #INCREMENT_VALUE;
+	    END_IF;
+	    
+	    // Shift the DWord one digit to the right for next counting iteration
+	    #tempDWord := SHR(IN := #tempDWord, N := #SHIFT_BITS_NO);
+	  END_FOR;
+	  
+	  // Copy DWord actual cycle to DWord previous cycle
+	  #statDWordPrevCycle := #value;
+	END_REGION
+	
+	REGION Outputs
+	  #numberOfEdges := #tempCount;
+	  // ENO mechanism is not used, forced to true
+	  ENO := TRUE;
+	END_REGION
+	
+END_FUNCTION_BLOCK
+

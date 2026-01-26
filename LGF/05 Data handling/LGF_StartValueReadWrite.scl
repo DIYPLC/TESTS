@@ -1,0 +1,348 @@
+﻿TYPE "LGF_typeDiagnostics"
+TITLE = LGF_typeDiagnostics
+VERSION : 0.1
+//Diagnostic structure to store and transfer diagnostic information from blocks through the interface.
+   STRUCT
+      status { ExternalVisible := 'False'; ExternalWritable := 'False'} : Word;   // Status of the Block or error identification when error occurred
+      subfunctionStatus { ExternalVisible := 'False'; ExternalWritable := 'False'} : Word;   // Status or return value of called FB's, FC's and system blocks
+      stateNumber { ExternalVisible := 'False'; ExternalWritable := 'False'} : DInt;   // State in the state machine of the block where the error occurred
+   END_STRUCT;
+
+END_TYPE
+
+FUNCTION_BLOCK "LGF_StartValueReadWrite"
+TITLE = LGF_StartValueReadWrite
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : 'Simatic Systems Support'
+FAMILY : LGF
+NAME : LGF_StartValueReadWrite
+//Read or write start value(s) from variables or complete data blocks
+   VAR_INPUT 
+      read : Bool;   // Rising edge: Read start value of data block / Variable of data block
+      write : Bool;   // Rising edge: Write actual value(s) to start value of data block / Variable of data block
+      dataSource { S7_PredefinedAssignment := 'NULL'; S7_HiddenAssignment := 'HideIfNoParamAssigned'} : Variant;   // Data (block / variable) source, if a separate source is needed.  May also be `NULL` - then the target is also used as the source
+      dataDestination { S7_PredefinedAssignment := 'NULL'} : Variant;   // Data (block / variable) destination
+   END_VAR
+
+   VAR_OUTPUT 
+      readDone { ExternalWritable := 'False'} : Bool;   // TRUE: Read has been completed successfully
+      writeDone { ExternalWritable := 'False'} : Bool;   // TRUE: Write has been completed successfully
+      busy { ExternalWritable := 'False'} : Bool;   // TRUE: FB is not finished and new output values can be expected
+      error { ExternalWritable := 'False'} : Bool;   // TRUE: An error occurred during the execution of the FB
+      lastRead {InstructionName := 'DTL'; LibVersion := '1.0'; ExternalWritable := 'False'} : DTL;   // Timestamp of last read access
+      lastWrite {InstructionName := 'DTL'; LibVersion := '1.0'; ExternalWritable := 'False'} : DTL;   // Timestamp of last write access
+      status { ExternalWritable := 'False'} : Word := #STATUS_NO_CALL;   // 16#0000 - 16#7FFF: Status of the FB, 16#8000 - 16#FFFF: Error identification
+      diagnostics { ExternalWritable := 'False'} : "LGF_typeDiagnostics";   // Diagnostic information
+   END_VAR
+
+   VAR 
+      statInternal { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Struct   // Static structure for internal tags
+         readPrevious { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Previous value of 'read' input for edge detection
+         writePrevious { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Previous value of 'write' input for edge detection
+         error { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Static value for output 'error'
+         readTimestamp {InstructionName := 'DTL'; LibVersion := '1.0'; ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : DTL;   // Static value for reading timestamp
+         writeTimestamp {InstructionName := 'DTL'; LibVersion := '1.0'; ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : DTL;   // Static value for writing timestamp
+         diagnostics { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'; S7_SetPoint := 'False'} : "LGF_typeDiagnostics" := (#STATUS_NO_CALL, (), ());
+         emptyDiagnostics { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'; S7_SetPoint := 'False'} : "LGF_typeDiagnostics";   // Empty diagnostics information (for initialization purposes only)
+      END_STRUCT;
+      statMainState { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : DInt := #STATE_NO_PROCESSING;   // State in the state machine of the FB
+   END_VAR
+
+   VAR_TEMP 
+      tempExecute : Bool;   // Temporary value for input 'read' / 'write'
+      tempBusy : Bool;   // Temporary variable
+      tempReturnValue : Word;   // Temporary variable
+   END_VAR
+
+   VAR CONSTANT 
+      NO_ERROR_OCCURRED : Word := 16#0000;   // No Error occurred during execution
+      STATE_NO_PROCESSING : DInt := 0;   // FB state: No processing
+      STATE_READ : DInt := 1;   // FB state: Read
+      STATE_WRITE : DInt := 2;   // FB state: Write
+      STATE_READ_DONE : DInt := 11;   // FB state: Read done
+      STATE_WRITE_DONE : DInt := 12;   // FB state: Write done
+      STATE_ERROR : Int := 19;   // FB state: Error
+      STATUS_NO_CALL : Word := 16#7000;   // No job being currently processed
+      STATUS_READ : Word := 16#7001;   // Read value(s) in progress
+      STATUS_WRITE : Word := 16#7002;   // Write value(s) in progress
+      STATUS_READ_DONE : Word := 16#0001;   // Read execution finished without errors
+      STATUS_WRITE_DONE : Word := 16#0002;   // Write execution finished without errors
+      ERR_MULTIPLE_COMMANDS : Word := 16#8400;   // Error: Multiple commands add the same time not allowed. 
+      ERR_READ : Word := 16#8601;   // Error: Read value(s) `READ_DBL` - see `diagnostics.subfunctionStatus`
+      ERR_WRITE : Word := 16#8602;   // Error: Write value(s) `WRITE_DBL` - see `diagnostics.subfunctionStatus`
+      ERR_READ_TIME : Word := 16#8611;   // Error: Read timestamp `RD_LOC_T` while read values - see `diagnostics.subfunctionStatus`
+      ERR_WRITE_TIME : Word := 16#8612;   // Error: Write timestamp `WR_LOC_T` while write values - see `diagnostics.subfunctionStatus`
+      ERR_UNDEFINED_STATE : Word := 16#8600;   // Error: Undefined state in state machine
+   END_VAR
+
+
+BEGIN
+	REGION BLOCK INFO HEADER
+	  //===============================================================================
+	  // (C)Copyright Siemens 2025
+	  //-------------------------------------------------------------------------------
+	  // Title:            LGF_StartValueReadWrite
+	  // Comment/Function: Read or write start value(s) from variables or complete datablocks
+	  // Library/Family:   LGF (Library General Functions
+	  // Author:           Simatic Systems Support
+	  // Tested with:      S7-1516F FW 2.9
+	  // Engineering:      TIA Portal V17
+	  // Restrictions:     ---
+	  // Requirements:     ---
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge        | Changes applied
+	  //----------|------------|-------------------------|-----------------------------
+	  // 01.00.00 | 2025-05-05 | Simatic Systems Support | First released version
+	  //===============================================================================
+	END_REGION BLOCK INFO HEADER
+	
+	REGION DESCRIPTION
+	(/*
+	The function reads or writes the start value of a single variable, a structured variable or an entire data area or data block from the source to the destination.
+	
+	The parameter `dataDestination` must always be present, the parameter `dataSource` is optional.  
+	If `dataSource` is not used, the function...
+	* reads the start value(s) of the destination(s) and writes them to the current value of the same variable(s)/data block.
+	* writes the start value(s) of the target to the start value(s) of the same variable(s) of the data block.
+	
+	---
+	
+	NOTE
+	:    If the start values are written, the data block then appears in engineering as an "inconsistent" data block after the values have been written by the user program.
+	
+	---
+	
+	NOTE
+	:    In order to use complete data blocks, they must be derived from a PLC data type.
+	
+	---
+	
+	Note
+	:    A change to the start values can no longer be reversed without further modifications.
+	:    The possibilities are, for example:  
+	     * using an "empty" source with default values
+	     * overwriting the value again with a different value
+	     * downloading the original data block from the engineering system
+	
+	---
+	
+	Caution
+	:    The changes are written to the SMC (Simatic Memory Card).  
+	The SMC is a flash memory with limited write cycles, so you should not write cyclically to the SMC!
+	*/)
+	END_REGION DESCRIPTION
+	
+	REGION TRIGGERING
+	  #tempExecute := #read OR #write; // Work with temporary value / create process image
+	  IF (#tempExecute = TRUE) AND (#statInternal.readPrevious = FALSE) // Check if FB is triggered
+	    // TODO(optional): delete next line and comment line if FB shall finish current job before new job can be started with rising edge of execute
+	    AND (#statInternal.diagnostics.status = #STATUS_NO_CALL)
+	  THEN // First call; initialize FB
+	    #statInternal.error := FALSE;
+	    #diagnostics := #statInternal.emptyDiagnostics;
+	    #statInternal.diagnostics := #statInternal.emptyDiagnostics;
+	    // State machine - start processing
+	    IF #read AND #write THEN
+	      #statInternal.diagnostics.status := #ERR_MULTIPLE_COMMANDS;
+	      #statInternal.diagnostics.stateNumber := #STATE_NO_PROCESSING;
+	      #statMainState := #STATE_ERROR;
+	      
+	    ELSIF #read THEN
+	      #statMainState := #STATE_READ;
+	      #tempReturnValue := INT_TO_WORD(
+	                                      READ_DBL(REQ := FALSE,
+	                                               SRCBLK := #dataDestination,
+	                                               BUSY => #tempBusy,
+	                                               DSTBLK => #dataDestination)
+	      );
+	    ELSIF #write THEN
+	      #statMainState := #STATE_WRITE;
+	      #tempReturnValue := INT_TO_WORD(
+	                                      READ_DBL(REQ := FALSE,
+	                                               SRCBLK := #dataDestination,
+	                                               BUSY => #tempBusy,
+	                                               DSTBLK => #dataDestination)
+	      );
+	    END_IF;
+	  END_IF;
+	  
+	  // Edge detection 'execute' input
+	  #statInternal.readPrevious := #tempExecute;
+	END_REGION TRIGGERING
+	
+	IF (#statInternal.diagnostics.status = #STATUS_NO_CALL) THEN // Nothing to do -> End here to reduce "system load"
+	  RETURN;
+	END_IF;
+	
+	REGION STATE MACHINE
+	  CASE #statMainState OF // State machine of FB
+	    #STATE_NO_PROCESSING:
+	      REGION No Processing
+	        ; // No processing active (Note: this state must always be present and left empty)
+	      END_REGION No Processing
+	      
+	    #STATE_READ:
+	      REGION Read
+	        IF #dataSource <> null THEN
+	          #tempReturnValue := INT_TO_WORD(
+	                                          READ_DBL(REQ := TRUE,
+	                                                   SRCBLK := #dataSource,
+	                                                   BUSY => #tempBusy,
+	                                                   DSTBLK => #dataDestination)
+	          );
+	        ELSE
+	          #tempReturnValue := INT_TO_WORD(
+	                                          READ_DBL(REQ := TRUE,
+	                                                   SRCBLK := #dataDestination,
+	                                                   BUSY => #tempBusy,
+	                                                   DSTBLK => #dataDestination)
+	          );
+	        END_IF;
+	        
+	        IF FALSE THEN
+	          ;
+	          
+	        ELSIF TRUE
+	          AND NOT #tempBusy
+	          AND #tempReturnValue = #NO_ERROR_OCCURRED
+	        THEN
+	          IF #dataSource <> null THEN
+	            #tempReturnValue := INT_TO_WORD(
+	                                            READ_DBL(REQ := FALSE,
+	                                                     SRCBLK := #dataSource,
+	                                                     BUSY => #tempBusy,
+	                                                     DSTBLK => #dataDestination)
+	            );
+	          ELSE
+	            #tempReturnValue := INT_TO_WORD(
+	                                            READ_DBL(REQ := FALSE,
+	                                                     SRCBLK := #dataDestination,
+	                                                     BUSY => #tempBusy,
+	                                                     DSTBLK => #dataDestination)
+	            );
+	          END_IF;
+	          
+	          #tempReturnValue := INT_TO_WORD(RD_LOC_T(#statInternal.readTimestamp));
+	          
+	          IF NOT #tempReturnValue.%X15 THEN
+	            #statInternal.diagnostics.status := #STATUS_READ_DONE;
+	            #statMainState := #STATE_READ_DONE;
+	          ELSE
+	            #statInternal.diagnostics.status := #ERR_READ_TIME;
+	            #statInternal.diagnostics.subfunctionStatus := #tempReturnValue;
+	            #statInternal.diagnostics.stateNumber := #STATE_READ;
+	            #statMainState := #STATE_ERROR;
+	          END_IF;
+	          
+	        ELSIF #tempReturnValue.%X15 THEN
+	          #statInternal.diagnostics.status := #ERR_READ;
+	          #statInternal.diagnostics.subfunctionStatus := #tempReturnValue;
+	          #statInternal.diagnostics.stateNumber := #STATE_READ;
+	          #statMainState := #STATE_ERROR;
+	          
+	        ELSE
+	          #statInternal.diagnostics.status := #STATUS_READ;
+	        END_IF;
+	      END_REGION Read
+	      
+	    #STATE_WRITE:
+	      REGION Write
+	        IF #dataSource <> null THEN
+	          #tempReturnValue := INT_TO_WORD(
+	                                          WRIT_DBL(REQ := TRUE,
+	                                                   SRCBLK := #dataSource,
+	                                                   BUSY => #tempBusy,
+	                                                   DSTBLK => #dataDestination)
+	          );
+	        ELSE
+	          #tempReturnValue := INT_TO_WORD(
+	                                          WRIT_DBL(REQ := TRUE,
+	                                                   SRCBLK := #dataDestination,
+	                                                   BUSY => #tempBusy,
+	                                                   DSTBLK => #dataDestination)
+	          );
+	        END_IF;
+	        
+	        IF FALSE THEN
+	          ;
+	        ELSIF TRUE
+	          AND NOT #tempBusy
+	          AND #tempReturnValue = #NO_ERROR_OCCURRED
+	        THEN
+	          #tempReturnValue := INT_TO_WORD(
+	                                          WRIT_DBL(REQ := FALSE,
+	                                                   SRCBLK := #dataDestination,
+	                                                   BUSY => #tempBusy,
+	                                                   DSTBLK => #dataDestination));
+	          
+	          #tempReturnValue := INT_TO_WORD(RD_LOC_T(#statInternal.writeTimestamp));
+	          
+	          IF NOT #tempReturnValue.%X15 THEN
+	            #statInternal.diagnostics.status := #STATUS_WRITE_DONE;
+	            #statMainState := #STATE_WRITE_DONE;
+	          ELSE
+	            #statInternal.diagnostics.status := #ERR_WRITE_TIME;
+	            #statInternal.diagnostics.subfunctionStatus := #tempReturnValue;
+	            #statInternal.diagnostics.stateNumber := #STATE_WRITE;
+	            #statMainState := #STATE_ERROR;
+	          END_IF;
+	          
+	        ELSIF #tempReturnValue.%X15 THEN
+	          #statInternal.diagnostics.status := #ERR_WRITE;
+	          #statInternal.diagnostics.subfunctionStatus := #tempReturnValue;
+	          #statInternal.diagnostics.stateNumber := #STATE_WRITE;
+	          #statMainState := #STATE_ERROR;
+	          
+	        ELSE
+	          #statInternal.diagnostics.status := #STATUS_WRITE;
+	        END_IF;
+	      END_REGION Write
+	      
+	    #STATE_READ_DONE,
+	    #STATE_WRITE_DONE,
+	    #STATE_ERROR:
+	      REGION Read or Write done / Error
+	        // execution done --> set state no processing
+	        IF NOT #tempExecute THEN
+	          #statInternal.diagnostics.status := #STATUS_NO_CALL;
+	          #statMainState := #STATE_NO_PROCESSING;
+	        END_IF;
+	      END_REGION Read or Write done / Error
+	      
+	    ELSE // Undefined state in state machine reached
+	      REGION Undefined state
+	        #statInternal.diagnostics.#status := #ERR_UNDEFINED_STATE;
+	        #statMainState := #STATE_ERROR;
+	      END_REGION Undefined state
+	  END_CASE;
+	END_REGION STATE MACHINE
+	
+	REGION Write outputs
+	  IF #statInternal.diagnostics.status.%X15 AND NOT #statInternal.error THEN // Error occurred (#statStatus is 16#8000 to 16#FFFF)
+	    REGION Error occured
+	      #statInternal.error := TRUE;
+	      #diagnostics := #statInternal.diagnostics;
+	    END_REGION Error occured
+	    
+	  ELSIF (#tempExecute = FALSE) AND (#statMainState > #STATE_READ_DONE) THEN // Reset outputs
+	    REGION Execute reseted
+	      #statInternal.diagnostics.status := #STATUS_NO_CALL;
+	    END_REGION Execute reseted
+	  END_IF;
+	  
+	  REGION Write static values to outputs
+	    #readDone := #statMainState = #STATE_READ_DONE;
+	    #lastRead := #statInternal.readTimestamp;
+	    #writeDone := #statMainState = #STATE_WRITE_DONE;
+	    #lastWrite := #statInternal.writeTimestamp;
+	    #busy := #statMainState = #STATE_READ OR #statMainState = #STATE_WRITE;
+	    #error := #statMainState = #STATE_ERROR;
+	    #status := #statInternal.diagnostics.status;
+	    // if ENO mechanism is not used / not wanted replace the following line by --> ENO := TRUE;
+	    ENO := #statMainState <> #STATE_ERROR;
+	  END_REGION Write static values to outputs
+	END_REGION Write outputs
+	
+END_FUNCTION_BLOCK
+

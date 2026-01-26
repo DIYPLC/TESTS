@@ -1,0 +1,121 @@
+﻿FUNCTION "LGF_SearchMinMax_LReal" : Void
+TITLE = LGF_SearchMinMax_LReal
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_Digital_Industries
+FAMILY : LGF
+NAME : LGF_SearchMinMax_LReal
+//This function searches, in an array of the data type LReal, for the maximum and minimum value and the respective index in the array.
+   VAR_OUTPUT 
+      minValue : LReal;   // Minimum value found in the array
+      minValueIndex : DInt;   // Index of the minimum found value in the array.  The start index of the array plus `minValueIndex` results in the array index of the smallest value. The index starts with 0.
+      maxValue : LReal;   // Maximum value found in the array
+      maxValueIndex : DInt;   // Index of the maximum found value in the array.  The start index of the array plus `maxValueIndex` results in the array index of the smallest value. The index starts with 0.
+   END_VAR
+
+   VAR_IN_OUT 
+      values : Array[*] of LReal;   // Array in whose fields the maximum and minimum are searched
+   END_VAR
+
+   VAR_TEMP 
+      tempArrayLowerBound : DInt;   // Lower bound of the array
+      tempArrayUpperBound : DInt;   // Upper bound of the array
+      tempCounter : DInt;   // Loop iteration counter to travers trough the array
+      tempArrayIndexMax : DInt;   // Current index number of the maximum found value
+      tempArrayIndexMin : DInt;   // Current index number of the minimum found value
+      tempActValue : LReal;   // Value of the current position in the array
+      tempMinValue : LReal;   // Current minimum found value
+      tempMaxValue : LReal;   // Current maximum found value
+   END_VAR
+
+   VAR CONSTANT 
+      START_FROM_SECOND_ELEMENT : Int := 1;   // The search starts from the second element of the array. The first is used for initialization of min/max
+      DIMENSION_ONE : UInt := 1;   // First dimension of an array
+   END_VAR
+
+
+BEGIN
+	REGION Block info header
+	  //=============================================================================
+	  // Siemens AG / (c)Copyright 2019
+	  //-----------------------------------------------------------------------------
+	  // Title:            LGF_SearchMinMax_LReal
+	  // Comment/Function: Searches an array for the minimum and maximum number and
+	  //                   outputs the position and values of those numbers for
+	  //                   array of long real
+	  // Library/Family:   LGF(Library General Functions)
+	  // Author:           Siemens Digital Industry Support
+	  // Tested with:      S7-PLCSIM Advanced V2.0 SP1
+	  // Engineering:      TIA Portal V15 Update 2
+	  // Restrictions:     ENO disabled - Error handling not needed, using whole array
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge       | Changes applied
+	  //----------|------------|------------------------|------------------------------
+	  // 01.00.00 11.11.2019  Simatic Systems Support
+	  //                      First release
+	  //                      copied from "LGF_SearchMinMax" and reworked to array[*]
+	  // 03.00.00 23.04.2020  Simatic Systems Support
+	  //                      Set version to V3.0.0, harmonize the version of the whole library
+	  // 03.00.01 09.02.2021  Simatic Systems Support
+	  //                      Insert documentation
+	  // 03.00.02 14.11.2022  Simatic Systems Support
+	  //                      Fix loop start index (start from lower Bound + 1)
+	  //=============================================================================
+	END_REGION Block info header
+	
+	REGION DESCRIPTION
+	  (/*
+	An array of any size is connected via the `values` input. The elements are then compared in turn. The smallest and largest values, as well as their corresponding index are output to the array.
+	
+	Note
+	:    If there are several identical min. or max. values, the index of the first min. or max. value is output.
+	*/)
+	END_REGION DESCRIPTION
+	
+	REGION Validation of inputs and outputs 
+	  // Lower bound
+	  #tempArrayLowerBound := LOWER_BOUND(ARR := #values, DIM := #DIMENSION_ONE);
+	  // Upper bound 
+	  #tempArrayUpperBound := UPPER_BOUND(ARR := #values, DIM := #DIMENSION_ONE);
+	END_REGION
+	
+	REGION Searching the array 
+	  //Assign first value as min / max
+	  #tempMaxValue := #values[#tempArrayLowerBound];
+	  #tempMinValue := #tempMaxValue;
+	  
+	  //Search the Array for min/max values
+	  FOR #tempCounter := (#tempArrayLowerBound + #START_FROM_SECOND_ELEMENT) TO #tempArrayUpperBound DO
+	    
+	    #tempActValue := #values[#tempCounter];
+	    
+	    // check for min
+	    IF #tempActValue < #tempMinValue THEN
+	      #tempMinValue := #tempActValue;
+	      #tempArrayIndexMin := #tempCounter;
+	      // check for max
+	    ELSIF #tempActValue > #tempMaxValue THEN
+	      #tempMaxValue := #tempActValue;
+	      #tempArrayIndexMax := #tempCounter;
+	    END_IF;
+	  END_FOR;
+	END_REGION
+	
+	REGION Writting to outputs
+	  //Copy found values to outputs
+	  //Copy Minimum value
+	  #minValue := #values[#tempArrayIndexMin];
+	  //Copy Maximum value
+	  #maxValue := #values[#tempArrayIndexMax];
+	  
+	  //Write found indexes to outputs
+	  #minValueIndex := #tempArrayIndexMin;
+	  #maxValueIndex := #tempArrayIndexMax;
+	  
+	  //ENO mechanism is not used, no error possible
+	  ENO := TRUE;
+	END_REGION
+	
+END_FUNCTION
+

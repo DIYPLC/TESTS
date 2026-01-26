@@ -1,0 +1,156 @@
+﻿FUNCTION "LGF_MatrixTranspose" : Void
+TITLE = LGF_MatrixTranspose
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_Digital_Industry
+FAMILY : LGF
+NAME : LGF_MatrixTranspose
+//This function transposes a matrix of the data type `ARRAY[*,*] of LREAL`.
+//
+//Condition: Input matrix (m x n) = output matrix (n x m).  
+//A matrix is transposed by making columns out of the rows.
+//
+//$$
+//  A = 
+//\begin{bmatrix}
+//   a_{11} & \cdots & a_{1n} \\
+//   \vdots & \ddots & \vdots \\
+//   a_{m1} & \cdots & a_{mn}
+//\end{bmatrix}
+//;
+//
+// A^T = 
+//\begin{bmatrix}
+//   a_{11} & \cdots & a_{m1} \\
+//   \vdots & \ddots & \vdots \\
+//   a_{1n} & \cdots & a_{mn}
+//\end{bmatrix}  
+//$$
+//
+//Note
+//:    Note that the number of rows of the input matrix must be equal to the number of columns of the output matrix. Also, the number of columns of the input matrix must be equal to the number of rows of the output matrix.
+//
+   VAR_OUTPUT 
+      error : Bool;   // FALSE: No error  TRUE: An error occurred during the execution of the FB
+      status : Word;   // 16#0000-16#7FFF: Status of the FB  16#8000-16#FFFF: Error identification (see following Table)
+   END_VAR
+
+   VAR_IN_OUT 
+      matrix : Array[*, *] of LReal;   // Matrix to be transposed
+      matrixTranspose : Array[*, *] of LReal;   // Transposed matrix
+   END_VAR
+
+   VAR_TEMP 
+      tempMatrix1LowerBoundRows : DInt;   // Matrix1 lower bound for the rows (Dimension 1)
+      tempMatrix1LowerBoundColumns : DInt;   // Matrix1 lower bound for the columns (Dimension 2)
+      tempMatrix1UpperBoundRows : DInt;   // Matrix1 upper bound for the rows (Dimension 1)
+      tempMatrix1UpperBoundColumns : DInt;   // Matrix1 upper bound for the columns (Dimension 2)
+      tempResultMatrixLowerBoundRows : DInt;   // Result matrix lower bound for the rows (Dimension 1)
+      tempResultMatrixLowerBoundColumns : DInt;   // Result matrix lower bound for the columns (Dimension 2)
+      tempResultMatrixUpperBoundRows : DInt;   // Result matrix upper bound for the rows (Dimension 1)
+      tempResultMatrixUpperBoundColumns : DInt;   // Result matrix upper bound for the columns (Dimension 2)
+      tempCounterRow : DInt;   // Index counter for traversiong trough rows (Dimension 1)
+      tempCounterColumn : DInt;   // Index counter for traversiong trough columns (Dimension 2)
+   END_VAR
+
+   VAR CONSTANT 
+      ROWS : UInt := 1;   // Rows are the first dimention of the two dimentional array
+      COLUMNS : UInt := 2;   // Columns are the second dimension of the two dimensional array
+      STATUS_NO_ERROR : Word := 16#0000;   // Execution finished without errors
+      ERR_MATR1_LOWBOUND_ROWS_RESMATR_LOWBOUND_COLUMNS : Word := 16#8200;   // Error: Matrix1 lower bound rows(Dim1) size is different with Result Matrix lower bound columns(Dim2)
+      ERR_MATR1_LOWBOUND_COLUMNS_RESMATR_LOWBOUND_ROWS : Word := 16#8201;   // Error: Matrix1 lower bound columns(Dim2) size is different with Result Matrix lower bound rows(Dim1)
+      ERR_MATR1_UPPBOUND_ROWS_RESMATR_UPPBOUND_COLUMNS : Word := 16#8202;   // Error: Matrix1 upper bound rows(Dim1) size is different with Result Matrix upper bound columns(Dim2)
+      ERR_MATR1_UPPBOUND_COLUMNS_RESMATR_UPPBOUND_ROWS : Word := 16#8203;   // Error: Matrix1 upper bound columns(Dim2) size is different with Result Matrix upperbound rows(Dim1)
+   END_VAR
+
+
+BEGIN
+	REGION Block info header
+	  //=============================================================================
+	  // SIEMENS AG / (c)Copyright 2017
+	  //-------------------------------------------------------------------------------
+	  // Title:            LGF_MatrixTranspose
+	  // Comment/Function: Caluclates the transposed matrix of the input matrix
+	  // Library/Family:   LGF(Library General Functions)
+	  // Author:           Siemens Digital Industry Support
+	  // Tested with:      S7-PLCSIM Advanced V2.0 SP1
+	  // Engineering:      TIA Portal V15 Update 2
+	  // Restrictions:     ENO disabled - error handling done by error and status
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge       | Changes applied
+	  //----------|------------|------------------------|------------------------------
+	  // 01.00.00 19.08.2015  Siemens Industry Online Support
+	  //                      First released version
+	  // 01.00.01 02.01.2017  Siemens Industry Online Support
+	  //                      Upgrade: TIA Portal V14 Update 1
+	  // 02.00.00 06.02.2017  Siemens Industry Online Support
+	  //                      Functionality using Array[*,*]
+	  // 02.00.01 17.08.2018  Siemens Industry Online Support
+	  //                      Upgrade: TIA V15 Update 2
+	  // 02.00.02 23.11.2018  Siemens Industry Online Support
+	  //                      Upgrade: TIA V15.1
+	  // 02.00.07 13.11.2019  Simatic Systems Support
+	  //                      Regions, comments and constants are added
+	  //                      Moved matrices to IO field.
+	  // 03.00.00 23.04.2020  Simatic Systems Support
+	  //                      Set version to V3.0.0, harmonize the version of the whole library
+	  // 03.00.01 02.02.2020  Simatic Systems Support
+	  //                      Insert documentation
+	  //=================================================================================
+	END_REGION Block info header
+	
+	REGION Determine the size of the matrices
+	  // Lower bound rows
+	  #tempMatrix1LowerBoundRows := LOWER_BOUND(ARR := #matrix, DIM := #ROWS);
+	  #tempResultMatrixLowerBoundRows := LOWER_BOUND(ARR := #matrixTranspose, DIM := #ROWS);
+	  // Lower bound columns
+	  #tempMatrix1LowerBoundColumns := LOWER_BOUND(ARR := #matrix, DIM := #COLUMNS);
+	  #tempResultMatrixLowerBoundColumns := LOWER_BOUND(ARR := #matrixTranspose, DIM := #COLUMNS);
+	  // Upper bound rows
+	  #tempMatrix1UpperBoundRows := UPPER_BOUND(ARR := #matrix, DIM := #ROWS);
+	  #tempResultMatrixUpperBoundRows := UPPER_BOUND(ARR := #matrixTranspose, DIM := #ROWS);
+	  // Upper bound columns
+	  #tempMatrix1UpperBoundColumns := UPPER_BOUND(ARR := #matrix, DIM := #COLUMNS);
+	  #tempResultMatrixUpperBoundColumns := UPPER_BOUND(ARR := #matrixTranspose, DIM := #COLUMNS);
+	END_REGION
+	
+	REGION Error validation
+	  // Input matrix lower bound rows must be equal to output matrix lower bound columns.
+	  IF (#tempMatrix1LowerBoundRows <> #tempResultMatrixLowerBoundColumns) THEN
+	    #error := TRUE;
+	    #status := #ERR_MATR1_LOWBOUND_ROWS_RESMATR_LOWBOUND_COLUMNS;
+	    RETURN;
+	    // Input matrix lower bound columns must be equal to output matrix lower bound rows. 
+	  ELSIF (#tempMatrix1LowerBoundColumns <> #tempResultMatrixLowerBoundRows) THEN
+	    #error := TRUE;
+	    #status := #ERR_MATR1_LOWBOUND_COLUMNS_RESMATR_LOWBOUND_ROWS;
+	    RETURN;
+	    // Input matrix upper bound rows must be equal to output matrix upper bound columns
+	  ELSIF (#tempMatrix1UpperBoundRows <> #tempResultMatrixUpperBoundColumns) THEN
+	    #error := TRUE;
+	    #status := #ERR_MATR1_UPPBOUND_ROWS_RESMATR_UPPBOUND_COLUMNS;
+	    RETURN;
+	    // Input matrix upper bound columns must be equal to output matrix upper bound rows.
+	  ELSIF (#tempMatrix1UpperBoundColumns <> #tempResultMatrixUpperBoundRows) THEN
+	    #error := TRUE;
+	    #status := #ERR_MATR1_UPPBOUND_COLUMNS_RESMATR_UPPBOUND_ROWS;
+	    RETURN;
+	  END_IF;
+	END_REGION
+	
+	REGION Calculation of the transposed matrix
+	  FOR #tempCounterRow := #tempMatrix1LowerBoundRows TO #tempMatrix1UpperBoundRows DO
+	    FOR #tempCounterColumn := #tempMatrix1LowerBoundColumns TO #tempMatrix1UpperBoundColumns DO
+	      #matrixTranspose[#tempCounterColumn, #tempCounterRow] := #matrix[#tempCounterRow, #tempCounterColumn];
+	    END_FOR;
+	  END_FOR;
+	  
+	  #error := false;
+	  #status := #STATUS_NO_ERROR;
+	  //Set ENO to true
+	  ENO := TRUE;
+	END_REGION
+	
+END_FUNCTION
+

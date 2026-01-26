@@ -1,0 +1,776 @@
+﻿TYPE "LGF_typeFileReadWriteDeleteTimestamp"
+TITLE = LGF_typeFileReadWriteDeleteTimeStamp
+VERSION : 0.1
+//This UDT belongs to the module `LGF_FileReadWriteDelete` and keeps a timestamp of a command or a file.   
+//If the timestamp is unknown, the default timestamp is displayed: `DTL#1970-01-01-00:00:00`.
+   STRUCT
+      dateAndTime {InstructionName := 'DTL'; LibVersion := '1.0'; ExternalWritable := 'False'} : DTL;   // Time stamp
+      timestampIsLocal { ExternalWritable := 'False'} : Bool;   // TRUE: The timestamp is used in local time.  FALSE: The timestamp is used in system time / UTC.  Only used if `includeTimestamp` is set.
+   END_STRUCT;
+
+END_TYPE
+
+TYPE "LGF_typeDiagnostics"
+TITLE = LGF_typeDiagnostics
+VERSION : 0.1
+//Diagnostic structure to store and transfer diagnostic information from blocks through the interface.
+   STRUCT
+      status { ExternalVisible := 'False'; ExternalWritable := 'False'} : Word;   // Status of the Block or error identification when error occurred
+      subfunctionStatus { ExternalVisible := 'False'; ExternalWritable := 'False'} : Word;   // Status or return value of called FB's, FC's and system blocks
+      stateNumber { ExternalVisible := 'False'; ExternalWritable := 'False'} : DInt;   // State in the state machine of the block where the error occurred
+   END_STRUCT;
+
+END_TYPE
+
+TYPE "LGF_typeFileReadWriteDeleteTimestamps"
+TITLE = LGF_typeFileReadWriteDeleteTimeStamps
+VERSION : 0.1
+//This UDT belongs to the module `LGF_FileReadWriteDelete` and lists all timestamps of the commands and the file, if known.   
+//If the timestamp is unknown, the default timestamp is displayed: `DTL#1970-01-01-00:00:00`.
+   STRUCT
+      file { ExternalWritable := 'False'; S7_SetPoint := 'False'} : "LGF_typeFileReadWriteDeleteTimestamp";   // Time stamp of file
+      lastCommand { ExternalWritable := 'False'; S7_SetPoint := 'False'} : "LGF_typeFileReadWriteDeleteTimestamp";   // Time stamp of last command
+      executeRead { ExternalWritable := 'False'; S7_SetPoint := 'False'} : "LGF_typeFileReadWriteDeleteTimestamp";   // Time stamp of command `executeRead`
+      executeWrite { ExternalWritable := 'False'; S7_SetPoint := 'False'} : "LGF_typeFileReadWriteDeleteTimestamp";   // Time stamp of command `executeWrite`
+      executeDelete { ExternalWritable := 'False'; S7_SetPoint := 'False'} : "LGF_typeFileReadWriteDeleteTimestamp";   // Time stamp of command `executeDelete`
+      lastError { ExternalWritable := 'False'; S7_SetPoint := 'False'} : "LGF_typeFileReadWriteDeleteTimestamp";   // Time stamp of the last error that occurred
+   END_STRUCT;
+
+END_TYPE
+
+TYPE "LGF_typeFileReadWriteDeleteParameter"
+TITLE = LGF_typeFileReadWriteDeleteParameter
+VERSION : 0.1
+//This UDT belongs to the Module `LGF_FileReadWriteDelete` and lists all possible parameters to configure its behavior.
+   STRUCT
+      dataLengthMustMatch { S7_SetPoint := 'True'} : Bool := TRUE;   // TRUE: The length of the file data set and the dataset in the PLC must match (File read)
+      clearBufferBefore { S7_SetPoint := 'True'} : Bool := TRUE;   // TRUE: Buffer would be cleared with 16#00 Byte before writing the data (File write)
+      includeTimestamp { S7_SetPoint := 'True'} : Bool;   // TRUE: A Timestamp (DTL) is included in front of the Data.  `executeWrite` adds the actual time (system- or local time)  `executeRead` reads back the timestamp
+      timeStampIsLocal { S7_SetPoint := 'True'} : Bool;   // TRUE: The timestamp is used in local time.  FALSE: The timestamp is used in system time / UTC.  Only used if `includeTimestamp` is set.
+   END_STRUCT;
+
+END_TYPE
+
+FUNCTION_BLOCK "LGF_FileReadWriteDelete"
+TITLE = LGF_FileReadWriteDelete
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : 'Simatic Systems Support'
+FAMILY : LGF
+NAME : LGF_FileReadWriteDelete
+//The function `LGF_FileReadWriteDelete` can be used to read, write or delete a file to/from the SIMATIC Memory Card (SMC).
+//
+//To read or write the data, it is necessary to deserialize/serialize it, which the function already does for the user. For this purpose, an external buffer in the form of a byte array must be connected, which can hold the amount of data; if the buffer is too small, an error is output.
+//
+//The file name must always be specified in full together with the folder name and the file extension in the following format: `UserFiles/Test.dat`.
+   VAR_INPUT 
+      executeRead : Bool;   // Rising edge starts file read once
+      executeWrite : Bool;   // Rising edge starts file write once
+      executeDelete : Bool;   // Rising edge starts file delete once
+      fileName : String;   // Name of file including path: `UserFiles/test.dat`
+      parameter { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : "LGF_typeFileReadWriteDeleteParameter";
+   END_VAR
+
+   VAR_OUTPUT 
+      done { ExternalWritable := 'False'} : Bool;   // TRUE: Commanded functionality has been completed successfully
+      busy { ExternalWritable := 'False'} : Bool;   // TRUE: FB is not finished; new output values can be expected
+      error { ExternalWritable := 'False'} : Bool;   // TRUE: An error occurred during the execution of the functionality
+      status { ExternalWritable := 'False'} : Word := #STATUS_NO_CALL;   // 16#0000 - 16#7FFF: Status of the FB, 16#8000 - 16#FFFF: Error identification
+      dataLength { ExternalWritable := 'False'} : DInt;   // Data length read from file (serialized length of `data`)
+      fileDoesNotExist { ExternalWritable := 'False'} : Bool;   // True: The file or the path present at `fileName` does not exist  
+      timestamps { ExternalWritable := 'False'} : "LGF_typeFileReadWriteDeleteTimestamps";   // Timestamps for commands and file
+      diagnostics { ExternalWritable := 'False'} : "LGF_typeDiagnostics";
+   END_VAR
+
+   VAR_IN_OUT 
+      bufferByteArray : Array[*] of Byte;   // Byte array buffer for read / write from / to file
+      data : Variant;   // Data set read from file / to write to file
+   END_VAR
+
+   VAR 
+      statInternal { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Struct   // Internal function flags
+         executePrevious { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Old value of 'execute' input for edge detection
+         done { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Static value for output 'done'
+         busy { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Static value for output 'busy'
+         error { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Static value for output 'error'
+         diagnostics { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'; S7_SetPoint := 'False'} : "LGF_typeDiagnostics" := (#STATUS_NO_CALL, (), ());
+         emptyDiagnostics { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'; S7_SetPoint := 'False'} : "LGF_typeDiagnostics" := (#STATUS_NO_CALL, (), ());   // Empty diagnostics information (for initialization purposes only)
+      END_STRUCT;
+      instFileRead {InstructionName := 'FileReadC'; LibVersion := '1.0'; ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'; S7_SetPoint := 'False'} : FileReadC;   // File read instance
+      instFileWrite {InstructionName := 'FileWriteC'; LibVersion := '1.0'; ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'; S7_SetPoint := 'False'} : FileWriteC;   // File write instance
+      instFileDelete {InstructionName := 'FileDelete'; LibVersion := '1.0'; ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'; S7_SetPoint := 'False'} : FileDelete;   // File delete instance
+      statMainState { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : DInt := #STATE_NO_PROCESSING;   // State in the state machine of the FB
+      statParameterDataIsByteArray { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Store type of Parameter, in case of "ByteArray" -->  deserialize isn't needed....
+      statAsynchronusMode { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Set this tag to TRUE if asynchronous mode is desired
+      statBufferSize { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : DInt;   // Size of buffer array
+      statLengthData { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : DInt;   // Size of datapoint given at `data`
+      statLengthFile { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : DInt := 0;   // Size of datapoint given at `instFileRead`
+      statLengthTimeStamp { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : DInt := 0;   // Size of TimeStamp if active, otherwise 0
+      statTimestamps { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'; S7_SetPoint := 'False'} : "LGF_typeFileReadWriteDeleteTimestamps";   // Timestamps for commands and file
+      statTimestampDefault { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'; S7_SetPoint := 'False'} : "LGF_typeFileReadWriteDeleteTimestamp" := (#DEFAULT_DATE, FALSE);
+   END_VAR
+
+   VAR_TEMP 
+      tempExecute : Bool;   // Temporary variable for input 'execute'
+      tempExitStateLoop : Bool;   // Set to TRUE: leave loop from state machine after run trough
+      tempResult : Word;   // Temporary variable to store results of sub function call and do error handling if error occurs
+      tempBufferPosition : DInt;   // Temporary variable for deserialization / for the prefix check
+      tempPathPrefix : String;   // Temporary variable for filepath prefix
+   END_VAR
+
+   VAR CONSTANT 
+      DEFAULT_DATE {InstructionName := 'DTL'; LibVersion := '1.0'} : DTL := DTL#1970-01-01-00:00:00;   // Default Date
+      PATH_PREFIX : String := 'UserFiles/';   // Path prefix needed in front of the file name
+      EMPTY_BYTE : Byte := 16#00;   // Empty byte to initialize the buffer
+      FILE_DELETE_PATH_NAME_NOT_EXIST : Word := 16#8091;   // Error: The file or the path present at `fileName`dose not exist  
+      FILE_DELETE_FILE_NOT_EXIST : Word := 16#8092;   // Error: The file at `fileName`dose not exist in the path
+      STATE_NO_PROCESSING : DInt := 0;   // FB state: No processing
+      STATE_FILE_READ_INIT : DInt := 1;   // FB state: Init Read
+      STATE_FILE_WRITE_INIT : DInt := 2;   // FB state: Init Write
+      STATE_FILE_DELETE_INIT : DInt := 3;   // FB state: Init Delete
+      STATE_FILE_READ : DInt := 10;   // FB state: Read from file
+      STATE_FILE_READ_PARAMETER_TO_INTERFACE : DInt := 11;   // FB state: Read from file - Process parameter
+      STATE_FILE_WRITE_PARAMETER : DInt := 20;   // FB state: Write to file - Process parameter
+      STATE_FILE_WRITE : DInt := 21;   // FB state: Write to file
+      STATE_FILE_DELETE : DInt := 30;   // FB state: Delete file
+      STATUS_EXECUTION_FINISHED : Word := 16#0000;   // Execution finished without errors
+      STATUS_NO_CALL : Word := 16#7000;   // No job being currently processed
+      STATUS_FIRST_CALL : Word := 16#7001;   // First call after incoming new job (rising edge 'execute')
+      STATUS_SUBSEQUENT_CALL : Word := 16#7002;   // Subsequent call during active processing without further details
+      ERR_UNDEFINED_STATE : Word := 16#8600;   // Error due to an undefined state in state machine
+      "- - - Application Error codes" : Word;
+      ERR_BUFFER_LOWERBOUND : Word := 16#8201;   // Error: Buffer array lower bound  Lower bound must be 0
+      ERR_BUFFER_ARRAY_TO_SMALL_TO_COPY : Word := 16#8202;   // Error: Buffer size less than needed size for data
+      ERR_MULTIPLE_COMMANDS : Word := 16#8400;   // Error: Multiple commands add the same time not allowed. 
+      ERR_FILE_PATH : Word := 16#8401;   // Error: File path error: File path must start with 'UserFiles/'.
+      ERR_READ_TIME_LOCAL : Word := 16#8402;   // Error: Read local time `RD_LOC_T`- see `diagnostics.subFunctionStatus`
+      ERR_READ_TIME_SYSTEM : Word := 16#8403;   // Error: Read system time (UTC) `RD_SYS_T` - see `diagnostics.subFunctionStatus`
+      ERR_FILE_SIZE_GRATER_THEN_DATA_SIZE : Word := 16#8411;   // Error: File length and Data length dose not match!
+      ERR_FILE_SIZE_LESS_THEN_DATA_SIZE : Word := 16#8412;   // Error: File length and Data length dose not match!
+      ERR_MOVE_BLK_VARIANT : Word := 16#8601;   // Error: Move block variant (buffer to data) - see `diagnostics.subFunctionStatus`
+      ERR_SERIALIZE_DATA : Word := 16#8602;   // Error: Serialize data - see `diagnostics.subFunctionStatus`
+      ERR_DESERIALIZE_DATA : Word := 16#8603;   // Error: Deserialize data - see `diagnostics.subFunctionStatus`
+      ERR_SERIALIZE_DATE_TIMESTAMP : Word := 16#8604;   // Error: Serialize date and time stamp - see `diagnostics.subFunctionStatus`
+      ERR_DESERIALIZE_DATE_TIMESTAMP : Word := 16#8605;   // Error: Deserialize date and time stamp - see `diagnostics.subFunctionStatus`
+      ERR_FILE_READ_INIT : Word := 16#8610;   // Error: Read file Initialization from SMC - see `diagnostics.subFunctionStatus`
+      ERR_FILE_READ : Word := 16#8611;   // Error: Read file from SMC - see `diagnostics.subFunctionStatus`
+      ERR_FILE_WRITE_INIT : Word := 16#8620;   // Error: Write file Initialization to SMC - see `diagnostics.subFunctionStatus`
+      ERR_FILE_WRITE : Word := 16#8621;   // Error: Write file to SMC - see `diagnostics.subFunctionStatus`
+      ERR_FILE_DELETE_INIT : Word := 16#8630;   // Error: Delete file Initialization from SMC - see `diagnostics.subFunctionStatus`
+      ERR_FILE_DELETE : Word := 16#8631;   // Error: Delete file from SMC - see `diagnostics.subFunctionStatus`
+   END_VAR
+
+
+BEGIN
+	REGION BLOCK INFO HEADER
+	  //================================================================================
+	  //SIEMENS AG
+	  //(c)Copyright 2017 All Rights Reserved
+	  //--------------------------------------------------------------------------------
+	  //Library:       LGF (Library General Functions) 
+	  //Tested with:   S7-1510SP-F
+	  //Engineering:   TIA Portal V15
+	  //Restrictions:  ---
+	  //Requirements:  S7-1500/S7-1500T FW 2.5
+	  //Functionality: The function `LGF_FileReadWriteDelete` can be used to read, write or delete a file to/from the SIMATIC Memory Card (SMC).
+	  //To read or write the data, it is necessary to deserialize/serialize it, which the function already does for the user.
+	  //For this purpose, an external buffer in the form of a Byte array must be connected, which can hold the amount of data;
+	  //if the buffer is too small, an error is output.
+	  //The file name must always be specified in full together with the folder name AND the file extension in the following format: `UserFiles/Test.dat`.
+	  //--------------------------------------------------------------------------------
+	  //Change log table:
+	  //Version  | Date       | Expert in charge        | Changes applied
+	  //---------|------------|-------------------------|------------------------------
+	  //01.00.00 | 10.07.2025 | Simatic Systems Support | First released version
+	  //================================================================================
+	END_REGION
+	
+	REGION DESCRIPTION
+	  (/*
+	# All commands
+	
+	The file name must always be specified in full together with the folder name and the file extension in the following format: `UserFiles/test.dat`.
+	
+	# Time stamps
+	
+	Time stamps are written for commands, an error and the file, they are stored in the variable `timestamps`. In the event of an error, the timestamps of the individual commands are not written, the timestamp of the file is reset to the default value `DTL#1970-01-01-00:00:00`.
+	*/)
+	  
+	  (/*
+	# File Read - Command `executeRead`
+	
+	With the command `executeRead` a file can be read into the data budget of a variable at `data`. To read the data it is necessary to deserialize it, which the function already takes from the user.  
+	For deserialization an external buffer in the form of a byte array must be connected which can take up the amount of data, if the buffer is too small an error is output.
+	*/)
+	  
+	  (/*
+	# File Delete - Command `executeDelete`
+	
+	With the command `executeDelete` a file can be deleted from the SIMATIC Memory Card (SMC). The file name must always be specified in full together with the folder name and the file extension in the following format: `UserFiles/test.dat`.
+	*/)
+	  
+	  (/*
+	# File Write - Command `executeWrite`
+	
+	With the command `executeWrite` the data budget of a variable can be written to `data` in a file. For writing the data it is necessary to serialize it, which the function already takes from the user.  
+	For serialization an external buffer in the form of a byte array must be connected which can take up the data quantity, if the buffer is too small an error is output.
+	
+	---
+	
+	Note
+	:    The file extension (here e.g. `dat`) can be freely selected or omitted, it is useful for external processing to indicate the format of the file to the user.
+	:    A file extension in the file name has no influence on the content of the file as well as its formatting, providing the data in an appropriate file format is up to the user.
+	
+	---
+	
+	Warning
+	:    The SMC (SIMATIC Memory Card) is a flash memory with finite writing cycles.
+	:    A high frequent write access therefore also affects the lifetime of the SMC!
+	*/)
+	END_REGION DESCRIPTION
+	
+	REGION TRIGGERING
+	  #tempExecute := #executeRead OR #executeWrite OR #executeDelete; // Work with temporary value / create process image
+	  IF (#tempExecute = TRUE) AND (#statInternal.executePrevious = FALSE) // Check if FB is triggered
+	    // FB shall finish current job before new job can be started with rising edge of execute
+	    AND (#statInternal.diagnostics.status = #STATUS_NO_CALL)
+	  THEN // First call; initialize FB
+	    #statInternal.done := FALSE;
+	    #statInternal.busy := TRUE;
+	    #statInternal.error := FALSE;
+	    
+	    // Initialize functionality: reset of variables, diagnostics, etc.
+	    #statInternal.diagnostics := #statInternal.emptyDiagnostics;
+	    #statInternal.diagnostics.status := #STATUS_FIRST_CALL;
+	    #diagnostics := #statInternal.emptyDiagnostics;
+	    
+	    // Initialize functionality: call subsidiary FBs with FALSE
+	    #instFileRead(REQ := FALSE);
+	    #instFileWrite(REQ := FALSE);
+	    #instFileDelete(REQ := FALSE);
+	    
+	    REGION Generate Timestamp of command
+	      IF #parameter.timeStampIsLocal THEN
+	        #tempResult := INT_TO_WORD(RD_LOC_T(#statTimestamps.lastCommand.dateAndTime));
+	      ELSE
+	        #tempResult := INT_TO_WORD(RD_SYS_T(#statTimestamps.lastCommand.dateAndTime));
+	      END_IF;
+	      #statTimestamps.lastCommand.timestampIsLocal := #parameter.timeStampIsLocal;
+	    END_REGION
+	    
+	    IF FALSE // Multiple Commands set?
+	      OR (#executeRead AND #executeWrite)
+	      OR (#executeRead AND #executeDelete)
+	      OR (#executeWrite AND #executeDelete)
+	    THEN
+	      #statInternal.diagnostics.status := #ERR_MULTIPLE_COMMANDS;
+	      #statInternal.diagnostics.stateNumber := #STATE_NO_PROCESSING;
+	      #statMainState := #STATE_NO_PROCESSING;
+	      
+	    ELSIF #tempResult.%X15 THEN // Read time stamp throws an error?
+	      IF #parameter.timeStampIsLocal THEN
+	        #statInternal.diagnostics.status := #ERR_READ_TIME_LOCAL;
+	      ELSE
+	        #statInternal.diagnostics.status := #ERR_READ_TIME_SYSTEM;
+	      END_IF;
+	      
+	      #statInternal.diagnostics.stateNumber := #STATE_NO_PROCESSING;
+	      #statMainState := #STATE_NO_PROCESSING;
+	      
+	      // State machine - start processing
+	    ELSIF #executeRead THEN
+	      #statMainState := #STATE_FILE_READ_INIT;
+	    ELSIF #executeWrite THEN
+	      #statMainState := #STATE_FILE_WRITE_INIT;
+	    ELSIF #executeDelete THEN
+	      #statMainState := #STATE_FILE_DELETE_INIT;
+	    END_IF;
+	    
+	  ELSIF (#statInternal.diagnostics.status = #STATUS_FIRST_CALL) THEN
+	    #statInternal.diagnostics.status := #STATUS_SUBSEQUENT_CALL;
+	  END_IF;
+	  
+	  // Edge detection 'execute' input
+	  #statInternal.executePrevious := #tempExecute;
+	END_REGION TRIGGERING
+	
+	IF (#statInternal.diagnostics.status = #STATUS_NO_CALL) THEN // Nothing to do -> End here to reduce "system load"
+	  RETURN;
+	END_IF;
+	
+	REGION STATE_MACHINE
+	  // If one ore more runs in the same cycle are necessary, set #tempStateChangeActive := TRUE;
+	  REPEAT
+	    // Reset #tempExitStateLoop := TRUE; as its defined state to prevent endless loop
+	    #tempExitStateLoop := TRUE;
+	    
+	    // State machine of FB
+	    CASE #statMainState OF
+	      #STATE_NO_PROCESSING: // No processing active (Note: this state must always be present and left empty)
+	        ;
+	        
+	      #STATE_FILE_READ_INIT,
+	      #STATE_FILE_WRITE_INIT,
+	      #STATE_FILE_DELETE_INIT:
+	        REGION Init
+	          REGION Verify File Path
+	            #tempPathPrefix := #PATH_PREFIX;
+	            
+	            FOR #tempBufferPosition := 1 TO DINT_TO_INT(LEN(#tempPathPrefix)) DO
+	              IF #fileName[#tempBufferPosition] <> #tempPathPrefix[#tempBufferPosition] THEN
+	                // Characters arenÄt identiacal
+	                #statInternal.diagnostics.status := #ERR_FILE_PATH;
+	                #statInternal.diagnostics.subfunctionStatus := DINT_TO_WORD(#tempBufferPosition);
+	                EXIT; // Stop execution and leave block
+	              END_IF;
+	            END_FOR;
+	            
+	            // Leaving the outer loop as well in case of error
+	            IF #statInternal.diagnostics.status.%X15 THEN
+	              EXIT; // Stop execution and leave block
+	            END_IF;
+	          END_REGION
+	          
+	          REGION Proof if delete is called to jump to the next step
+	            // If delet is called - move on to next state
+	            // jump over the others by jump over loop iterator with continue
+	            IF #statMainState = #STATE_FILE_DELETE_INIT THEN
+	              REGION Delete File handler init
+	                // Init file read with false
+	                #instFileDelete(REQ := FALSE);
+	                
+	                IF #instFileDelete.Error THEN
+	                  #statInternal.diagnostics.status := #ERR_FILE_DELETE_INIT;
+	                  #statInternal.diagnostics.subfunctionStatus := #instFileDelete.Status;
+	                  EXIT; // Stop execution and leave block
+	                END_IF;
+	                
+	                // Next state
+	                #statMainState := #STATE_FILE_DELETE;
+	                // ASYNCRONUS - set to true:
+	                #tempExitStateLoop := #statAsynchronusMode;
+	                CONTINUE;
+	              END_REGION
+	            END_IF;
+	          END_REGION
+	          
+	          REGION Verify buffer boundary
+	            // Check buffer size
+	            // Check lower boundary
+	            #tempResult := DINT_TO_WORD(LOWER_BOUND(ARR := #bufferByteArray, DIM := 1));
+	            
+	            IF 0 <> #tempResult THEN // ERROR: buffer lowerbound has to be 0
+	              #statInternal.diagnostics.status := #ERR_BUFFER_LOWERBOUND;
+	              #statInternal.diagnostics.subfunctionStatus := #tempResult;
+	              EXIT; // Stop execution and leave block
+	            END_IF;
+	            
+	            // Get upper boundary and calc size of buffer
+	            #statBufferSize := UPPER_BOUND(ARR := #bufferByteArray, DIM := 1) + 1;
+	          END_REGION
+	          
+	          // Verify parameter data types
+	          REGION Set TimeStamp length
+	            IF #parameter.includeTimestamp THEN
+	              #statLengthTimeStamp := 14;
+	            ELSE
+	              #statLengthTimeStamp := 0;
+	            END_IF;
+	          END_REGION
+	          
+	          REGION Verify parameter data types
+	            // Check type of Parameter attached to IN/OUT
+	            // If Array proceed here, Array limits checked by move block variant
+	            IF IS_ARRAY(#data) AND TypeOfElements(#data) = Byte THEN
+	              #statParameterDataIsByteArray := TRUE;
+	              // Get array size
+	              #statLengthData := UDINT_TO_DINT(CountOfElements(#data));
+	              
+	              // Verify if buffer is big enough to store data
+	              IF #statBufferSize < (#statLengthData + #statLengthTimeStamp) THEN
+	                // ERROR: buffer array is to small for data array
+	                #statInternal.diagnostics.status := #ERR_BUFFER_ARRAY_TO_SMALL_TO_COPY;
+	                #statInternal.diagnostics.subfunctionStatus := 16#0000;
+	                EXIT; // Stop execution and leave block
+	              END_IF;
+	            END_IF;
+	          END_REGION
+	          
+	          REGION Proof if read is called to jump to the next step
+	            IF #statMainState = #STATE_FILE_READ_INIT THEN
+	              REGION Check array to see if the length is sufficient to store the read data
+	                #statParameterDataIsByteArray := FALSE;
+	                #statLengthData := 0;
+	                
+	                #tempResult := INT_TO_WORD(
+	                                           Serialize(SRC_VARIABLE := #data,
+	                                                     DEST_ARRAY => #bufferByteArray,
+	                                                     POS := #statLengthData));
+	                
+	                // Check if serialize parameter structure was successful, otherwise set ERROR
+	                IF #STATUS_EXECUTION_FINISHED <> #tempResult THEN
+	                  #statInternal.diagnostics.status := #ERR_SERIALIZE_DATA;
+	                  #statInternal.diagnostics.subfunctionStatus := #tempResult;
+	                  EXIT; // Stop execution and leave block
+	                END_IF;
+	              END_REGION
+	              
+	              REGION Read File handler init
+	                // Set length for FileRead call
+	                IF #parameter.dataLengthMustMatch THEN
+	                  #instFileRead.Length := 0;
+	                ELSE
+	                  #instFileRead.Length := DINT_TO_UDINT(#statLengthData + #statLengthTimeStamp);
+	                END_IF;
+	                
+	                // Init file read with false
+	                #instFileRead(REQ := FALSE);
+	                
+	                IF #instFileRead.Error THEN
+	                  #statInternal.diagnostics.status := #ERR_FILE_READ_INIT;
+	                  #statInternal.diagnostics.subfunctionStatus := #instFileRead.Status;
+	                  EXIT; // Stop execution and leave block
+	                END_IF;
+	                
+	                // Next state
+	                #statMainState := #STATE_FILE_READ;
+	                // ASYNCRONUS - set to true:
+	                #tempExitStateLoop := #statAsynchronusMode;
+	                CONTINUE;
+	              END_REGION
+	            END_IF;
+	          END_REGION
+	          
+	          REGION Proof if write is called to jump to the next step
+	            IF #statMainState = #STATE_FILE_WRITE_INIT THEN
+	              REGION File handler init
+	                // Init file write with false
+	                #instFileWrite(REQ := FALSE);
+	                
+	                IF #instFileWrite.Error THEN
+	                  #statInternal.diagnostics.status := #ERR_FILE_WRITE_INIT;
+	                  #statInternal.diagnostics.subfunctionStatus := #instFileWrite.Status;
+	                  EXIT; // Stop execution and leave block
+	                END_IF;
+	                
+	                // Next state
+	                #statMainState := #STATE_FILE_WRITE_PARAMETER;
+	                // ASYNCRONUS - set to true:
+	                #tempExitStateLoop := #statAsynchronusMode;
+	                CONTINUE;
+	              END_REGION
+	            END_IF;
+	          END_REGION
+	        END_REGION
+	        
+	      #STATE_FILE_READ:
+	        REGION File read - File handling
+	          // Set file handler request to true
+	          #instFileRead(REQ    := TRUE,
+	                        Name   := #fileName,
+	                        Offset := UDINT#0,
+	                        Data   := #bufferByteArray);
+	          
+	          IF #instFileRead.Error THEN
+	            #statLengthFile := UDINT_TO_DINT(#instFileRead.ResultLength);
+	            #statInternal.diagnostics.status := #ERR_FILE_READ;
+	            #statInternal.diagnostics.subfunctionStatus := #instFileRead.Status;
+	            EXIT; // Stop execution and leave block
+	            
+	          ELSIF #instFileRead.Done THEN
+	            #statLengthFile := UDINT_TO_DINT(#instFileRead.ResultLength);
+	            // Check file length parameter
+	            IF TRUE
+	              AND #parameter.dataLengthMustMatch
+	              AND (#statLengthFile > (#statLengthData + #statLengthTimeStamp))
+	            THEN
+	              #statTimestamps.file := #statTimestampDefault;
+	              #statInternal.diagnostics.status := #ERR_FILE_SIZE_GRATER_THEN_DATA_SIZE;
+	              #statInternal.diagnostics.subfunctionStatus := DINT_TO_WORD((#statLengthData + #statLengthTimeStamp));
+	              EXIT; // Stop execution and leave block
+	              
+	            ELSIF TRUE
+	              AND #parameter.dataLengthMustMatch
+	              AND (#statLengthFile < (#statLengthData + #statLengthTimeStamp))
+	            THEN
+	              #statTimestamps.file := #statTimestampDefault;
+	              #statInternal.diagnostics.status := #ERR_FILE_SIZE_LESS_THEN_DATA_SIZE;
+	              #statInternal.diagnostics.subfunctionStatus := DINT_TO_WORD((#statLengthData + #statLengthTimeStamp));
+	              EXIT; // Stop execution and leave block
+	              
+	            ELSE
+	              // Next state
+	              #statMainState := #STATE_FILE_READ_PARAMETER_TO_INTERFACE;
+	              // ASYNCRONUS - set to true:
+	              #tempExitStateLoop := #statAsynchronusMode;
+	            END_IF;
+	          END_IF;
+	        END_REGION
+	        
+	      #STATE_FILE_READ_PARAMETER_TO_INTERFACE:
+	        REGION File read - Parameter handling
+	          // Init buffer size/position pointer
+	          #tempBufferPosition := 0;
+	          
+	          REGION Include time stamp
+	            IF #parameter.includeTimestamp THEN
+	              // Deserialize Time Stamp into buffer
+	              // Length of timestamp is 14 byte
+	              #tempResult := INT_TO_WORD(
+	                                         Deserialize(SRC_ARRAY := #bufferByteArray,
+	                                                     DEST_VARIABLE => #statTimestamps.file,
+	                                                     POS := #tempBufferPosition)
+	              );
+	              
+	              
+	              // Check if move parameter structure was successful, otherwise set ERROR
+	              IF #STATUS_EXECUTION_FINISHED <> #tempResult THEN
+	                #statTimestamps.file := #statTimestampDefault;
+	                #statInternal.diagnostics.status := #ERR_DESERIALIZE_DATE_TIMESTAMP;
+	                #statInternal.diagnostics.subfunctionStatus := #tempResult;
+	                EXIT; // Stop execution and leave block
+	              END_IF;
+	              
+	            ELSE
+	              #statTimestamps.file := #statTimestampDefault;
+	            END_IF;
+	          END_REGION
+	          
+	          // If parameter is byte array - just copy
+	          IF #statParameterDataIsByteArray THEN
+	            // Copy buffer array into parameter array
+	            #tempResult := INT_TO_WORD(
+	                                       MOVE_BLK_VARIANT(SRC := #bufferByteArray,
+	                                                        COUNT := DINT_TO_UDINT(#statLengthData),
+	                                                        SRC_INDEX := #tempBufferPosition,
+	                                                        DEST_INDEX := DINT#0,
+	                                                        DEST => #data)
+	            );
+	            
+	            // Check if move parameter structure was successful, otherwise set ERROR
+	            IF #STATUS_EXECUTION_FINISHED <> #tempResult THEN
+	              #statTimestamps.file := #statTimestampDefault;
+	              #statInternal.diagnostics.status := #ERR_MOVE_BLK_VARIANT;
+	              #statInternal.diagnostics.subfunctionStatus := #tempResult;
+	              EXIT; // Stop execution and leave block
+	            END_IF;
+	            
+	            // Next state switched by status
+	            #statInternal.diagnostics.status := #STATUS_EXECUTION_FINISHED;
+	            #statInternal.diagnostics.subfunctionStatus := #STATUS_EXECUTION_FINISHED;
+	            
+	          ELSE // Parameter is NOT byte array - DESERIALZE
+	            // Deserialize data from buffer
+	            #tempResult := INT_TO_WORD(
+	                                       Deserialize(SRC_ARRAY := #bufferByteArray,
+	                                                   DEST_VARIABLE => #data,
+	                                                   POS := #tempBufferPosition)
+	            );
+	            
+	            // Check if serialize parameter structure was successful, otherwise set ERROR
+	            IF #STATUS_EXECUTION_FINISHED <> #tempResult THEN
+	              #statTimestamps.file := #statTimestampDefault;
+	              #statInternal.diagnostics.status := #ERR_DESERIALIZE_DATA;
+	              #statInternal.diagnostics.subfunctionStatus := #tempResult;
+	              EXIT; // Stop execution and leave block
+	            END_IF;
+	            
+	            #statTimestamps.executeRead := #statTimestamps.lastCommand;
+	            // Next state switched by status
+	            #statInternal.diagnostics.status := #STATUS_EXECUTION_FINISHED;
+	            #statInternal.diagnostics.subfunctionStatus := #STATUS_EXECUTION_FINISHED;
+	          END_IF;
+	        END_REGION
+	        
+	      #STATE_FILE_WRITE_PARAMETER:
+	        REGION File write - Parameter handling
+	          // Init buffer size/position pointer
+	          #tempBufferPosition := 0;
+	          
+	          REGION Include time stamp
+	            IF #parameter.includeTimestamp THEN
+	              // Serialize Time Stamp into buffer
+	              // Length of timestamp is 14 byte
+	              #statTimestamps.file := #statTimestamps.lastCommand;
+	              
+	              #tempResult := INT_TO_WORD(
+	                                         Serialize(SRC_VARIABLE := #statTimestamps.file,
+	                                                   DEST_ARRAY => #bufferByteArray,
+	                                                   POS := #tempBufferPosition)
+	              );
+	              
+	              // Check if move parameter structure was successful, otherwise set ERROR
+	              IF #STATUS_EXECUTION_FINISHED <> #tempResult THEN
+	                #statTimestamps.file := #statTimestampDefault;
+	                #statInternal.diagnostics.status := #ERR_SERIALIZE_DATE_TIMESTAMP;
+	                #statInternal.diagnostics.subfunctionStatus := #tempResult;
+	                EXIT; // Stop execution and leave block
+	              END_IF;
+	              
+	            ELSE
+	              #statTimestamps.file := #statTimestampDefault;
+	            END_IF;
+	          END_REGION
+	          
+	          IF #statParameterDataIsByteArray THEN // Parameter is byte array - just copy
+	            // Copy parameter array into buffer array
+	            #tempResult := INT_TO_WORD(
+	                                       MOVE_BLK_VARIANT(SRC := #data,
+	                                                        COUNT := DINT_TO_UDINT(#statLengthData),
+	                                                        SRC_INDEX := DINT#0,
+	                                                        DEST_INDEX := #tempBufferPosition,
+	                                                        DEST => #bufferByteArray)
+	            );
+	            // Set data length
+	            #statLengthData += #tempBufferPosition;
+	            
+	            // Check if move parameter structure was successful, otherwise set ERROR
+	            IF #STATUS_EXECUTION_FINISHED <> #tempResult THEN
+	              #statTimestamps.file := #statTimestampDefault;
+	              #statInternal.diagnostics.status := #ERR_MOVE_BLK_VARIANT;
+	              #statInternal.diagnostics.subfunctionStatus := #tempResult;
+	              EXIT; // Stop execution and leave block
+	            END_IF;
+	            
+	          ELSE // Parameter is NOT byte array - SERIALZE Data
+	            // Clear buffer before writing the data into the file
+	            // This avoids unintended content inside the binary file
+	            IF #parameter.clearBufferBefore THEN
+	              FILL_BLK(IN    := #EMPTY_BYTE,
+	                       COUNT := DINT_TO_UDINT(#statBufferSize - #tempBufferPosition - 1),
+	                       OUT   => #bufferByteArray[#tempBufferPosition]);
+	            END_IF;
+	            
+	            // Serialize data into buffer
+	            #tempResult := INT_TO_WORD(
+	                                       Serialize(SRC_VARIABLE := #data,
+	                                                 DEST_ARRAY => #bufferByteArray,
+	                                                 POS := #tempBufferPosition)
+	            );
+	            
+	            // After serialize, set array size pointer to numer of serialized elements
+	            #statLengthData := #tempBufferPosition;
+	            
+	            // Check if serialize parameter structure was successful, otherwise set ERROR
+	            IF #STATUS_EXECUTION_FINISHED <> #tempResult THEN
+	              #statTimestamps.file := #statTimestampDefault;
+	              #statInternal.diagnostics.status := #ERR_SERIALIZE_DATA;
+	              #statInternal.diagnostics.subfunctionStatus := #tempResult;
+	              EXIT; // Stop execution and leave block
+	            END_IF;
+	          END_IF;
+	          
+	          // Next state
+	          #statMainState := #STATE_FILE_WRITE;
+	          // ASYNCRONUS - set to true:
+	          #tempExitStateLoop := #statAsynchronusMode;
+	        END_REGION
+	        
+	      #STATE_FILE_WRITE:
+	        REGION File write - File handling
+	          // Set file handler request to true
+	          #instFileWrite(REQ    := TRUE,
+	                         Name   := #fileName,
+	                         Offset := UDINT#0,
+	                         Length := DINT_TO_UDINT(#statLengthData),
+	                         Data   := #bufferByteArray);
+	          
+	          IF #instFileWrite.Error THEN
+	            #statTimestamps.file := #statTimestampDefault;
+	            #statTimestamps.executeWrite := #statTimestampDefault;
+	            #statLengthFile := UDINT_TO_DINT(#instFileWrite.ResultLength);
+	            #statInternal.diagnostics.status := #ERR_FILE_WRITE;
+	            #statInternal.diagnostics.subfunctionStatus := #instFileWrite.Status;
+	            EXIT; // Stop execution and leave block
+	            
+	          ELSIF #instFileWrite.Done THEN
+	            #statTimestamps.executeWrite := #statTimestamps.lastCommand;
+	            
+	            #statLengthFile := UDINT_TO_DINT(#instFileWrite.ResultLength);
+	            // Next state switched by status
+	            #statInternal.diagnostics.status := #STATUS_EXECUTION_FINISHED;
+	            #statInternal.diagnostics.subfunctionStatus := 16#0000;
+	          END_IF;
+	        END_REGION
+	        
+	      #STATE_FILE_DELETE:
+	        REGION File delete
+	          // Set file handler request to true
+	          #instFileDelete(REQ  := TRUE,
+	                          Name := #fileName);
+	          
+	          IF #instFileDelete.Error THEN
+	            #statTimestamps.file := #statTimestampDefault;
+	            #statTimestamps.executeDelete := #statTimestampDefault;
+	            #statInternal.diagnostics.status := #ERR_FILE_DELETE;
+	            #statInternal.diagnostics.subfunctionStatus := #instFileDelete.Status;
+	            EXIT; // Stop execution and leave block
+	            
+	          ELSIF #instFileDelete.Done THEN
+	            #statTimestamps.file := #statTimestampDefault;
+	            #statTimestamps.executeDelete := #statTimestamps.lastCommand;
+	            // Next state switched by status
+	            #statInternal.diagnostics.status := #STATUS_EXECUTION_FINISHED;
+	            #statInternal.diagnostics.subfunctionStatus := 16#0000;
+	          END_IF;
+	        END_REGION
+	        
+	      ELSE // Undefined state in state machine reached
+	        #statInternal.diagnostics.status := #ERR_UNDEFINED_STATE;
+	    END_CASE;
+	    // if one ore more runs in the same cycle are necessary, set #tempExitStateLoop := FALSE;
+	    // Check state, if condition = TRUE --> #tempExitStateLoop = TRUE --> LEAVE LOOP
+	  UNTIL (TRUE = #tempExitStateLoop)
+	  END_REPEAT;
+	END_REGION STATE_MACHINE
+	
+	REGION OUTPUTS
+	  // Write outputs
+	  IF (#statInternal.diagnostics.status = #STATUS_EXECUTION_FINISHED) AND (#statInternal.done = FALSE) THEN // Execution finished without errors
+	    #statInternal.done := TRUE;
+	    #statInternal.busy := FALSE;
+	    #statInternal.error := FALSE;
+	    #statMainState := #STATE_NO_PROCESSING; // Switch state machine to "no processing"
+	    
+	  ELSIF (#statInternal.diagnostics.status.%X15 = TRUE) AND (#statInternal.error = FALSE) THEN // Error occurred (#statStatus is 16#8000 to 16#FFFF)
+	    #statInternal.done := FALSE;
+	    #statInternal.busy := FALSE;
+	    #statInternal.error := TRUE;
+	    // Write diagnostics
+	    #statTimestamps.lastError := #statTimestamps.lastCommand;
+	    #statInternal.diagnostics.stateNumber := #statMainState;
+	    #diagnostics := #statInternal.diagnostics;
+	    #statMainState := #STATE_NO_PROCESSING; // Switch state machine to "no processing"
+	    
+	  ELSIF (#tempExecute = FALSE) AND ((#statInternal.done = TRUE) OR (#statInternal.error = TRUE)) THEN // Reset outputs
+	    #statInternal.done := FALSE;
+	    #statInternal.busy := FALSE;
+	    #statInternal.error := FALSE;
+	    #statInternal.diagnostics.status := #STATUS_NO_CALL;
+	    #statLengthData := 0;
+	    #statLengthFile := 0;
+	  END_IF;
+	  
+	  // Write static values to outputs
+	  #done := #statInternal.done;
+	  #busy := #statInternal.busy;
+	  #error := #statInternal.error;
+	  #status := #statInternal.diagnostics.status;
+	  
+	  #dataLength := #statLengthData;
+	  
+	  #fileDoesNotExist := TRUE
+	  AND (FALSE
+	  OR #statInternal.diagnostics.status = #ERR_FILE_READ
+	  OR #statInternal.diagnostics.status = #ERR_FILE_DELETE
+	  ) AND (FALSE
+	  OR #statInternal.diagnostics.subfunctionStatus = #FILE_DELETE_PATH_NAME_NOT_EXIST
+	  OR #statInternal.diagnostics.subfunctionStatus = #FILE_DELETE_FILE_NOT_EXIST
+	  );
+	  
+	  #timestamps := #statTimestamps;
+	  
+	  ENO := #statInternal.error;
+	END_REGION OUTPUTS
+	
+END_FUNCTION_BLOCK
+

@@ -1,0 +1,144 @@
+﻿FUNCTION "LGF_CalcCRC16" : Word
+TITLE = LGF_CalcCRC16
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_Industry_Support
+FAMILY : LGF
+NAME : LGF_CRC16
+//The CRC calculation is used for error detection at data transmission. The result of a calculation returns a CRC value via the data sent. The receiver detects a faulty transmission due to the unequal CRC value. The function `LGF_CalcCRC16` uses 16 bits as the generator polynomial (mask).
+   VAR_INPUT 
+      initValue { S7_PredefinedAssignment := '16#00'} : Word;   // Start value with which the calculation is executed.  If there is no need for start value - assign 16#00
+      mask { S7_PredefinedAssignment := '16#00'} : Word;   // Generator polynomial with which the calculation is executed.  (Mask / CRC polynomial)
+      noOfElements { S7_PredefinedAssignment := '0'} : UInt;   // Number of elements to be used in CRC calculation  0 = all elements / the whole array
+   END_VAR
+
+   VAR_OUTPUT 
+      error : Bool;   // TRUE: An error occurred during the execution of the FB
+      status : Word;   // 16#0000 - 16#7FFF: Status of the FB, 16#8000 - 16#FFFF: Error identification
+   END_VAR
+
+   VAR_IN_OUT 
+      "array" : Array[*] of Byte;   // Data stream for which the CRC value will be calculated.
+   END_VAR
+
+   VAR_TEMP 
+      tempCRC : Word;   // Temp CRC checksum
+      tempLowerLimit : DInt;   // Temp Lower limit of input array
+      tempUpperLimit : DInt;   // Temp Upper limit of input array
+      tempIndexArray : DInt;   // Temp array loop index
+      tempIndexCRC : DInt;   // Temp CRC loop index
+   END_VAR
+
+   VAR CONSTANT 
+      SHIFT_ONE_BIT : UInt := 1;   // Shift the CRC Calculation by 1 bit
+      SHIFT_ONE_BYTE : UInt := 8;   // Shift by 1 byte (= 8 bits)
+      ARRAY_FIRST_DIMENSION : UInt := 1;   // First dimension in the Array
+      CRC_LOOP_LOWER_LIMIT : DInt := 0;   // Lower limit of CRC loop
+      CRC_LOOP_UPPER_LIMIT : DInt := 7;   // Upper limit of CRC loop
+      ERR_NO_OF_ELEMENTS : Word := 16#8400;   // Error: `noOfElements` exceeds the maximum number of array elements
+      STATUS_NO_ERROR : Word := 16#0000;   // No error occurred in function call
+   END_VAR
+
+
+BEGIN
+	REGION Block info header
+	  //===============================================================================
+	  // SIEMENS AG / (c)Copyright 2019
+	  //-------------------------------------------------------------------------------
+	  // Title:            LGF_CRC16
+	  // Comment/Function: This function makes a CRC calculation according
+	  //                   to the CRC-16 algorithm
+	  // Library/Family:   LGF (Library General Functions)
+	  // Author:           Siemens Digital Industry Support
+	  // Tested with:      CPU 1515F-2 PN FW:V2.6
+	  // Engineering:      TIA Portal V15.1 Update 2
+	  // Restrictions:     ENO disabled - no error handling, no failure possible
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge       | Changes applied
+	  //----------|------------|------------------------|------------------------------
+	  // 01.00.00 03.07.2018  Siemens Industry Online Support
+	  //                      First released version
+	  // 01.00.01 17.08.2018  Siemens Industry Online Support
+	  //                      Upgrade: TIA V15 Update 2
+	  // 01.00.02 23.11.2018  Siemens Industry Online Support
+	  //                      Upgrade: TIA V15.1
+	  // 01.00.03 09.10.2019  Simatic Systems Support
+	  //                      Code refactoring, comments added
+	  // 03.00.00 23.04.2020  Simatic Systems Support
+	  //                      Set version to V3.0.0, harmonize the version of the whole library
+	  // 03.00.01 12.11.2020  Simatic Systems Support
+	  //                      Insert documentation
+	  //                      Assign default start values to optional inputs - `initValue`, `mask`
+	  // 03.01.00 14.04.2023  Simatic Systems Support
+	  //                      Add input `noOfElements` to assign length to be converted different from array size 
+	  //                      Add outputs `error` and `status` display a wrong assignment to `noOfElements`
+	  //=============================================================================
+	END_REGION Block info header
+	
+	REGION DESCRIPTION
+	  (/*
+	The function calculates the CRC value from a data stream of any size. The data stream is composed of the individual elements of the array at the input/output parameter `array`. The start value `initValue` and the generator polynomial `mask` can be freely selected.
+	
+	The input `noOfELements` can be used to specify the desired number of elements for calculation, it applies:
+	
+	$NumberOfElements <= (ArrayUpperLimit - ArrayLowerUnderLimit + 1)$
+	
+	---
+	
+	Note
+	:    Various online tools are available for calculating the CRC values. The function of the block was tested with the following online tool, since it supports the input parameters `mask` (Polynomial) and `initValue` (Initial Value):
+	:    http://www.sunshine2k.de/coding/javascript/crc/crc_js.html
+	*/)
+	END_REGION DESCRIPTION
+	
+	REGION Initialization and input data processing
+	  // Defining initial value for algorithm
+	  #tempCRC := #initValue;
+	  // Input array size calculation
+	  #tempLowerLimit := LOWER_BOUND(ARR := #array, DIM := #ARRAY_FIRST_DIMENSION);
+	  #tempUpperLimit := UPPER_BOUND(ARR := #array, DIM := #ARRAY_FIRST_DIMENSION);
+	  
+	  // check paramter `noOfELements`, if gretaer than zero check if fits to array size
+	  IF #noOfElements > 0 THEN
+	    IF #noOfElements > (#tempUpperLimit - #tempLowerLimit + 1) THEN
+	      #status := #ERR_NO_OF_ELEMENTS;
+	      #error := TRUE;
+	      ENO := FALSE;
+	      #LGF_CalcCRC16 := #tempCRC;
+	      RETURN;
+	    ELSE
+	      #tempUpperLimit := #tempLowerLimit + #noOfElements - 1;
+	    END_IF;
+	  END_IF;
+	END_REGION
+	
+	REGION CRC calculation
+	  FOR #tempIndexArray := #tempLowerLimit TO #tempUpperLimit DO
+	    // Perform division using XOR function for appropriate word in array (with shift byte into MSB of 16bit CRC)
+	    #tempCRC := #tempCRC XOR SHL(IN := BYTE_TO_WORD(#array[#tempIndexArray]), N := #SHIFT_ONE_BYTE);
+	    
+	    FOR #tempIndexCRC := #CRC_LOOP_LOWER_LIMIT TO #CRC_LOOP_UPPER_LIMIT DO
+	      // Check if MSB is set
+	      IF #tempCRC.%X15 THEN
+	        // Shift left and perform division by mask polynomial using XOR function
+	        #tempCRC := SHL(IN := #tempCRC, N := #SHIFT_ONE_BIT) XOR #mask;
+	      ELSE
+	        // Shift left without division
+	        #tempCRC := SHL(IN := #tempCRC, N := #SHIFT_ONE_BIT);
+	      END_IF;
+	    END_FOR;
+	    
+	  END_FOR;
+	END_REGION
+	
+	REGION Outputs assignment
+	  #LGF_CalcCRC16 := #tempCRC;
+	  
+	  #status := #STATUS_NO_ERROR;
+	  #error := FALSE;
+	  ENO := TRUE;
+	END_REGION
+	
+END_FUNCTION
+

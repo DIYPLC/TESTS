@@ -1,0 +1,119 @@
+﻿FUNCTION "LGF_IsValueInRange" : Bool
+TITLE = LGF_IsValueInRange
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_Digital_Industries
+FAMILY : LGF
+NAME : LGF_IsValueInRange
+//The function checks whether a value is within a defined value range.  
+//The value range is defined with a set point and a range around this set point. The function calculates the low limit and high limit of the value range.
+   VAR_INPUT 
+      value : LReal;   // Value to be checked to determine whether it is within the defined value range
+      setpoint : LReal;   // Set point
+      range : LReal;   // Area where the setpoint is in range
+   END_VAR
+
+   VAR_OUTPUT 
+      overHighLimit : Bool;   // TRUE if the “value” is greater than the upper limit value
+      belowLowLimit : Bool;   // TRUE, if the “value” is less than the lower limit value
+      error : Bool;   // FALSE: No error  TRUE: An error occurred during the execution of the FB
+      status : Word;   // 16#0000-16#7FFF: Status of the FB  16#8000-16#FFFF: Error identification (see following Table)
+   END_VAR
+
+   VAR_TEMP 
+      tempHighLimit : LReal;   // Calculated high limit
+      tempLowLimit : LReal;   // Calculated low limit
+      tempValueOverHighLimit : Bool;   // Input value is over the high limit
+      tempValueUnderLowLimit : Bool;   // Input value is below the low limit
+   END_VAR
+
+   VAR CONSTANT 
+      HALF : LReal := 0.5;   // 0.5 to calculate half of the range. Used for defining high/low limit
+      STATUS_NO_ERROR : Word := 16#0000;   // Status: no error occurred
+      ERR_RANGE_LIMIT_VALUES : Word := 16#8401;   // Error: During calculating of the limit values
+   END_VAR
+
+
+BEGIN
+	REGION Block info header
+	  //=============================================================================
+	  // SIEMENS AG / (c)Copyright 2017
+	  //-------------------------------------------------------------------------------
+	  // Title:            LGF_IsValueInRange
+	  // Comment/Function: Checks if a given value is within a specified range of a given setpoint
+	  // Library/Family:   LGF(Library General Functions)
+	  // Author:           Siemens Digital Industry Support
+	  // Tested with:      S7-PLCSIM Advanced V2.0 SP1
+	  // Engineering:      TIA Portal V15 Update 2
+	  // Restrictions:     ENO disabled - error handling done by error and status
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge       | Changes applied
+	  //----------|------------|------------------------|------------------------------
+	  // 01.00.00 30.01.2017  Siemens Industry Online Support
+	  //                      First released version
+	  // 01.00.01 17.08.2018  Siemens Industry Online Support
+	  //                      Upgrade: TIA V15 Update 2
+	  // 01.00.02 23.11.2018  Siemens Industry Online Support
+	  //                      Upgrade: TIA V15.1
+	  // 01.01.00 13.11.2019  Simatic Systems Support
+	  //                      renamed from "LGF_HighLowLimit" to "LGF_IsValueInRange"
+	  //                      Code refactoring
+	  //                      error values changed, regions, comments and constant’s are added
+	  // 03.00.00 23.04.2020  Simatic Systems Support
+	  //                      Set version to V3.0.0, harmonize the version of the whole library
+	  // 03.00.01 12.11.2020  Simatic Systems Support
+	  //                      Insert documentation
+	  //=============================================================================
+	END_REGION Block info header
+	
+	REGION DESCRIPTION
+	  (/*
+	The `setpoint` and `range` variables define a range of values.  
+	The function checks whether the `value` is below, in or above the value range. The outputs `belowLowLimit`, `Ret_Val`, or `overHighLimit` show where the `value` is located.
+	
+	Figure: Principle of operation
+	
+	![LGF_IsValueInRange - Principle of operation](LGF_IsValueInRange.PNG "LGF_IsValueInRange - Principle of operation")
+	*/)
+	END_REGION DESCRIPTION
+	
+	REGION Initialization and limits check
+	  // Calculation of limits 
+	  // High limit
+	  #tempHighLimit := #setpoint + (#HALF * ABS(#range));
+	  // Low limit
+	  #tempLowLimit := #setpoint - (#HALF * ABS(#range));
+	  // Outside of data range
+	  IF ENO = false THEN
+	    #error := true;
+	    #status := #ERR_RANGE_LIMIT_VALUES;
+	    #overHighLimit := false;
+	    #belowLowLimit := false;
+	    #LGF_IsValueInRange := false;
+	    RETURN;
+	  END_IF;
+	END_REGION
+	
+	REGION Limits evaluation
+	  // Check if the value is higher then the high limit
+	  #tempValueOverHighLimit := #value > #tempHighLimit;
+	  
+	  // Check if the value is lower then the low limit
+	  #tempValueUnderLowLimit := #value < #tempLowLimit;
+	END_REGION
+	
+	REGION Writing to outputs
+	  // Check if the value is in range and write outputs
+	  #LGF_IsValueInRange := NOT (#tempValueOverHighLimit OR #tempValueUnderLowLimit);
+	  #overHighLimit := #tempValueOverHighLimit;
+	  #belowLowLimit := #tempValueUnderLowLimit;
+	  
+	  #error := FALSE;
+	  #status := #STATUS_NO_ERROR;
+	  // ENO mechanism is not used
+	  ENO := TRUE;
+	END_REGION
+	
+END_FUNCTION
+

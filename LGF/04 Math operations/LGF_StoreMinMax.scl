@@ -1,0 +1,95 @@
+﻿FUNCTION_BLOCK "LGF_StoreMinMax"
+TITLE = LGF_StoreMinMax
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_Digital_Industries
+FAMILY : LGF
+NAME : LGF_MinMaxHistory
+//This function reads-in a value of a variable at each call and outputs the maximum and minimum value that has been read in since the first call.  
+//The evaluation can be reset if necessary. The block supports the data type LReal.
+   VAR_INPUT 
+      value : LReal := 0.0;   // Value to be compared with min/max
+      reset : Bool := false;   // TRUE: The min/max history is reset and the evaluation starts over again.
+   END_VAR
+
+   VAR_OUTPUT 
+      minValue { ExternalWritable := 'False'} : LReal := 0.0;   // Minimum value since first call or `reset`.
+      maxValue { ExternalWritable := 'False'} : LReal := 0.0;   // Maximum values since first call or `reset`.
+   END_VAR
+
+   VAR 
+      statStoreMinValue { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : LReal := #LREAL_MAX;   // Static memory to store the minimum value
+      statStoreMaxValue { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : LReal := #LREAL_MIN;   // Static memory to store the maximum value
+   END_VAR
+
+   VAR CONSTANT 
+      LREAL_MAX : LReal := 1.7976931348623157e+308;   // Maximum long real value for reset / restart the recording
+      LREAL_MIN : LReal := -1.7976931348623157e+308;   // Minimum long real value for reset / restart the recording
+   END_VAR
+
+
+BEGIN
+	REGION Block info header
+	  //=============================================================================
+	  // SIEMENS AG / (c)Copyright 2017
+	  //-----------------------------------------------------------------------------
+	  // Title:            LGF_MinMaxHistory
+	  // Comment/Function: This function block saves the minimum and maximum value,
+	  //                   since the start of the block.
+	  //                   ENO disabled - no error handling, no failure possible
+	  // Library/Family:   LGF(Library General Functions)
+	  // Author:           Siemens Digital Industry Support
+	  // Tested with:      S7-PLCSIM Advanced V2.0 SP1
+	  // Engineering:      TIA Portal V15 Update 2
+	  // Restrictions:     -
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge       | Changes applied
+	  //----------|------------|------------------------|------------------------------
+	  // 01.00.00 19.08.2015  Siemens Industry Online Support
+	  //                      First released version
+	  // 01.00.01 02.01.2017  Siemens Industry Online Support
+	  //                      Upgrade: TIA Portal V14 Update 1
+	  //                      Code optimization
+	  // 01.00.02 17.08.2018  Siemens Industry Online Support
+	  //                      Upgrade: TIA V15 Update 2
+	  // 01.00.03 23.11.2018  Siemens Industry Online Support
+	  //                      Upgrade: TIA V15.1
+	  // 01.00.04 09.10.2019  Simatic Systems Support
+	  //                      Regions, comments and constants are added
+	  // 03.00.00 23.04.2020  Simatic Systems Support
+	  //                      Set version to V3.0.0, harmonize the version of the whole library
+	  // 03.00.01 04.02.2021  Simatic Systems Support
+	  //                      Insert documentation
+	  //=============================================================================
+	END_REGION
+	
+	REGION Compare values
+	  // Save min value
+	  IF (#value < #statStoreMinValue) THEN
+	    #statStoreMinValue := #value;
+	  END_IF;
+	  
+	  // Save max value
+	  IF (#value > #statStoreMaxValue) THEN
+	    #statStoreMaxValue := #value;
+	  END_IF;
+	  
+	  // If reset is TRUE, min and max value are set to #LREAL_MAX and #LREAL_MIN respectively
+	  IF #reset THEN
+	    #statStoreMinValue := #LREAL_MAX;
+	    #statStoreMaxValue := #LREAL_MIN;
+	  END_IF;
+	END_REGION
+	
+	REGION Writting to outputs
+	  #minValue := #statStoreMinValue;
+	  #maxValue := #statStoreMaxValue;
+	  
+	  //ENO mechanism is not used
+	  ENO := TRUE;
+	END_REGION
+	
+	
+END_FUNCTION_BLOCK
+

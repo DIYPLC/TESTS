@@ -1,0 +1,350 @@
+﻿FUNCTION "LGF_GetCalendarDay" : DInt
+TITLE = LGF_GetCalendarDay
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_Digital_Industry
+FAMILY : LGF
+NAME : LGF_GetCalendarDay
+//This function uses the specified date to calculate the number of days that have passed since the beginning of the year (1st January).
+//
+//The function is used in the functions “LGF_GetCalendarWeek_ISO” and “LGF_GetCalendarWeek_US”.
+   VAR_INPUT 
+      "date" {InstructionName := 'DTL'; LibVersion := '1.0'} : DTL;   // Date for the calculation of the calendar days since 1 January.
+   END_VAR
+
+   VAR_OUTPUT 
+      error : Bool;   // FALSE: No error / TRUE: An error occurred during the execution of the FB
+      status : Word;   // 16#0000-16#7FFF: Status of the FB / 16#8000-16#FFFF: Error identification (see following Table)
+   END_VAR
+
+   VAR_TEMP 
+      tempDaysPassed : DInt;   // Temp tag for the number of days past
+      tempDate {InstructionName := 'DTL'; LibVersion := '1.0'} : DTL;   // Temp variable to store date for calculations
+   END_VAR
+
+   VAR CONSTANT 
+      FIRST_DAY : USInt := 1;   // 1st of a month
+      LAST_DAY : USInt := 31;   // 31st of a month
+      JANUARY : USInt := 1;   // Month number for January
+      DECEMBER : USInt := 12;   // Month number for December
+      TIME_ZERO_FORCE_UPDATE : Time := t#0d;   // By adding zero an update of DTL Tag is forced and auto checks are applied
+      ONE_DAY : DInt := 1;   // One single day for incrementing
+      STATUS_NO_ERROR : Word := 16#0000;   // Status: no error occurred
+      ERR_LIM_DATE : Word := 16#8201;   // Date out of the range, has to be greater than <1970-01-01 ; 2262-04-11>
+   END_VAR
+
+
+BEGIN
+	REGION BLOCK INFO HEADER
+	  //===============================================================================
+	  // SIEMENS AG / (c)Copyright 2019
+	  //-------------------------------------------------------------------------------
+	  // Title:            LGF_GetCalendarDay
+	  // Comment/Function: This function calculates for a date the passed days since 1st January.
+	  // Library/Family:   LGF(Library General Functions)
+	  // Author:           Siemens Digital Industry Support
+	  // Tested with:      S7-PLCSIM Advanced V2.0 SP1
+	  // Engineering:      TIA Portal V15.1
+	  // Restrictions:     ENO disabled - error handling done with error and status
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge       | Changes applied
+	  //----------|------------|------------------------|------------------------------
+	  // 01.00.00 16.07.2019  Simatic Systems Support
+	  //                      First release
+	  //                      ENO used for internal error handling, interface has error and status
+	  //                      temp tag naming, insert constant
+	  // 03.00.00 23.04.2020  Simatic Systems Support
+	  //                      Set version to V3.0.0, harmonize the version of the whole library
+	  // 03.00.01 19.01.2020  Simatic Systems Support
+	  //                      Insert documentation
+	  //=============================================================================
+	END_REGION BLOCK INFO HEADER
+	
+	REGION INITIALISATION
+	  #tempDate := #date;
+	  #tempDaysPassed := 0;
+	END_REGION
+	
+	REGION COUNT DAYS
+	  // Check #date
+	  // adding zero forces the PLC to update the tag and eno check
+	  #tempDate := #tempDate + #TIME_ZERO_FORCE_UPDATE;
+	  IF ENO = FALSE THEN
+	    #error := TRUE;
+	    #status := #ERR_LIM_DATE;
+	    #LGF_GetCalendarDay := #tempDaysPassed;
+	    RETURN;
+	  END_IF;
+	  
+	  // Weekday of 1st January in the current year
+	  #tempDate.MONTH := #JANUARY;
+	  #tempDate.DAY := #FIRST_DAY;
+	  // adding zero forces the PLC to update the tag
+	  // in this case especially the weekday
+	  #tempDate := #tempDate + #TIME_ZERO_FORCE_UPDATE;
+	  
+	  // Days passed in the year since 1st January, "date" included
+	  #tempDaysPassed := DATE_TO_DINT(DTL_TO_DATE(#date)) - DATE_TO_DINT(DTL_TO_DATE(#tempDate)) + #ONE_DAY;
+	END_REGION
+	
+	REGION OUTPUTS
+	  #error := FALSE;
+	  #status := #STATUS_NO_ERROR;
+	  #LGF_GetCalendarDay := #tempDaysPassed;
+	  
+	  // ENO is not used, forced to TRUE
+	  ENO := TRUE;
+	END_REGION
+	
+END_FUNCTION
+
+FUNCTION "LGF_GetCalendarWeek_ISO" : DInt
+TITLE = LGF_GetCalendarWeek_ISO
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_Digital_Industry
+FAMILY : LGF
+NAME : LGF_GetCalendarWeek_ISO
+//This function uses the specified date to calculate the calendar week and the number of days that have passed since the beginning of the year for ISO 8601 European countries.
+   VAR_INPUT 
+      "date" {InstructionName := 'DTL'; LibVersion := '1.0'} : DTL;   // Date used to calculate the calendar week and days since 1 January
+   END_VAR
+
+   VAR_OUTPUT 
+      calendarDay : DInt;   // Days past since January 1st on given date
+      error : Bool;   // FALSE: No error / TRUE: An error occurred during the execution of the FB
+      status : Word;   // 16#0000-16#7FFF: Status of the FB / 16#8000-16#FFFF: Error identification (see following Table)
+   END_VAR
+
+   VAR_TEMP 
+      tempDate {InstructionName := 'DTL'; LibVersion := '1.0'} : DTL;   // Temp variable for date calculations
+      tempCurrentYearWeekday1Jan : UDInt;   // Temp weekday of 1st January in the current year
+      tempNextYearWeekday1Jan : UDInt;   // Temp weekday of 1st January in the next year
+      tempCurrentYearWeekday31Dec : UDInt;   // Temp weekday of 31st December in the current year
+      tempPrevYearWeekday1Jan : UDInt;   // Temp weekday of 1st January in the previous year
+      tempPrevYearWeekday31Dec : UDInt;   // Temp weekday of 31st December in the previous year
+      tempDaysCorr : DInt;   // Temp correction of the number of #tempDays depending on the weekday of 1st January
+      tempWeek : DInt;   // Temp number of the week
+      tempDays : DInt;   // Temp number of the days
+      tempCurrentYearIsLeapyear : Bool;   // Temp check if current year is a leap year (29. February/366 days)
+      tempPrevYearIsLeapyear : Bool;   // Temp check if previous year is a leap year (29. February/366 days)
+      tempYearCurrentYear : UInt;   // Temp actual / current year
+      tempPreviousYear : UInt;   // Temp previous year
+      tempNextYear : UInt;   // Temp next year
+      tempIsCurrentYearWith53Weeks : Bool;   // Temp variable with info about current year. Has 53 weeks?
+      tempIsPrevYearWith53Weeks : Bool;   // Temp variable with info about previous year. Has 53 weeks?
+   END_VAR
+
+   VAR CONSTANT 
+      SUNDAY : UDInt := 1;   // Weekday: Sunday
+      MONDAY : UDInt := 2;   // Weekday: Monday
+      TUESDAY : UDInt := 3;   // Weekday: Tuesday
+      WEDNESDAY : UDInt := 4;   // Weekday: Wednesday
+      THURSDAY : UDInt := 5;   // Weekday: Thursday
+      FRIDAY : UDInt := 6;   // Weekday: Friday
+      SATURDAY : UDInt := 7;   // Weekday: Saturday
+      FIRST_DAY : USInt := 1;   // 1st of a month is the first day
+      LAST_DAY : USInt := 31;   // 31st of a month is the last day of a month
+      JANUARY : USInt := 1;   // Month number for January
+      DECEMBER : USInt := 12;   // Month number for December
+      ONE_YEAR : UInt := 1;   // Number of years: 1 - Const for calculation
+      ONE_DAY : DInt := 1;   // Number of days: 1 - Const for calculation
+      TWO_DAYS : DInt := 2;   // Number of days: 2 - Const for calculation
+      THREE_DAYS : DInt := 3;   // Number of days: 3 - Const for calculation
+      FOUR_DAYS : DInt := 4;   // Number of days: 4 - Const for calculation
+      FIVE_DAYS : DInt := 5;   // Number of days: 5 - Const for calculation
+      SEVEN_DAYS : DInt := 7;   // Number of days: 7 - Const for calculation
+      ONE_WEEK : DInt := 1;   // Number of weeks: 1 - Const for calculation
+      WEEK_1 : DInt := 1;   // Week number 1
+      WEEK_52 : DInt := 52;   // Week number 52
+      WEEK_53 : DInt := 53;   // Week number 53
+      WEEK_54 : DInt := 54;   // Week number 54
+      LEAP_YEAR_CHECK_4 : UInt := 4;   // Leap year - year that can be exactly divided by 4
+      LEAP_YEAR_CHECK_100 : UInt := 100;   // Not a leap year - year that can be exactly divided by 100
+      LEAP_YEAR_CHECK_400 : UInt := 400;   // Leap year - year that can be exactly divided by 400
+      STATUS_NO_ERROR : Word := 16#0000;   // Status: no error occurred
+      ERR_LIM_DATE : Word := 16#8201;   // Date out of the range, has to be greater than <1970-01-01 ; 2262-04-11>
+   END_VAR
+
+
+BEGIN
+	REGION BLOCK INFO HEADER
+	  //===============================================================================
+	  // SIEMENS AG / (c)Copyright 2019
+	  //-------------------------------------------------------------------------------
+	  // Title:            LGF_GetCalendarWeek_ISO
+	  // Comment/Function: This function calculates the week number for ISO 8601 following countries
+	  //                   - new week starts whith Monday
+	  //                   - the week number 1, is the week which contains the first Thursday of the Year
+	  //                   - a year has 52 or 53 weeks
+	  // Library/Family:   LGF(Library General Functions)
+	  // Author:           Siemens Digital Industry Support
+	  // Tested with:      S7-PLCSIM Advanced V2.0 SP1
+	  // Engineering:      TIA Portal V14 Upd 1
+	  // Restrictions:     ENO disabled - error handling done with error and status
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge       | Changes applied
+	  //----------|------------|------------------------|------------------------------
+	  // 01.00.00 27.01.2017  Siemens Industry Online Support
+	  //                      First released version
+	  // 01.00.01 17.08.2018  Siemens Industry Online Support
+	  //                      Upgrade: TIA V15 Update 2
+	  // 01.00.02 23.11.2018  Siemens Industry Online Support
+	  //                      Upgrade: TIA V15.1
+	  // 01.00.03 16.07.2019  Simatic Systems Support
+	  //                      Renamed from LGF_CalenderWeek to LGF_CalenderWeek_ISO
+	  //                      Function split into week for ISO and US Format and as well day counter.
+	  //                      Result passed as return value.
+	  //                      Standard header implemented
+	  //                      Constant, temp variable naming
+	  //                      Update function call of CalendarDay
+	  // 03.00.00 23.04.2020  Simatic Systems Support
+	  //                      Set version to V3.0.0, harmonize the version of the whole library
+	  // 03.00.01 19.01.2020  Simatic Systems Support
+	  //                      Insert documentation
+	  //=============================================================================
+	END_REGION BLOCK INFO HEADER
+	
+	REGION DESCRIPTION
+	  (/*
+	##### Counting method for European countries in accordance with ISO 8601
+	* Calendar weeks have 7 days, start on a Monday, and they are counted continuously throughout the year
+	* Calendar week 1 of a year is the week that contains the first Thursday.
+	* Each year has either 52 or 53 calendar weeks.
+	* A year has 53 calendar weeks if the following characteristics apply:
+	  -  A common year begins on a Thursday and ends on a Thursday.
+	  -  A leap year begins either on a Wednesday and ends on a Thursday or it begins on a Thursday and ends on a Friday.
+	* The 29th, 30th and 31st December can belong to the calendar week 1 of the following year.
+	* The 1st, 2nd, and 3rd January can still belong to the last calendar week of the previous year.
+	
+	*/)
+	END_REGION DESCRIPTION
+	
+	REGION INITIALISATION
+	  #tempDays := 0;
+	  #tempWeek := 0;
+	END_REGION
+	
+	REGION COUNT DAYS
+	  // Days passed in the year since 1st January, "date" included
+	  #tempDays := "LGF_GetCalendarDay"("date" := #date, error => #error, status => #status);
+	  IF #error THEN
+	    #LGF_GetCalendarWeek_ISO := #tempWeek;
+	    RETURN;
+	  END_IF;
+	END_REGION
+	
+	REGION COUNT WEEKS
+	  // Year of actual year, previous year and next year
+	  #tempYearCurrentYear := #date.YEAR;
+	  #tempPreviousYear := #date.YEAR - #ONE_YEAR;
+	  #tempNextYear := #date.YEAR + #ONE_YEAR;
+	  
+	  // Check if current year is a leap year (29. February/366 days)
+	  #tempCurrentYearIsLeapyear := (((#tempYearCurrentYear MOD #LEAP_YEAR_CHECK_4 = 0) AND NOT (#tempYearCurrentYear MOD #LEAP_YEAR_CHECK_100 = 0)) OR (#tempYearCurrentYear MOD #LEAP_YEAR_CHECK_400 = 0));
+	  // Check if previous year is a leap year (29. February/366 days)
+	  #tempPrevYearIsLeapyear := (((#tempPreviousYear MOD #LEAP_YEAR_CHECK_4 = 0) AND NOT (#tempPreviousYear MOD #LEAP_YEAR_CHECK_100 = 0)) OR (#tempPreviousYear MOD #LEAP_YEAR_CHECK_400 = 0));
+	  
+	  // Weekday of 1st January in the current year
+	  #tempDate := #date;
+	  #tempDate.MONTH := #JANUARY;
+	  #tempDate.DAY := #FIRST_DAY;
+	  #tempDate := #tempDate + T#0ms;
+	  #tempCurrentYearWeekday1Jan := #tempDate.WEEKDAY;
+	  
+	  // Weekday of 1st January in the next year
+	  #tempDate.YEAR := #tempNextYear;
+	  #tempDate.MONTH := #JANUARY;
+	  #tempDate.DAY := #FIRST_DAY;
+	  #tempDate := #tempDate + T#0ms;
+	  #tempNextYearWeekday1Jan := #tempDate.WEEKDAY;
+	  
+	  // Weekday of 31st December in the current year
+	  #tempDate := #date;
+	  #tempDate.MONTH := #DECEMBER;
+	  #tempDate.DAY := #LAST_DAY;
+	  #tempDate := #tempDate + T#0ms;
+	  #tempCurrentYearWeekday31Dec := #tempDate.WEEKDAY;
+	  
+	  // Weekday of 1st January in the previous year
+	  #tempDate.YEAR := #tempPreviousYear;
+	  #tempDate.MONTH := #JANUARY;
+	  #tempDate.DAY := #FIRST_DAY;
+	  #tempDate := #tempDate + T#0ms;
+	  #tempPrevYearWeekday1Jan := #tempDate.WEEKDAY;
+	  
+	  // Weekday of 31st December in the previous year
+	  #tempDate.YEAR := #tempPreviousYear;
+	  #tempDate.MONTH := #DECEMBER;
+	  #tempDate.DAY := #LAST_DAY;
+	  #tempDate := #tempDate + T#0ms;
+	  #tempPrevYearWeekday31Dec := #tempDate.WEEKDAY;
+	  
+	  // Calculate the week number for european countries (ISO 8601)
+	  // - new week begins whith Monday
+	  // - the week number 1, is the week which contains the first Thursday of the Year
+	  // - a year has 52 or 53 weeks
+	  
+	  // Check if previous year had 53 weeks
+	  #tempIsPrevYearWith53Weeks := (#tempPrevYearWeekday1Jan = #THURSDAY AND #tempPrevYearWeekday31Dec = #THURSDAY AND (NOT #tempPrevYearIsLeapyear))
+	  OR (#tempPrevYearIsLeapyear AND ((#tempPrevYearWeekday1Jan = #WEDNESDAY AND #tempPrevYearWeekday31Dec = #THURSDAY) OR (#tempPrevYearWeekday1Jan = #THURSDAY AND #tempPrevYearWeekday31Dec = #FRIDAY)));
+	  // Check if current year has 53 weeks
+	  #tempIsCurrentYearWith53Weeks := (#tempCurrentYearWeekday1Jan = #THURSDAY AND #tempCurrentYearWeekday31Dec = #THURSDAY AND (NOT #tempCurrentYearIsLeapyear))
+	  OR (#tempCurrentYearIsLeapyear AND ((#tempCurrentYearWeekday1Jan = #WEDNESDAY AND #tempCurrentYearWeekday31Dec = #THURSDAY) OR (#tempCurrentYearWeekday1Jan = #THURSDAY AND #tempCurrentYearWeekday31Dec = #FRIDAY)));
+	  
+	  // Correction of the number of #tempDays depending on the weekday of 1st January 
+	  CASE #tempCurrentYearWeekday1Jan OF
+	    #SUNDAY:
+	      #tempDaysCorr := #tempDays - #TWO_DAYS;
+	    #MONDAY:
+	      #tempDaysCorr := #tempDays - #ONE_DAY;
+	    #TUESDAY:
+	      #tempDaysCorr := #tempDays;
+	    #WEDNESDAY:
+	      #tempDaysCorr := #tempDays + #ONE_DAY;
+	    #THURSDAY:
+	      #tempDaysCorr := #tempDays + #TWO_DAYS;
+	    #FRIDAY:
+	      #tempDaysCorr := #tempDays - #FOUR_DAYS;
+	    #SATURDAY:
+	      #tempDaysCorr := #tempDays - #THREE_DAYS;
+	    ELSE
+	      ;
+	  END_CASE;
+	  
+	  IF #tempDaysCorr < 0 THEN
+	    // 1., 2. and 3. January can belong to the last week of the previous year
+	    IF #tempIsPrevYearWith53Weeks THEN
+	      #tempWeek := #WEEK_53;
+	    ELSE
+	      #tempWeek := #WEEK_52;
+	    END_IF;
+	  ELSE
+	    // calculate the number of the week
+	    #tempWeek := #tempDaysCorr / #SEVEN_DAYS + #ONE_WEEK;
+	    
+	    // 29., 30. and 31. December can belong to the first week of the next year
+	    IF #tempWeek = #WEEK_53 THEN
+	      IF #tempIsCurrentYearWith53Weeks THEN
+	        #tempWeek := #WEEK_53;
+	      ELSE
+	        #tempWeek := #WEEK_1;
+	      END_IF;
+	    END_IF;
+	  END_IF;
+	END_REGION
+	
+	REGION OUTPUTS
+	  #calendarDay := #tempDays;
+	  #error := FALSE;
+	  #status := #STATUS_NO_ERROR;
+	  #LGF_GetCalendarWeek_ISO := #tempWeek;
+	  
+	  // ENO is not used, forced to TRUE
+	  ENO := TRUE;
+	END_REGION
+	
+END_FUNCTION
+

@@ -1,0 +1,60 @@
+﻿FUNCTION "LGF_BitTest" : Bool
+TITLE = LGF_BitTest
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_SIMATIC_Systems_Support
+FAMILY : LGF
+NAME : LGF_BitTest
+//This block checks whether a bit is TRUE or FALSE at a given position in a variable of the data type DWORD.  
+//Alternatively, Word and Byte can be used instead of DWord by converting the passed parameter with, for example, BYTE_TO_DWORD and the result with DWORD_TO_BYTE.
+   VAR_INPUT 
+      value : DWord;   // Tag where the bit has to be tested
+      bitNo : USInt;   // bit number to test in "value" parameter
+   END_VAR
+
+   VAR CONSTANT 
+      BINARY_ZERO : DWord := 16#0000;   // Binary zero to compare shifted result
+      TRUE_BOOL_BIT : DWord := 16#0001;   // Just one bit which is true, to shift in Dword for masking
+      MAX_NO_OF_BITS : USInt := 32;   // Maximum bits in a DWord = 32
+   END_VAR
+
+
+BEGIN
+	REGION BLOCK INFO HEADER
+	  //===============================================================================
+	  // SIEMENS AG / (c)Copyright 2019
+	  //-------------------------------------------------------------------------------
+	  // Title:            LGF_BitTest
+	  // Comment/Function: Test bit in DWord if it is 1 or 0 respectively
+	  //                   returning TRUE or FALSE
+	  //                   can be used for Word and Byte as well, by convert
+	  //                   the passed paramter and the result using for e.g. Dword_to_Byte
+	  // Library/Family:   LGF (Library General Functions)
+	  // Author:           Siemens Digital Industry
+	  // Tested with:      CPU1212C DC/DC/DC FW:V4.2
+	  // Engineering:      TIA Portal V15.1
+	  // Restrictions:     ENO not in use, set to true, no error handling
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge         | Changes applied
+	  // 01.00.00 | 06.06.2015 | Siemens Industry Support | first release
+	  // 03.00.00 | 23.04.2020 | Siemens Industry Support | Set version to V3.0.0
+	  //                         harmonize the version of the whole library
+	  // 03.00.01 | 19.01.2021 | Simatic Systems Support
+	  //                         Insert documentation
+	  //===============================================================================
+	END_REGION
+	
+	REGION Logic
+	  // test the bit in tag
+	  // shift one true bit into the selected position
+	  // compare with input value with "AND" logic and check if different to zero
+	  // result is true if bit is true, otherwise it is false
+	  #LGF_BitTest := (#BINARY_ZERO <> (#value AND SHL(IN := #TRUE_BOOL_BIT, N := (#bitNo MOD #MAX_NO_OF_BITS))));
+	  
+	  // no error handling needed
+	  ENO := TRUE;
+	END_REGION
+	
+END_FUNCTION
+

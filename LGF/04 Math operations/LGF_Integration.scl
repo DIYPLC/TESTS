@@ -1,0 +1,217 @@
+﻿FUNCTION_BLOCK "LGF_Integration"
+TITLE = LGF_Integration
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_Digital_Industries
+FAMILY : LGF
+NAME : LGF_Integration
+//The function approximately calculates the area under a function curve (the integral). The function curve is transferred as an analog `value` (LReal) which varies over time. The integral value is output on `integral`.  
+//The implementation is based on the trapezoidal rule and uses second [s] as time base, e.g. speed [m/s].
+   VAR_INPUT 
+      enable : Bool;   // Enables integral calculation  If this input is set to the value `FALSE`, the integral calculation is stopped and the `integral` output shows the last calculated value.
+      value : LReal;   // Analog value of the continuous function curve, based on [s], (e.g. [volume flow/s])
+      reset : Bool;   // Sets the output “integral” to “0.0”.
+   END_VAR
+
+   VAR_OUTPUT 
+      integral { ExternalWritable := 'False'} : LReal;   // Integral value
+      error { ExternalWritable := 'False'} : Bool;   // FALSE: No error  TRUE: An error occurred during the execution of the FB
+      status { ExternalWritable := 'False'} : Word;   // 16#0000-16#7FFF: Status of the FB  16#8000-16#FFFF: Error identification (see following Table)
+      subfunctionStatus { ExternalWritable := 'False'} : Word;   // Status or return value of called FB's, FC's and system blocks
+   END_VAR
+
+   VAR 
+      statLastTime {InstructionName := 'DTL'; LibVersion := '1.0'; ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : DTL;   // System time from previous execution of the function
+      statTimeDiffrence { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : LReal;   // Time difference between the calls
+      statInputOldValue { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : LReal;   // Input value from the previous execution of the function
+      statIntegral { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : LReal;   // Caluclated integral value
+      statEnablePrevious { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Previous value of `enable`
+   END_VAR
+
+   VAR_TEMP 
+      tempSysTime {InstructionName := 'DTL'; LibVersion := '1.0'} : DTL;   // Read System time
+      tempCalculation : LReal;   // Temporary variable used for passing values between calculations
+      tempRetval : Word;   // Return value of system function
+   END_VAR
+
+   VAR CONSTANT 
+      CLEAR_TIME {InstructionName := 'DTL'; LibVersion := '1.0'} : DTL;   // Empty DTL, to clear last saved time
+      MILLISECOND_PER_SECOND : LReal := 1000.0;   // One second writen in miliseconds
+      NANOSEC_PER_SEC : LReal := 1000000000.0;   // Conversion for converting nanoseconds into seconds
+      DIVIDE_BY_TWO : LReal := 2.0;   // Constant for devision by 2 / Half the number
+      ZERO : LReal := 0.0;   // Zero constant for initialization and resetting variables
+      STATUS_EXECUTION_FINISHED_NO_ERROR : Word := 16#0000;   // Status: No error in the function during execution
+      SUB_STATUS_NO_ERROR : Word := 16#0000;   // Status: No error in the called subfunction function
+      ERR_READ_SYS_TIME : Word := 16#8600;   // Error: System time FC `RD_SYS_T` returned an error when excuting - check `subFunctionStatus` code
+      ONE_SECOND : LReal := 1.0;   // Constant of one second
+   END_VAR
+
+
+BEGIN
+	REGION Block info header
+	  //============================================================================
+	  // SIEMENS AG / (c)Copyright 2025
+	  //----------------------------------------------------------------------------
+	  // Title:            LGF_Integration
+	  // Comment/Function: Integrates the input value
+	  //                   integration by trapezoidal rule
+	  // Library/Family:   LGF(Library General Functions)
+	  // Author:           Siemens Digital Industry Support
+	  // Tested with:      S7-PLCSIM Advanced V4.0 / S7-1215
+	  // Engineering:      TIA Portal V17 
+	  // Restrictions:     ENO disabled - no error handling by error and status
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //----------|------------|------------------------|----------------------------
+	  // Version  | Date       | Expert in charge       | Changes applied
+	  //----------|------------|------------------------|----------------------------
+	  // 01.00.00 17.02.2017  Siemens Industry Online Support
+	  //                      First released version
+	  // 01.00.01 17.08.2018  Siemens Industry Online Support
+	  //                      Upgrade: TIA V15 Update 2
+	  // 01.00.02 23.11.2018  Siemens Industry Online Support
+	  //                      Upgrade: TIA V15.1
+	  // 01.01.00 12.11.2019  Simatic Systems Support
+	  //                      Regions, comments and constants are added, code refactored
+	  // 03.00.00 23.04.2020  Simatic Systems Support
+	  //                      Set version to V3.0.0, harmonize the version of the whole library
+	  // 03.00.01 09.02.2021  Simatic Systems Support
+	  //                      Insert documentation
+	  // 03.00.02 07.06.2021  Simatic Systems Support
+	  //                      Fix bug - incompatibility with S7-1200 and LTIME
+	  // 03.01.00 11.07.2025  Simatic Systems Support
+	  //                      Fix bug - Time measurement and calculation for nanoseconds fixed
+	  //                      Fix Wording/Bug - Time measurement scaling [ms] / [s] - timing for calculatiuon is bnased on seconds 
+	  //=============================================================================
+	END_REGION Block info header
+	
+	REGION DESCRIPTION
+	  (/*
+	NOTE
+	:    The status of called commands is output in `subFunctionStatus`. In this case, the output value in `status` indicates which command caused the error. In this case, refer to the TIA Portal Online Help section for information on the respective commands.
+	
+	---
+	
+	The integral calculation includes the summation of those trapezoidal areas that span between the last two function values on the `value` input and the time. The elapsed time is calculated via the system time of the CPU. This trapezoidal area is identical to the product of the mean value of the two process values and the time interval.
+	
+	---
+	
+	NOTE
+	:    The calculation takes [s] as time base. So the analoge value hase to use the same time base, e.g. speed [m/s].
+	
+	---
+	
+	$$
+	 A = \frac{1}{2} * (F_{t_1}+F_{t_0}) * (t_1-t_0) + \frac{1}{2} * (F_{t_2}+F_{t_1}) * (t_2-t_1) + ...
+	$$
+	
+	Figure: Principle of operation
+	
+	![LGF_Integration - Principle of operation](LGF_Integration.PNG "LGF_Integration - Principle of operation")
+	
+	Start the integral calculation for the inputvalue at the parameter `value`:
+	* Set the parameter `enable` to the value `TRUE`
+	* Set the parameter `reset` to the value `FALSE`
+	
+	If the parameter `enable` is set to the value `FALSE`, the integral calculation is stopped and the output `integral` outputs the last calculated value.  
+	If the parameter `reset` is set to the value `TRUE`, the output `integral` is reset to `0.0`
+	*/)
+	END_REGION DESCRIPTION
+	
+	//Reset region must be before the enable region so that even if the function disabled, the user can reset the values.
+	REGION Reset the function
+	  IF #reset THEN
+	    #statInputOldValue := #ZERO;
+	    #statIntegral := #ZERO;
+	    
+	    // Clear LastTime value.
+	    // Initial condition - first Delta time will be 0.
+	    #statLastTime := #CLEAR_TIME;
+	    
+	    #integral := #ZERO;
+	    #error := false;
+	    #status := #STATUS_EXECUTION_FINISHED_NO_ERROR;
+	    #subfunctionStatus := #SUB_STATUS_NO_ERROR;
+	    ENO := TRUE; //ENO mechanism is not used because of error and status
+	    RETURN;
+	  END_IF;
+	END_REGION Reset the function
+	
+	REGION Enable/Disable integral calculation
+	  IF NOT #enable THEN
+	    #statInputOldValue := #ZERO;
+	    #statEnablePrevious := #enable;
+	    
+	    // Clear LastTime value.
+	    // If it is not cleared when the function is enabled again,
+	    // the first value will be multiplied with the time difference of the whole disable time
+	    // Initial condition - first Delta time will be 0.
+	    #statLastTime := #CLEAR_TIME;
+	    
+	    #integral := #statIntegral;
+	    #error := false;
+	    #status := #STATUS_EXECUTION_FINISHED_NO_ERROR;
+	    #subfunctionStatus := #SUB_STATUS_NO_ERROR;
+	    ENO := TRUE; //ENO mechanism is not used because of error and status
+	    RETURN;
+	  END_IF;
+	END_REGION Enable/Disable integral calculation
+	
+	REGION Get system time
+	  // Read system time
+	  #tempRetval := INT_TO_WORD(RD_SYS_T(OUT => #tempSysTime));
+	  
+	  // in case of rising edge, reset old time to actual time
+	  // This results in the first calcualtion step adding ZERO to the integral value,
+	  // as we do not have to diffrent points for calculation at this time...
+	  IF #enable AND NOT #statEnablePrevious THEN
+	    #statLastTime := #tempSysTime;
+	  END_IF;
+	  
+	  // Error Handling read system time
+	  IF (#tempRetval > #SUB_STATUS_NO_ERROR) THEN
+	    #integral := #statIntegral;
+	    #error := TRUE;
+	    #status := #ERR_READ_SYS_TIME;
+	    #subfunctionStatus := #tempRetval;
+	    ENO := TRUE; //ENO mechanism is not used because of error and status
+	    RETURN;
+	  END_IF;
+	END_REGION
+	
+	REGION Calculating the integral
+	  // Calculate time difference between last and actual time
+	  // coverting from DTL via time and DInt to Real
+	  // scale from millisecond to second
+	  #statTimeDiffrence := DINT_TO_LREAL(UDINT_TO_DINT(#tempSysTime.NANOSECOND) - UDINT_TO_DINT(#statLastTime.NANOSECOND)) / #NANOSEC_PER_SEC;
+	  
+	  // just in case the new nanoseconds counter is less than the old one we need to add one second
+	  IF #statTimeDiffrence < #ZERO THEN
+	    #statTimeDiffrence += #ONE_SECOND;
+	  END_IF;
+	  
+	  // integration by trapezoidal rule
+	  // add LastScalIn to ScalIn
+	  // divide by two --> avarage of both - old and actual value
+	  // multiply with time delta --> area unterneath the both borders
+	  #tempCalculation := (#value + #statInputOldValue) * #statTimeDiffrence / #DIVIDE_BY_TWO;
+	  
+	  // Calculate new integral by adding the new/actual value to the old value
+	  #statIntegral += #tempCalculation;
+	  
+	  // Write actual to last time
+	  #statLastTime := #tempSysTime;
+	  // Save last input value for next iteration
+	  #statInputOldValue := #value;
+	  // Save previous value of enable
+	  #statEnablePrevious := #enable;
+	END_REGION Calculating the integral
+	
+	REGION Write outputs
+	  #integral := #statIntegral;
+	  #error := false;
+	  #status := #STATUS_EXECUTION_FINISHED_NO_ERROR;
+	  #subfunctionStatus := #SUB_STATUS_NO_ERROR;
+	  ENO := TRUE; //ENO mechanism is not used because of error and status
+	END_REGION Write outputs
+	
+END_FUNCTION_BLOCK
+

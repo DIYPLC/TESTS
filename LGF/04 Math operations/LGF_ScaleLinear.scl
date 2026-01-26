@@ -1,0 +1,155 @@
+﻿FUNCTION "LGF_ScaleLinear" : LReal
+TITLE = LGF_ScaleLinear
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_Digital_Industry_Support
+FAMILY : LGF
+NAME : LGF_ScaleLinear
+//This function scales an input variable (`LReal`) via a linear straight-line equation.
+   VAR_INPUT 
+      x : LReal;   // Input value `x` to be scaled.
+      x1 : LReal;   // Point 1 (P1) -`x` coordinate of the linear function.
+      y1 : LReal;   // Point 1 (P1) -`y` coordinate of the linear function.
+      x2 : LReal;   // Point 2 (P2) -`x` coordinate of the linear function.
+      y2 : LReal;   // Point 2 (P2) -`y` coordinate of the linear function.
+      yMin : LReal;   // Lower limit value of the output.
+      yMax : LReal;   // High limit value of the output.
+   END_VAR
+
+   VAR_OUTPUT 
+      error : Bool;   // FALSE: No error  TRUE: An error occurred during the execution of the FB
+      status : Word;   // 16#0000-16#7FFF: Status of the FB  16#8000-16#FFFF: Error identification (see following Table)
+   END_VAR
+
+   VAR_TEMP 
+      tempY : LReal;   // Temp scaled value `y`
+      tempStatus : Word;   // Temp status memory
+   END_VAR
+
+   VAR CONSTANT 
+      STATUS_FINISHED_NO_ERROR : Word := 16#0000;   // Status: Execution finished without errors.
+      ERR_LOW_LIM_OVER_UP_LIM : Word := 16#8200;   // Error: Lower limit value `yMin` is greater than high limit value `yMax`.
+      WARN_Y_LIMITED_TO_YMIN : Word := 16#6001;   // Warning: Output value limited to `yMin`
+      WARN_Y_LIMITED_TO_YMAX : Word := 16#6002;   // Warning: Output value limited to `yMax`
+      PRECISION : LReal := 1.0E-06;   // Accuracy with which the two numbers are considered equal
+   END_VAR
+
+
+BEGIN
+	REGION BLOCK INFO HEADER
+	  //===============================================================================
+	  // SIEMENS AG / (c)Copyright 2017
+	  //-------------------------------------------------------------------------------
+	  // Title:            LGF_ScaleLinear
+	  // Comment/Function: This function scales an input variable (`LReal`) via a linear straight-line equation.
+	  // Library/Family:   LGF(Library General Functions)
+	  // Author:           Siemens Digital Industry Support
+	  // Tested with:      S7-PLCSIM Advanced V2.0 SP1
+	  // Engineering:      TIA Portal V14 Upd 1
+	  // Restrictions:     ENO mechanism is not used, Error handling done by error and status
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge       | Changes applied
+	  //----------|------------|------------------------|------------------------------
+	  // 01.00.00 | 27.01.2017 | Siemens Industry Online Support
+	  //                         First released version
+	  // 01.00.01 | 17.08.2018 | Siemens Industry Online Support
+	  //                         Upgrade: TIA V15 Update 2
+	  // 01.00.02 | 23.11.2018 | Siemens Industry Online Support
+	  //                         Upgrade: TIA V15.1
+	  // 02.00.00 | 25.01.2019 | Simatic Systems Support
+	  //                         Data type changed from Variant to LReal
+	  // 02.00.01 | 25.06.2019 | Simatic Systems Support
+	  //                         Standard header and block parameters update, status parameter added
+	  //                         LReal value comparison added
+	  //                         Result parameter changed to return value of FC for use in SCL
+	  //                         Warning number changed to range of 16#6xxx
+	  //                         refactor variable handling and extract returns in between the code
+	  //                         add ENO handling
+	  // 03.00.00 | 23.04.2020 | Simatic Systems Support | Set version to V3.0.0
+	  //                         harmonize the version of the whole library
+	  // 03.00.01 | 12.11.2020 | Simatic Systems Support
+	  //                         Insert documentation
+	  //                         Move to folder "Math operations"
+	  //=============================================================================
+	END_REGION Block info header
+	
+	REGION DESCRIPTION
+	  (/*
+	The function linearly scales an input variable (e.g. an analog input value) to a specific output variable (e.g. level).
+	
+	To determine the output variable, the following linear equation is used in the function:
+	
+	$$
+	 x = \frac{y_2 - y_1}{x_2 - x_1} * (x - x_1) + y_1
+	$$
+	
+	The straight line is described by the two points, P1 and P2. You specify the points as a Cartesian coordinate system using x and y coordinates.
+	
+	Note
+	:    If the values of the parameters `x1` and `x2` are the same, the value of `y1` is output on output `y`.
+	
+	---
+	
+	By specifying `yMin` and `yMax` you can restrict the calculated value of `y` to a range limited at top and bottom. Thus, you avoid override and underride ranges.
+	
+	Figure: Graphical representation
+	
+	![LGF_ScaleLinear - Principle of operation](LGF_ScaleLinear.PNG "LGF_ScaleLinear - Principle of operation")
+	
+	#### Example
+	
+	A signal from 4 to 20mA is applied on an analog input module. This signal is converted to the CPU internal value from 0 to 27648 to measure a level. 0 corresponds to a level of 0.0m and 27648 to a level of 1.7m.
+	
+	The block must then be parameterized as follows:  
+	* P2: $x1 = 0$; $y1 = 0.0$
+	* P2: $x2 = +27648$; $y2 = 1.7$
+	* $yMin = 0.0$; $yMax = 1.7$;
+	*/)
+	END_REGION DESCRIPTION
+	
+	REGION INITIALISATION
+	  #tempY := 0.0;
+	  #tempStatus := #STATUS_FINISHED_NO_ERROR;
+	END_REGION
+	
+	REGION CONVERT
+	  // check if limits in a plausible range
+	  // --> higher limit has to be greater than lower limit
+	  IF (#yMin > #yMax) THEN
+	    #tempY := 0.0;
+	    #tempStatus := #ERR_LOW_LIM_OVER_UP_LIM;
+	    
+	  ELSE// no error, process scaling
+	    // Scale algorithm
+	    IF (ABS(#x1 - #x2) <= (#PRECISION * ABS(#x1))) THEN
+	      //The slope is approximately ZERO.
+	      //Special CASE, use a different equation, NOT "y = m*x+t", instead you use "x = y1"
+	      #tempY := #y1;
+	    ELSE
+	      // resolved equation --> F(x) = y = m*x+t, where m = slope/gradient, t = intercept
+	      #tempY := (#y2 - #y1) / (#x2 - #x1) * (#x - #x1) + #y1;
+	    END_IF;
+	    
+	    // Check if upper or lower limit is exceeded
+	    IF (#tempY < #yMin) THEN
+	      #tempY := #yMin;
+	      #tempStatus := #WARN_Y_LIMITED_TO_YMIN;  // set warning indicator
+	    ELSIF (#tempY > #yMax) THEN
+	      #tempY := #yMax;
+	      #tempStatus := #WARN_Y_LIMITED_TO_YMAX;  // set warning indicator
+	    END_IF;
+	  END_IF;
+	END_REGION
+	
+	REGION OUTPUTS  
+	  // set status and error output
+	  #status := #tempStatus;
+	  #error := #tempStatus.%X15;
+	  // set return value
+	  #LGF_ScaleLinear := #tempY;
+	  //ENO mechanism is not used - forced to true.
+	  ENO := TRUE;
+	END_REGION
+END_FUNCTION
+

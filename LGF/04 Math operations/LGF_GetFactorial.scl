@@ -1,0 +1,133 @@
+﻿FUNCTION "LGF_GetFactorial" : DInt
+TITLE = LGF_GetFactorial
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_Digital_Industry
+FAMILY : LGF
+NAME : LGF_GetFactorial
+//The function calculates the faculty of a natural number ($\mathbb{N}!$) and returns the result.
+//
+//The permissible value range of the input parameter `naturalNumber` is between 0 and 12, as 12 is the maximum factorial result fitting into a DInt type
+   VAR_INPUT 
+      naturalNumber : Int;   // Natural number (0..12)
+   END_VAR
+
+   VAR_OUTPUT 
+      error : Bool;   // FALSE: No error  TRUE: An error occurred during the execution of the FB
+      status : Word;   // 16#0000-16#7FFF: Status of the FB  16#8000-16#FFFF: Error identification (see following Table)
+   END_VAR
+
+   VAR_TEMP 
+      tempFactorial : DInt;   // Temp factorial
+   END_VAR
+
+   VAR CONSTANT 
+      FACTORIAL_OF_ZERO : Int := 1;   // Factorial of 0 --> 0!
+      FACTORIAL_OF_ONE : Int := 1;   // Factorial of 1 --> 1!
+      FACTORIAL_OF_TWO : Int := 2;   // Factorial of 2 --> 2!
+      FACTORIAL_OF_THREE : Int := 6;   // Factorial of 3 --> 3!
+      FACTORIAL_OF_FOUR : Int := 24;   // Factorial of 4 --> 4!
+      FACTORIAL_OF_FIVE : Int := 120;   // Factorial of 5 --> 5!
+      FACTORIAL_OF_SIX : Int := 720;   // Factorial of 6 --> 6!
+      FACTORIAL_OF_SEVEN : Int := 5040;   // Factorial of 7 --> 7!
+      FACTORIAL_OF_EIGHT : DInt := 40320;   // Factorial of 8 --> 8!
+      FACTORIAL_OF_NINE : DInt := 362880;   // Factorial of 9 --> 9!
+      FACTORIAL_OF_TEN : DInt := 3628800;   // Factorial of 10 --> 10!
+      FACTORIAL_OF_ELEVEN : DInt := 39916800;   // Factorial of 11 --> 11!
+      FACTORIAL_OF_TWELVE : DInt := 479001600;   // Factorial of 12 --> 12!
+      DEFAULT_ZERO : DInt;   // Default vlaue in case of error, Value outside range (0..12)
+      STATUS_NO_ERROR : Word := 16#0000;   // Execution finished without errors
+      ERR_WRONG_VALUE_RANGE : Word := 16#8101;   // Error: Input value out of range  Permissible value range is 0..12
+   END_VAR
+
+
+BEGIN
+	REGION Block info header
+	  //=============================================================================
+	  // Siemens AG / (c)Copyright 2017
+	  //-----------------------------------------------------------------------------
+	  // Title:            LGF_GetFactorial
+	  // Comment/Function: Outputs the value equal to the factorial N! of a natural number between 0 and 12
+	  //                   Factorial of 12 is the maximum value fits into a DInt type
+	  //                   MAGIC numbers are okay as they stay for the number/case itself
+	  // Library/Family:   LGF(Library General Functions)
+	  // Author:           Siemens Digital Industry Support
+	  // Tested with:      S7-PLCSIM Advanced V2.0 SP1
+	  // Engineering:      TIA Portal V15 Update 2
+	  // Restrictions:     ENO disabled - error handling done by error and status
+	  //                   Case of, MAGIC numbers are okay as they stay for the number/case itself
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //----------------------------------------------------------------------------- 
+	  // Change log table:
+	  // Version  | Date       | Expert in charge       | Changes applied
+	  //----------|------------|------------------------|----------------------------
+	  // 01.00.00 03.07.2018  Siemens Industry Online Support
+	  //                      First released version
+	  // 01.00.01 17.08.2018  Siemens Industry Online Support
+	  //                      Upgrade: TIA V15 Update 2
+	  // 01.00.02 23.11.2018  Siemens Industry Online Support
+	  //                      Upgrade: TIA V15.1
+	  // 01.01.00 23.09.2019  Siemens Industry Online Support
+	  //                      Renamed from "Factorial" to "GetFactorial"
+	  //                      Code refactoring, regions and more comments added
+	  //                      Reworked to case of, MAGIC numbers are okay as they stay for the number/case itself
+	  // 03.00.00 23.04.2020  Siemens Industry Support
+	  //                      Set version to V3.0.0, harmonize the version of the whole library
+	  // 03.00.01 12.11.2020  Simatic Systems Support
+	  //                      Insert documentation
+	  //=============================================================================
+	END_REGION Block info header
+	
+	REGION DESCRIPTION
+	  (/**/)
+	END_REGION DESCRIPTION
+	
+	REGION Caluclation of factorial
+	  //Validation check. Function is working with natural number between 0 and 12.
+	  // N! = 1*2*3*....*N;
+	  CASE #naturalNumber OF
+	    0:
+	      #tempFactorial := #FACTORIAL_OF_ZERO;
+	    1:
+	      #tempFactorial := #FACTORIAL_OF_ONE;
+	    2:
+	      #tempFactorial := #FACTORIAL_OF_TWO;
+	    3:
+	      #tempFactorial := #FACTORIAL_OF_THREE;
+	    4:
+	      #tempFactorial := #FACTORIAL_OF_FOUR;
+	    5:
+	      #tempFactorial := #FACTORIAL_OF_FIVE;
+	    6:
+	      #tempFactorial := #FACTORIAL_OF_SIX;
+	    7:
+	      #tempFactorial := #FACTORIAL_OF_SEVEN;
+	    8:
+	      #tempFactorial := #FACTORIAL_OF_EIGHT;
+	    9:
+	      #tempFactorial := #FACTORIAL_OF_NINE;
+	    10:
+	      #tempFactorial := #FACTORIAL_OF_TEN;
+	    11:
+	      #tempFactorial := #FACTORIAL_OF_ELEVEN;
+	    12:
+	      #tempFactorial := #FACTORIAL_OF_TWELVE;
+	    ELSE
+	      //Assigning error message when input is outside of working range
+	      #LGF_GetFactorial := #DEFAULT_ZERO;
+	      #error := TRUE;
+	      #status := #ERR_WRONG_VALUE_RANGE;
+	      RETURN;
+	  END_CASE;
+	END_REGION
+	
+	REGION Writing output  
+	  #LGF_GetFactorial := #tempFactorial;
+	  
+	  #error := FALSE;
+	  #status := #STATUS_NO_ERROR;
+	  // ENO mechanism is not used
+	  ENO := TRUE;
+	END_REGION
+	
+END_FUNCTION
+

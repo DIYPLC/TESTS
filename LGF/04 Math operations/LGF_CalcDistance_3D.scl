@@ -1,0 +1,69 @@
+﻿FUNCTION "LGF_CalcDistance_3D" : LReal
+TITLE = LGF_CalcDistance_3D
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_Digital_Industries
+FAMILY : LGF
+NAME : LGF_CalcDistance_3D
+//The function calculates the distance between two points in 3D space.
+   VAR_INPUT 
+      x1 : LReal;   // X coordinate point 1
+      y1 : LReal;   // Y coordinate point 1
+      z1 : LReal;   // Z coordinate point 1
+      x2 : LReal;   // X coordinate point 2
+      y2 : LReal;   // Y coordinate point 2
+      z2 : LReal;   // Z coordinate point 2
+   END_VAR
+
+
+BEGIN
+	REGION Block info header
+	  //=============================================================================
+	  // Siemens AG / (c)Copyright 2017
+	  //-----------------------------------------------------------------------------
+	  // Title:            LGF_CalcDistance_3D
+	  // Comment/Function: Calculates the distance between two points in 3D space
+	  // Library/Family:   LGF(Library General Functions)
+	  // Author:           Siemens Digital Industry Support
+	  // Tested with:      S7-PLCSIM Advanced V2.0 SP1
+	  // Engineering:      TIA Portal V15 Update 2
+	  // Restrictions:     ENO disabled - ENO mechanism is not used
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge       | Changes applied
+	  //----------|------------|------------------------|------------------------------
+	  // 01.00.00 04.10.2019  Siemens Industry Presales Support
+	  //                      First released version
+	  //                      derivate from "CalcDistance_2D" and extended to 3D
+	  // 03.00.00 23.04.2020  Siemens Industry Support
+	  //                      Set version to V3.0.0, harmonize the version of the whole library
+	  // 03.00.01 12.11.2020  Simatic Systems Support
+	  //                      Insert documentation
+	  //=============================================================================
+	END_REGION Block info header
+	
+	REGION DESCRIPTION
+	  (/*
+	The block calculates the distance between two points in a Cartesian coordinate system. The distance is calculated with the following formula:
+	
+	$$
+	 result = \sqrt[2]{(x_2-x_1)^2+(y_2-y_1)^2+(z_2-z_1)^2}
+	$$
+	
+	------
+	
+	Figure: Graphical representation
+	
+	![LGF_CalcDistance_3D - Principle of operation](LGF_CalcDistance_3D.PNG "LGF_CalcDistance_3D - Principle of operation")
+	*/)
+	END_REGION DESCRIPTION
+	
+	REGION Program
+	  // Calculating the distance
+	  #LGF_CalcDistance_3D := SQRT(SQR(#x2 - #x1) + SQR(#y2 - #y1) + SQR(#z2 - #z1));
+	  // ENO mechanism is not used
+	  ENO := TRUE;
+	END_REGION
+	
+END_FUNCTION
+

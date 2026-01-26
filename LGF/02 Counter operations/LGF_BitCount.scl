@@ -1,0 +1,92 @@
+﻿FUNCTION "LGF_BitCount" : Void
+TITLE = LGF_BitCount
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : SiemensSIMATICSystemsSupport
+FAMILY : LGF
+NAME : LGF_BitCount
+//This block counts in a variable of type DWord how many bits are set (TRUE) and how many are not set (FALSE) and outputs the number at the outputs.  
+//Instead of DWord, Word and Byte can also be used by converting the past parameter with e.g. BYTE_TO_DWORD and connecting the corresponding bit length of the data type at the parameter "numberOfBits".  
+//Byte=8, Word=16, DWord=32
+   VAR_INPUT 
+      value : DWord;   // Tag where the bit states has to be counted
+      numberOfBits : USInt;   // Number of bits in input tag "value" (bit size of Datatype), in case of Byte=8, Word=16, DWord=32
+   END_VAR
+
+   VAR_OUTPUT 
+      countBitsFalse : USInt;   // Number of bits are FALSE in input tag "value"
+      countBitsTrue : USInt;   // Number of bits are TRUE in input tag "value"
+   END_VAR
+
+   VAR_TEMP 
+      tempBinaryValues : DWord;   // Temp tag to store and work on the input value
+      tempLoopIndex : DInt;   // Temp tag for iterating trough tag via loop
+      tempCountBitsTrue : USInt;   // Temp tag to count bits are true
+      tempCountBitsFalse : USInt;   // Temp tag to count bits are false
+   END_VAR
+
+   VAR CONSTANT 
+      ZERO : USInt := 0;   // Numeric zero used for initialization
+      INCREMENT : USInt := 1;   // Numeric one to increment counters
+      SHIFT_ON_BIT_RIGHT : USInt := 1;   // Numeric one to shift bits one position to the right
+      START_INDEX : DInt := 1;   // Start index for FOR loop is one, because of the given number of bits 
+   END_VAR
+
+
+BEGIN
+	REGION BLOCK INFO HEADER
+	  //===============================================================================
+	  // SIEMENS AG / (c)Copyright 2019
+	  //-------------------------------------------------------------------------------
+	  // Title:            LGF_BitCount
+	  // Comment/Function: Count bits in elementary datatype - DWord
+	  //                   count the set (TRUE) and not set (FALSE) bits in a binary datatype 
+	  //                   can be used for Word and Byte as well, by convert
+	  //                   the past paramter and the result using for e.g. Dword_to_Byte
+	  //                   "numberOfBits" number of bits in input tag "value",
+	  //                   in case of Byte=8, Word=16, Dword=32
+	  // Library/Family:   LGF (Library General Functions)
+	  // Author:           Siemens Digital Industry
+	  // Tested with:      CPU1212C DC/DC/DC FW:V4.2
+	  // Engineering:      TIA Portal V15.1
+	  // Restrictions:     ENO not in use, set to true, no error handling
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge         | Changes applied
+	  // 01.00.00 | 06.06.2015 | Siemens Industry Support | first release
+	  // 03.00.00 | 23.04.2020 | Siemens Industry Support | Set version to V3.0.0
+	  //                         harmonize the version of the whole library
+	  // 03.00.02 | 19.01.2021 | Simatic Systems Support
+	  //                         Insert documentation
+	  //===============================================================================
+	END_REGION
+	
+	REGION Logic
+	  // init counter tags
+	  #tempCountBitsFalse := #ZERO;
+	  #tempCountBitsTrue := #ZERO;
+	  #tempBinaryValues := #value;
+	  
+	  // iterate over input tag
+	  FOR #tempLoopIndex := #START_INDEX TO USINT_TO_DINT(#numberOfBits) DO
+	    // check if bit is true or false
+	    IF #tempBinaryValues.%X0 THEN
+	      #tempCountBitsTrue += #INCREMENT;
+	    ELSE
+	      #tempCountBitsFalse += #INCREMENT;
+	    END_IF;
+	    
+	    // shift input tag one to the right
+	    #tempBinaryValues := SHR(IN := #tempBinaryValues, N := #SHIFT_ON_BIT_RIGHT);
+	  END_FOR;
+	  
+	  // set output values
+	  #countBitsFalse := #tempCountBitsFalse;
+	  #countBitsTrue := #tempCountBitsTrue;
+	  
+	  // no error handling needed
+	  ENO := TRUE;
+	END_REGION
+	
+END_FUNCTION
+

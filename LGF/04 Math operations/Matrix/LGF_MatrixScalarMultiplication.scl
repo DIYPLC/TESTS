@@ -1,0 +1,146 @@
+﻿FUNCTION "LGF_MatrixScalarMultiplication" : Void
+TITLE = LGF_MatrixScalarMultiplication
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_Digital_Industries
+FAMILY : LGF
+NAME : LGF_MatrixScalarMultiplication
+//This function block multiplies a matrix of the data type `ARRAY[*,*] of LREAL` with a scalar.
+//
+//Example for 2x2 matrix:
+//
+//$$
+// B =  b * A =  
+//
+//\begin{bmatrix}
+//   b*a_{11} & b*a_{12} \\
+//   b*a_{21} & b*a_{22}
+//\end{bmatrix}
+//$$
+//
+//A matrix is multiplied by a scalar, thereby multiplying each matrix element by the scalar. The result is output in the `matrixResult` matrix.
+//
+//Note
+//:    Note that the input and output matrix must have the same number of columns and rows.
+//
+   VAR_INPUT 
+      scalar : LReal;   // Scalar value where the matrix is multiplied
+   END_VAR
+
+   VAR_OUTPUT 
+      error : Bool;   // FALSE: No error  TRUE: An error occurred during the execution of the FB
+      status : Word;   // 16#0000-16#7FFF: Status of the FB  16#8000-16#FFFF: Error identification (see following Table)
+   END_VAR
+
+   VAR_IN_OUT 
+      matrixInput : Array[*, *] of LReal;   // Matrix to multiply
+      matrixResult : Array[*, *] of LReal;   // The result matrix of the multiplication
+   END_VAR
+
+   VAR_TEMP 
+      tempMatrixInLowerBoundRows : DInt;   // Input Matrix lower bound for the rows (Dimension 1)
+      tempMatrixInLowerBoundColumns : DInt;   // Input Matrix lower bound for the columns (Dimension 2)
+      tempMatrixInUpperBoundRows : DInt;   // Input Matrix upper bound for the rows (Dimension 1)
+      tempMatrixInUpperBoundColumns : DInt;   // Input Matrix upper bound for the columns (Dimension 2)
+      tempResultMatrixLowerBoundRows : DInt;   // Result matrix lower bound for the rows (Dimension 1)
+      tempResultMatrixLowerBoundColumns : DInt;   // Result matrix lower bound for the columns (Dimension 2)
+      tempResultMatrixUpperBoundRows : DInt;   // Result matrix upper bound for the rows (Dimension 1)
+      tempResultMatrixUpperBoundColumns : DInt;   // Result matrix upper bound for the columns (Dimension 2)
+      tempRowIndex : DInt;   // Index counter for traversiong trough rows (Dimension 1)
+      tempColumIndex : DInt;   // Index counter for traversiong trough columns (Dimension 2)
+   END_VAR
+
+   VAR CONSTANT 
+      ROWS : UInt := 1;   // Rows are the first dimention of the two dimentional array
+      COLUMNS : UInt := 2;   // Columns are the second dimension of the two dimensional array
+      STATUS_NO_ERROR : Word := 16#0000;   // Execution finished without errors
+      ERR_MATRICES_LOWER_BOUND_ROWS_DONT_MATCH : Word := 16#8201;   // Error: Matrices lower bound rows(Dim1) do not match
+      ERR_MATRICES_UPPER_BOUND_ROWS_DONT_MATCH : Word := 16#8202;   // Error: Matrices upper bound rows(Dim1) do not match
+      ERR_MATRICES_LOWER_BOUND_COLUMNS_DONT_MATCH : Word := 16#8203;   // Error: Matrices lower bound columns(Dim2) do not match
+      ERR_MATRICES_UPPER_BOUND_COLUMNS_DONT_MATCH : Word := 16#8204;   // Error: Matrices upper bound columns(Dim2) do not match
+   END_VAR
+
+
+BEGIN
+	REGION Block info header
+	  //=============================================================================
+	  // SIEMENS AG / (c)Copyright 2019
+	  //-------------------------------------------------------------------------------
+	  // Title:            LGF_MatrixScalarMultiplication
+	  // Comment/Function: Caluclates the multiplication of one matrix and a scalar value
+	  // Library/Family:   LGF(Library General Functions)
+	  // Author:           Siemens Digital Industry Support
+	  // Tested with:      S7-PLCSIM Advanced V2.0 SP1
+	  // Engineering:      TIA Portal V15 Update 2
+	  // Restrictions:     ENO disabled - error handling done by error and status
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge       | Changes applied
+	  //----------|------------|------------------------|------------------------------
+	  // 01.00.00 11.12.2019  Simatic Systems Support
+	  //                      First released version
+	  //                      based on "LGF_MatrixMultiplication"
+	  // 03.00.00 23.04.2020  Simatic Systems Support
+	  //                      Set version to V3.0.0, harmonize the version of the whole library
+	  // 03.00.01 02.02.2020  Simatic Systems Support
+	  //                      Insert documentation
+	  // 03.00.02 18.07.2020  Simatic Systems Support
+	  //                      Fix bug regarding wrong calculation
+	  //=================================================================================
+	END_REGION Block info header
+	
+	REGION Getting matrices size
+	  //Determine the size of the matrices
+	  // Lower bound rows
+	  #tempMatrixInLowerBoundRows := LOWER_BOUND(ARR := #matrixInput, DIM := #ROWS);
+	  #tempResultMatrixLowerBoundRows := LOWER_BOUND(ARR := #matrixResult, DIM := #ROWS);
+	  // Lower bound columns
+	  #tempMatrixInLowerBoundColumns := LOWER_BOUND(ARR := #matrixInput, DIM := #COLUMNS);
+	  #tempResultMatrixLowerBoundColumns := LOWER_BOUND(ARR := #matrixResult, DIM := #COLUMNS);
+	  
+	  // Upper bound rows
+	  #tempMatrixInUpperBoundRows := UPPER_BOUND(ARR := #matrixInput, DIM := #ROWS);
+	  #tempResultMatrixUpperBoundRows := UPPER_BOUND(ARR := #matrixResult, DIM := #ROWS);
+	  // Upper bound columns
+	  #tempMatrixInUpperBoundColumns := UPPER_BOUND(ARR := #matrixInput, DIM := #COLUMNS);
+	  #tempResultMatrixUpperBoundColumns := UPPER_BOUND(ARR := #matrixResult, DIM := #COLUMNS);
+	END_REGION
+	
+	REGION Error evaluation of matrices dimentions
+	  // Result matrix must have the same number of rows as matrix 1 and the same number of columns as the matrix 2.
+	  IF (#tempMatrixInLowerBoundRows <> #tempResultMatrixLowerBoundRows) THEN
+	    #error := true;
+	    #status := #ERR_MATRICES_LOWER_BOUND_ROWS_DONT_MATCH;
+	    RETURN;
+	  ELSIF (#tempMatrixInUpperBoundRows <> #tempResultMatrixUpperBoundRows) THEN
+	    #error := true;
+	    #status := #ERR_MATRICES_UPPER_BOUND_ROWS_DONT_MATCH;
+	    RETURN;
+	  ELSIF (#tempMatrixInLowerBoundColumns <> #tempResultMatrixLowerBoundColumns) THEN
+	    #error := true;
+	    #status := #ERR_MATRICES_LOWER_BOUND_COLUMNS_DONT_MATCH;
+	    RETURN;
+	  ELSIF (#tempMatrixInUpperBoundColumns <> #tempResultMatrixUpperBoundColumns) THEN
+	    #error := true;
+	    #status := #ERR_MATRICES_UPPER_BOUND_COLUMNS_DONT_MATCH;
+	    RETURN;
+	  END_IF;
+	END_REGION
+	
+	REGION Multiplication
+	  //Multiplies each row with each column
+	  FOR #tempRowIndex := #tempMatrixInLowerBoundRows TO #tempMatrixInUpperBoundRows DO
+	    FOR #tempColumIndex := #tempMatrixInLowerBoundColumns TO #tempMatrixInUpperBoundColumns DO
+	      // result is input matrix element multiplied with the scalar
+	      #matrixResult[#tempRowIndex, #tempColumIndex] := #matrixInput[#tempRowIndex, #tempColumIndex] * #scalar;
+	    END_FOR;
+	  END_FOR;
+	  
+	  #error := false;
+	  #status := #STATUS_NO_ERROR;
+	  //ENO mechanism is not used - forced to true.
+	  ENO := TRUE;
+	END_REGION
+	
+END_FUNCTION
+

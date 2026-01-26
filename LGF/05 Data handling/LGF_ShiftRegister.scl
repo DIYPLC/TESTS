@@ -1,0 +1,551 @@
+﻿TYPE "LGF_typeDiagnostics"
+TITLE = LGF_typeDiagnostics
+VERSION : 0.1
+//Diagnostic structure to store and transfer diagnostic information from blocks through the interface.
+   STRUCT
+      status { ExternalVisible := 'False'; ExternalWritable := 'False'} : Word;   // Status of the Block or error identification when error occurred
+      subfunctionStatus { ExternalVisible := 'False'; ExternalWritable := 'False'} : Word;   // Status or return value of called FB's, FC's and system blocks
+      stateNumber { ExternalVisible := 'False'; ExternalWritable := 'False'} : DInt;   // State in the state machine of the block where the error occurred
+   END_STRUCT;
+
+END_TYPE
+
+FUNCTION_BLOCK "LGF_ShiftRegister"
+TITLE = LGF_ShiftRegister
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_Digital_Industry_Support
+FAMILY : LGF
+NAME : LGF_ShiftRegister
+//The Function represents a shift register for any kind of Datatype (using `variant`).  
+//It is possible to shift the elements in the array at `bufferRegister` to the left (index `array[n]:=array[n+1]`) or right (index `array[n]:=array[n-1]`).  
+//It could be used for material tracking trough a machine or a process, e.g. for a rotary indexing table.
+//
+//---
+//
+//Note
+//:    As this is a real shift operation, it may cause some runtime effects while using big array sizes to move at the input `bufferRegister`.
+//:    Please consider that a FIFO or LIFO storage, based on indexes, could be used as well for most applications.
+   VAR_INPUT 
+      enable : Bool;   // TRUE: Enable functionality of FB
+      shiftLeft : Bool;   // Rising edge: Elements in the array `bufferRegister` shifted left.  Elements moved from index `N` to `N - 1`.  The element at index `N = 0`is overwritten
+      shiftRight : Bool;   // Rising edge: Elements in the array `bufferRegister` shifted right.  Elements moved from index `N` to `N + 1`.  The element at index `N = lastIndex` is overwritten
+      shiftRange { S7_PredefinedAssignment := '1'; S7_HiddenAssignment := 'HideIfNoParamAssigned'} : UInt := 1;   // Number of places to be shifted in the `bufferRegister` input array
+      reset : Bool;   // Initializing the buffer (reset the index and the counter)
+      clear : Bool;   // Clear buffer elements in `bufferRegister` with `initalItem`
+      fill : Bool;   // Overwrite buffer elements after shift operation.  * `shiftLeft` - the most right element/s  * `shiftRight` - the most left element/s  overwritten by `initalItem`.
+      initialItem { S7_PredefinedAssignment := 'NULL'} : Variant;   // Value with which the ARRAY of the buffer is initialized  (usually: `0` / default value)
+   END_VAR
+
+   VAR_OUTPUT 
+      valid { ExternalWritable := 'False'} : Bool;   // TRUE: Valid set of output values available at the FB
+      busy { ExternalWritable := 'False'} : Bool;   // TRUE: FB is active and new output values can be expected
+      error { ExternalWritable := 'False'} : Bool;   // FALSE: No error  TRUE: An error occurred during the execution of the FB
+      status { ExternalWritable := 'False'} : Word;   // 16#0000-16#7FFF: Status of the FB  16#8000-16#FFFF: Error identification (see following Table)
+      leftShiftCount { ExternalWritable := 'False'} : DInt;   // Number of left shift operations since clearing
+      rightShiftCount { ExternalWritable := 'False'} : DInt;   // Number of right shift operations since clearing
+      shiftOffsetCounter { ExternalWritable := 'False'} : DInt;   // Offset of shift operations.  `rightShift` - `leftShift`
+      diagnostics { ExternalWritable := 'False'} : "LGF_typeDiagnostics";
+   END_VAR
+
+   VAR_IN_OUT 
+      bufferRegister : Variant;   // Buffer / Register memory as ARRAY, which keeps the data.  The data in the register is shifted left or right depending on the command.
+   END_VAR
+
+   VAR 
+      statInternal { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Struct   // Static structure for internal tags
+         enablePrevious { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Previous value of 'enable' input for edge detection
+         valid { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Value for output 'valid'
+         busy { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Value for output 'busy'
+         error { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Value for output 'error'
+         errorUserCleared { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Error occurred that can only be solved by user; rising edge at enable input necessary
+         errorAutoCleared { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Error occurred that can be acknowledged by software while block is still in operation (e.g. reset/acknowledge/automatically by software routine)
+         disablingCompleted { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // TRUE: Disabling has been completed
+         diagnostics { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'; S7_SetPoint := 'False'} : "LGF_typeDiagnostics";
+         emptyDiagnostics { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'; S7_SetPoint := 'False'} : "LGF_typeDiagnostics";   // Empty diagnostics information (for initialization purposes only)
+      END_STRUCT;
+      statEdgesMem { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Struct   // Edge memory to store the previous query's for edge detection
+         shiftRight { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Edge on shift right command
+         shiftLeft { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Edge on shift left command
+         reset { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Reset edge
+         clear { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Clearing edge
+      END_STRUCT;
+      statBufferSize { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : UDInt;   // Number of array elements in the buffer / buffer size
+      statLeftShiftCount { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : DInt := 0;   // Number of left shift operations since reset/clear
+      statRightShiftCount { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : DInt := 0;   // Number of right shift operations since reset/clear
+      statMainState { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : DInt := #FB_STATE_NO_PROCESSING;   // State in the state machine of the FB
+   END_VAR
+
+   VAR_TEMP 
+      tempEnable : Bool;   // Temp value for input 'enable'
+      tempEdges : Struct   // Temp structure to store internally an edge 
+         shiftLeft : Bool;   // Edge on shift left command
+         shiftRight : Bool;   // Edge on shift right command
+         reset : Bool;   // Reset edge
+         clear : Bool;   // Edge on clearing command
+      END_STRUCT;
+      tempInternalError : Int;   // Temp tag to store internal return values
+      tempCounter : DInt;   // Temp counter for iteration trough the buffer
+      tempRepeatStateMaschine : Bool;   // Temp variable for repeating the state machine - is used to call the state machine again without waiting for the next cycle
+   END_VAR
+
+   VAR CONSTANT 
+      NO_INTERNAL_ERROR : Int := 16#0000;   // No internal error
+      EMPTY_INITIALIZED : Int := 0;   // Empty item index initialized = 0
+      INDEX_BEGINNING : Int := 0;   // Start index for the beginning of the array
+      COUNT_ELEMENTS : UDInt := 1;   // Number of elements to be copied = 1
+      INCREMENT : Int := 1;   // Increment value ONE
+      BUFFER_SIZE_CORRECTION : UDInt := 1;   // Buffer size correction (0-based counting)
+      COUNTER_LOWER_LIMIT : DInt := 0;   // Counter lower limit
+      ZERO_ELEMENTS : DInt := 0;   // Zero elements in buffer
+      FB_STATE_NO_PROCESSING : DInt := 0;   // FB state: No processing
+      FB_STATE_ENABLING : DInt := 1;   // FB state: Enabling
+      FB_STATE_IDLE : DInt := 10;   // FB state: Idle
+      FB_STATE_RESET : DInt := 11;   // FB state: Reset
+      FB_STATE_CLEAR : DInt := 12;   // FB state: Clear
+      FB_STATE_SHIFT_LEFT : DInt := 20;   // FB state: Shift left
+      FB_STATE_SHIFT_RIGHT : DInt := 30;   // FB state: Shift right
+      FB_STATE_DISABLING : DInt := 90;   // FB state: Disabling
+      STATUS_NO_ERROR : Word := 16#0000;   // Status: Execution finished without errors
+      STATUS_NO_CURRENT_JOBS : Word := 16#7000;   // Status: No current jobs, initial state
+      STATUS_FIRST_CALL : Word := 16#7001;   // First call after incoming new job (rising edge 'enable')
+      STATUS_SUBSEQUENT_CALL : Word := 16#7002;   // Status: Subsequent call during active processing without further details
+      SUB_STATUS_NO_ERROR : Word := 16#0000;   // No error occurred in sub function call
+      ERR_BUFFER_FULL : Word := 16#8002;   // Error: The buffer is full
+      ERR_BUFFER_EMPTY : Word := 16#8001;   // Error: The buffer is empty
+      ERR_NO_ARRAY : Word := 16#8200;   // Error: No array is present at the input `bufferRegister`
+      ERR_CLEARING_WITHOUT_INITIAL_ITEM : Word := 16#8201;   // Error: Clearing `bufferRegister` without an `initialItem` is not possible.
+      ERR_FILL_WITHOUT_INITIAL_ITEM : Word := 16#8202;   // Error: Option `fill` the buffer after shift operation without an `initialItem` is not possible.
+      ERR_WRONG_TYPE_INITIAL_ITEM : Word := 16#8203;   // Error: The data type of the input `initialItem` does not correspond to the data type of the array at the InOut parameter `bufferRegister`.
+      ERR_BOOL_NOT_SUPPORTED : Word := 16#8204;   // Error: Boolean variables and arrays are not supported by `MOVE_BLOCK_VARIANT`. (Use a PLC Datatype instead)
+      ERR_MULTIPLE_COMMANDS_DEDECTED : Word := 16#8401;   // Error: More than one command present at the same time.  Only one of the inputs `shiftLeft`, `shiftRight` or `clear` is allowed.
+      ERR_IN_SHIFT_RANGE : Word := 16#8402;   // Error: The value at `shiftRange` must not exceed the maximum size of the Array at `bufferRegister`.
+      ERR_UNDEFINED_STATE : Word := 16#8600;   // Error: Due to an undefined state in state machine
+      ERR_CLEAR_BUFFER : Word := 16#8610;   // Error: While clearing buffer in block `MOVE_BLK_VARIANT``.  Check `subFunctionStatus` code.
+      ERR_SHIFT_BUFFER_LEFT : Word := 16#8611;   // Error: While shift buffer left in block `MOVE_BLK_VARIANT` - check `subFunctionStatus` code
+      ERR_SHIFT_BUFFER_LEFT_FILL : Word := 16#8612;   // Error: While fill buffer after shift left in block `MOVE_BLK_VARIANT` - check `subFunctionStatus` code
+      ERR_SHIFT_BUFFER_RIGHT : Word := 16#8621;   // Error: While shift buffer right in block `MOVE_BLK_VARIANT` - check `subFunctionStatus` code
+      ERR_SHIFT_BUFFER_RIGHT_FILL : Word := 16#8622;   // Error: While fill buffer after shift right in block `MOVE_BLK_VARIANT` - check `subFunctionStatus` code
+   END_VAR
+
+
+BEGIN
+	REGION Block info header
+	  //===============================================================================
+	  // SIEMENS AG / (c)Copyright 2019
+	  //-------------------------------------------------------------------------------
+	  // Title:            LGF_ShiftRegister
+	  // Comment/Function: The Function represnts a shift register for any kind of Datatype (using `variant`) - it can be used as a kind of a ring buffer.
+	  //                   It is possible to shift the register array left (index `array[n]:=array[n+1]`) or right (index a`array[n]:=array[n-1]`).
+	  //                   As this is a real shift operation, it may causes some runtime effects while using big array sizes to move.
+	  //                   It could be used for pusing the material traking UDT trouf the maschin, e.g. a rotary indexing table
+	  //                   Please consider that a FIFO  or LIFO storage, based on indexes, could be used as well for most applications.
+	  // Library/Family:   LGF (Library General Functions)
+	  // Author:           Siemens Digital Industry Support
+	  // Tested with:      CPU 1515F-2 PN FW:V2.6
+	  // Engineering:      TIA Portal V16 Update 4
+	  // Restrictions:     ENO disabled - error handling done with error and status
+	  //                   Bool array is not supported by `MOVE_BLK_VARIANT`
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge       | Changes applied
+	  //----------|------------|------------------------|------------------------------
+	  // 01.00.00 03.07.2018  Siemens Industry Online Support
+	  //                      First released version
+	  // 03.00.00 09.04.2021  Simatic Systems Support
+	  //                      Refactoring and alignment to Datatype Variant
+	  //                      Insert documentation
+	  // 04.00.00 04.09.2024  Simatic Systems Support
+	  //                      Rework to PLC Open `Enable` behavior
+	  //                      Add `reset` input / counter outputs
+	  //                      Fix Bug while filling after left shift operation
+	  //                      Rework to diagnostic output datatype
+	  //=============================================================================
+	END_REGION Block info header
+	
+	REGION DESCRIPTION
+	  (/**/)
+	END_REGION DESCRIPTION
+	
+	
+	REGION ENABLING/DISABLING
+	  #tempEnable := #enable; // Work with temporary value / create process image
+	  IF (#tempEnable = TRUE) AND (#statInternal.diagnostics.status = #STATUS_NO_CURRENT_JOBS) THEN // Enable FB
+	    // First call; initialize FB
+	    #statInternal.valid := TRUE;
+	    #statInternal.busy := TRUE;
+	    #statInternal.error := FALSE;
+	    #statInternal.errorUserCleared := FALSE;
+	    #statInternal.errorAutoCleared := FALSE;
+	    #statInternal.disablingCompleted := FALSE;
+	    #statInternal.diagnostics := #statInternal.emptyDiagnostics;
+	    #diagnostics := #statInternal.emptyDiagnostics;
+	    #statInternal.diagnostics.status := #STATUS_FIRST_CALL;
+	    // State machine - start processing
+	    #statMainState := #FB_STATE_ENABLING;
+	    
+	  ELSIF (#tempEnable = FALSE) AND (#statInternal.enablePrevious = TRUE) THEN // Disable FB 
+	    #statMainState := #FB_STATE_DISABLING;
+	    
+	  ELSIF (#statInternal.diagnostics.status = #STATUS_FIRST_CALL) THEN // Set status identifier of subsequent call
+	    #statInternal.diagnostics.status := #STATUS_SUBSEQUENT_CALL;
+	  END_IF;
+	  
+	  // Edge detection 'enable' input
+	  #statInternal.enablePrevious := #tempEnable;
+	END_REGION ENABLING/DISABLING
+	
+	IF (#statInternal.diagnostics.status = #STATUS_NO_CURRENT_JOBS) THEN // Nothing to do -> End here to reduce "system load"
+	  RETURN;
+	END_IF;
+	
+	REGION STATE MACHINE
+	  REPEAT
+	    #tempRepeatStateMaschine := FALSE;
+	    
+	    CASE #statMainState OF // State machine of FB
+	      #FB_STATE_NO_PROCESSING:
+	        REGION No Processing
+	          ; // No processing active (Note: this state must always be present and left empty)
+	        END_REGION No Processing
+	        
+	      #FB_STATE_ENABLING: // Enabling active
+	        REGION Enabling
+	          // check whether the item type is BOOL
+	          // Bool is not supported by Systemfunction MOVE BLOCK VARIANT
+	          IF FALSE
+	            OR TypeOf(#initialItem) = Bool
+	            OR TypeOfElements(#bufferRegister) = Bool
+	          THEN
+	            #statInternal.errorUserCleared := TRUE;
+	            #statInternal.diagnostics.status := #ERR_BOOL_NOT_SUPPORTED;
+	            #statInternal.diagnostics.subfunctionStatus := #STATUS_NO_ERROR;
+	            EXIT;
+	          END_IF;
+	          // check whether the ring #buffer is an ARRAY.
+	          // IF so, the number OF the ARRAY elements is read out.
+	          // IF it is NOT an ARRAY, the program execution is terminated at this point
+	          IF IS_ARRAY(#bufferRegister) THEN
+	            #statBufferSize := CountOfElements(#bufferRegister);
+	          ELSE
+	            #statInternal.errorUserCleared := TRUE;
+	            #statInternal.diagnostics.status := #ERR_NO_ARRAY;
+	            #statInternal.diagnostics.subfunctionStatus := #STATUS_NO_ERROR;
+	            EXIT;
+	          END_IF;
+	          
+	          // check whether the initial value OF the ring #buffer
+	          // matches the entry (tag #item). IF the data types DO NOT match,
+	          // the program execution is terminated at this point
+	          IF TRUE
+	            AND (#initialItem <> NULL)
+	            AND (TypeOfElements(#bufferRegister) <> TypeOf(#initialItem))
+	          THEN
+	            #statInternal.errorUserCleared := TRUE;
+	            #statInternal.diagnostics.status := #ERR_WRONG_TYPE_INITIAL_ITEM;
+	            #statInternal.diagnostics.subfunctionStatus := #STATUS_NO_ERROR;
+	            EXIT;
+	          END_IF;
+	          
+	          // Store values for edge detection
+	          #statEdgesMem.shiftLeft := #shiftLeft;
+	          #statEdgesMem.shiftRight := #shiftRight;
+	          #statEdgesMem.reset := #reset;
+	          #statEdgesMem.clear := #clear;
+	          
+	          #statMainState := #FB_STATE_IDLE;
+	          #tempRepeatStateMaschine := TRUE;
+	        END_REGION Enabling
+	        
+	      #FB_STATE_IDLE:
+	        REGION IDLE
+	          // Collect edges
+	          #tempEdges.shiftRight := #shiftRight AND NOT #statEdgesMem.shiftRight;
+	          #tempEdges.shiftLeft := #shiftLeft AND NOT #statEdgesMem.shiftLeft;
+	          #tempEdges.reset := #reset AND NOT #statEdgesMem.reset;
+	          #tempEdges.clear := #clear AND NOT #statEdgesMem.clear;
+	          // Store values for edge detection
+	          #statEdgesMem.shiftRight := #shiftRight;
+	          #statEdgesMem.shiftLeft := #shiftLeft;
+	          #statEdgesMem.reset := #reset;
+	          #statEdgesMem.clear := #clear;
+	          
+	          // Reset is allways possible
+	          IF #tempEdges.reset THEN
+	            #statMainState := #FB_STATE_RESET;
+	            #tempRepeatStateMaschine := TRUE;
+	            
+	            // If error Pending - do nothing until error was reseted
+	          ELSIF #statInternal.diagnostics.status.%X15 THEN
+	            ;// Stay here and no further operation possible
+	            
+	            // Check if number of movements is in a plausible and valid range
+	            // -> Has to be lees than the buffer size
+	          ELSIF #shiftRange >= #statBufferSize THEN
+	            #statInternal.errorUserCleared := TRUE;
+	            #statInternal.diagnostics.status := #ERR_IN_SHIFT_RANGE;
+	            #statInternal.diagnostics.subfunctionStatus := #STATUS_NO_ERROR;
+	            
+	            // If Fill is activated, an inital item has to be present
+	          ELSIF (#fill AND #initialItem = NULL) THEN
+	            #statInternal.errorUserCleared := TRUE;
+	            #statInternal.diagnostics.status := #ERR_FILL_WITHOUT_INITIAL_ITEM;
+	            #statInternal.diagnostics.subfunctionStatus := #STATUS_NO_ERROR;
+	            
+	            // If clearBuffer has rising edge, the buffer is initialized by initial values
+	            // Check whether the initial value OF the ring #buffer
+	            // matches the entry (tag #item). IF the data types DO NOT match,
+	            // the program execution is terminated at this point
+	          ELSIF (#tempEdges.clear AND #initialItem = NULL) THEN
+	            #statInternal.errorAutoCleared := TRUE;
+	            #statInternal.diagnostics.status := #ERR_CLEARING_WITHOUT_INITIAL_ITEM;
+	            #statInternal.diagnostics.subfunctionStatus := #STATUS_NO_ERROR;
+	            
+	            // If Fill is activated, an inital item has to be present
+	          ELSIF (#fill AND #initialItem = NULL) THEN
+	            #statInternal.errorAutoCleared := TRUE;
+	            #statInternal.diagnostics.status := #ERR_FILL_WITHOUT_INITIAL_ITEM;
+	            #statInternal.diagnostics.subfunctionStatus := #STATUS_NO_ERROR;
+	            
+	            // Multiple commands dedected
+	          ELSIF (BOOL_TO_INT(#tempEdges.clear) + BOOL_TO_INT(#tempEdges.shiftRight) + BOOL_TO_INT(#tempEdges.shiftLeft)) > 1 THEN
+	            #statInternal.errorAutoCleared := TRUE;
+	            #statInternal.diagnostics.status := #ERR_MULTIPLE_COMMANDS_DEDECTED;
+	            #statInternal.diagnostics.subfunctionStatus := #STATUS_NO_ERROR;
+	            
+	            // Commands
+	          ELSIF #tempEdges.clear THEN
+	            #statMainState := #FB_STATE_CLEAR;
+	            #tempRepeatStateMaschine := TRUE;
+	          ELSIF #tempEdges.shiftRight THEN
+	            #statMainState := #FB_STATE_SHIFT_RIGHT;
+	            #tempRepeatStateMaschine := TRUE;
+	          ELSIF #tempEdges.shiftLeft THEN
+	            #statMainState := #FB_STATE_SHIFT_LEFT;
+	            #tempRepeatStateMaschine := TRUE;
+	          ELSE
+	            #statInternal.diagnostics.status := #STATUS_SUBSEQUENT_CALL;
+	          END_IF;
+	        END_REGION IDLE
+	        
+	      #FB_STATE_CLEAR:
+	        REGION CLEARING
+	          // Reset status
+	          #statInternal.errorAutoCleared := FALSE;
+	          
+	          FOR #tempCounter := #COUNTER_LOWER_LIMIT TO UDINT_TO_DINT(#statBufferSize - #BUFFER_SIZE_CORRECTION) DO
+	            #tempInternalError := MOVE_BLK_VARIANT(SRC := #initialItem,
+	                                                   COUNT := #COUNT_ELEMENTS,
+	                                                   SRC_INDEX := #INDEX_BEGINNING,
+	                                                   DEST_INDEX := #tempCounter,
+	                                                   DEST => #bufferRegister);
+	            
+	            // Checks whether a local error has occurred.
+	            IF (#tempInternalError <> #NO_INTERNAL_ERROR) THEN
+	              #statInternal.errorAutoCleared := TRUE;
+	              #statInternal.diagnostics.status := #ERR_CLEAR_BUFFER;
+	              #statInternal.diagnostics.subfunctionStatus := INT_TO_WORD(#tempInternalError);
+	              EXIT;
+	            END_IF;
+	          END_FOR;
+	          IF #statInternal.errorAutoCleared THEN
+	            EXIT;
+	          END_IF;
+	          
+	          // Reset counters
+	          #statLeftShiftCount :=
+	          #statRightShiftCount := #EMPTY_INITIALIZED;
+	          // Set next state
+	          #statMainState := #FB_STATE_IDLE;
+	          #tempRepeatStateMaschine := TRUE;
+	        END_REGION
+	        
+	      #FB_STATE_RESET:
+	        REGION RESET
+	          // Reset Error Auto Cleared
+	          #statInternal.errorAutoCleared := FALSE;
+	          // Set next state
+	          #statMainState := #FB_STATE_IDLE;
+	          #tempRepeatStateMaschine := TRUE;
+	        END_REGION
+	        
+	      #FB_STATE_SHIFT_LEFT:
+	        REGION SHIFT_LEFT
+	          // Shift whole array elemnts from N --> N-1
+	          #tempInternalError := MOVE_BLK_VARIANT(SRC := #bufferRegister,
+	                                                 COUNT := #statBufferSize - #shiftRange,
+	                                                 SRC_INDEX := #shiftRange,
+	                                                 DEST_INDEX := 0,
+	                                                 DEST => #bufferRegister);
+	          
+	          // Check whether a local error has occurred
+	          IF (#tempInternalError <> #NO_INTERNAL_ERROR) THEN
+	            #statInternal.errorAutoCleared := TRUE;
+	            #statInternal.diagnostics.status := #ERR_SHIFT_BUFFER_LEFT;
+	            #statInternal.diagnostics.subfunctionStatus := INT_TO_WORD(#tempInternalError);
+	            EXIT;
+	          END_IF;
+	          
+	          REGION Fill after shift left
+	            IF #fill THEN
+	              // Run through buffer and overwrite all elements with its initial item element
+	              FOR #tempCounter := UDINT_TO_DINT(#statBufferSize - #shiftRange) TO UDINT_TO_DINT(#statBufferSize - #BUFFER_SIZE_CORRECTION) DO
+	                // Overwrite the "old" values after shift
+	                #tempInternalError := MOVE_BLK_VARIANT(SRC := #initialItem,
+	                                                       COUNT := #COUNT_ELEMENTS,
+	                                                       SRC_INDEX := #INDEX_BEGINNING,
+	                                                       DEST_INDEX := #tempCounter,
+	                                                       DEST => #bufferRegister);
+	                
+	                // Check whether a local error has occurred
+	                IF (#tempInternalError <> #NO_INTERNAL_ERROR) THEN
+	                  #statInternal.errorAutoCleared := TRUE;
+	                  #statInternal.diagnostics.status := #ERR_SHIFT_BUFFER_LEFT_FILL;
+	                  #statInternal.diagnostics.subfunctionStatus := INT_TO_WORD(#tempInternalError);
+	                  EXIT;
+	                END_IF;
+	              END_FOR;
+	              IF #statInternal.errorAutoCleared THEN
+	                EXIT;
+	              END_IF;
+	            END_IF;
+	          END_REGION Fill after shift left
+	          
+	          // This program code section increments the index by 1 for shifting.    
+	          #statLeftShiftCount += #INCREMENT;
+	          // Set next state
+	          #statMainState := #FB_STATE_IDLE;
+	          #tempRepeatStateMaschine := TRUE;
+	        END_REGION
+	        
+	      #FB_STATE_SHIFT_RIGHT:
+	        REGION SHIFT_RIGHT
+	          // Shift whole array elemnsts from N --> N+1
+	          #tempInternalError := MOVE_BLK_VARIANT(SRC := #bufferRegister,
+	                                                 COUNT := #statBufferSize - #shiftRange,
+	                                                 SRC_INDEX := #INDEX_BEGINNING,
+	                                                 DEST_INDEX := #shiftRange,
+	                                                 DEST => #bufferRegister);
+	          
+	          // Check whether a local error has occurred
+	          IF (#tempInternalError <> #NO_INTERNAL_ERROR) THEN
+	            #statInternal.errorAutoCleared := TRUE;
+	            #statInternal.diagnostics.status := #ERR_SHIFT_BUFFER_RIGHT;
+	            #statInternal.diagnostics.subfunctionStatus := INT_TO_WORD(#tempInternalError);
+	            RETURN;
+	          END_IF;
+	          
+	          REGION Fill after shift right
+	            IF #fill THEN
+	              // Run through buffer and overwrite all elements with its initial item element
+	              FOR #tempCounter := #INDEX_BEGINNING TO UDINT_TO_DINT(#shiftRange - #BUFFER_SIZE_CORRECTION) DO
+	                // Overwrite the "old" values after shift
+	                #tempInternalError := MOVE_BLK_VARIANT(SRC := #initialItem,
+	                                                       COUNT := #COUNT_ELEMENTS,
+	                                                       SRC_INDEX := #INDEX_BEGINNING,
+	                                                       DEST_INDEX := #tempCounter,
+	                                                       DEST => #bufferRegister);
+	                
+	                // Check whether a local error has occurred
+	                IF (#tempInternalError <> #NO_INTERNAL_ERROR) THEN
+	                  #statInternal.errorAutoCleared := TRUE;
+	                  #statInternal.diagnostics.status := #ERR_SHIFT_BUFFER_RIGHT_FILL;
+	                  #statInternal.diagnostics.subfunctionStatus := INT_TO_WORD(#tempInternalError);
+	                  EXIT;
+	                END_IF;
+	              END_FOR;
+	              IF #statInternal.errorAutoCleared THEN
+	                EXIT;
+	              END_IF;
+	            END_IF;
+	          END_REGION Fill after shift right
+	          
+	          // This program code section increments the index by 1 for shifting.    
+	          #statRightShiftCount += #INCREMENT;
+	          // Set next state
+	          #statMainState := #FB_STATE_IDLE;
+	          #tempRepeatStateMaschine := TRUE;
+	        END_REGION
+	        
+	      #FB_STATE_DISABLING: // Disabling active
+	        REGION Disabling
+	          // Disabling is complete the bit #statDisablingCompleted must be set
+	          #statInternal.disablingCompleted := TRUE;
+	        END_REGION Disabling
+	        
+	      ELSE // Undefined state in state machine reached
+	        REGION Undefined state
+	          #statInternal.diagnostics.status := #ERR_UNDEFINED_STATE;
+	          #statInternal.diagnostics.subfunctionStatus := 16#00;
+	          #statInternal.diagnostics.stateNumber := #statMainState;
+	          #statInternal.errorUserCleared := TRUE;
+	        END_REGION Undefined state
+	    END_CASE;
+	  UNTIL #tempRepeatStateMaschine = false END_REPEAT;
+	END_REGION STATE MACHINE
+	
+	REGION OUTPUTS
+	  // Write outputs
+	  IF (#statInternal.disablingCompleted = TRUE) THEN
+	    REGION Disabling
+	      // Reset outputs if disabling completed
+	      #statInternal.valid := FALSE;
+	      #statInternal.busy := FALSE;
+	      #statInternal.error := FALSE;
+	      #statInternal.errorUserCleared := FALSE;
+	      #statInternal.errorAutoCleared := FALSE;
+	      #statInternal.diagnostics.status := #STATUS_NO_CURRENT_JOBS;
+	      #statMainState := #FB_STATE_NO_PROCESSING;
+	    END_REGION Disabling
+	    
+	  ELSIF (#statInternal.errorUserCleared = TRUE) AND (#statInternal.error = FALSE) THEN
+	    REGION Error user cleared
+	      // Error can only be cleared by user; rising edge at enable input is needed to continue 
+	      #statInternal.valid := FALSE;
+	      #statInternal.busy := FALSE;
+	      #statInternal.error := TRUE;
+	      // Write diagnostics
+	      #diagnostics := #statInternal.diagnostics;
+	      // Execution aborted --> set state no processing
+	      #statMainState := #FB_STATE_NO_PROCESSING;
+	    END_REGION Error user cleared
+	    
+	  ELSIF (#statInternal.errorAutoCleared = TRUE) AND (#statInternal.error = FALSE) THEN
+	    REGION Error auto cleared
+	      // Error can be reset by FB automatically
+	      #statInternal.valid := FALSE;
+	      #statInternal.busy := TRUE;
+	      #statInternal.error := TRUE;
+	      // Write diagnostics
+	      #diagnostics := #statInternal.diagnostics;
+	      // Handling of autocleared error
+	      #statMainState := #FB_STATE_IDLE;
+	      #tempRepeatStateMaschine := TRUE;
+	    END_REGION Error auto cleared
+	    
+	  ELSIF (#statInternal.errorAutoCleared = FALSE) AND (#statInternal.errorUserCleared = FALSE) AND (#statInternal.error = TRUE) THEN
+	    REGION After user/auto cleared or command aborted
+	      // If autocleared error is acknowledged
+	      #statInternal.valid := TRUE;
+	      #statInternal.busy := TRUE;
+	      #statInternal.error := FALSE;
+	      #statInternal.diagnostics.status := #STATUS_SUBSEQUENT_CALL;
+	    END_REGION After user/auto cleared or command aborted
+	  END_IF;
+	  
+	  REGION Write static values to outputs
+	    #valid := #statInternal.valid;
+	    #busy := #statInternal.busy;
+	    #error := #statInternal.error;
+	    #status := #statInternal.diagnostics.status;
+	    // if ENO mechanism is not used / error /& Status output present
+	    ENO := TRUE;
+	    // Write application specific static values to outputs
+	    #leftShiftCount := #statLeftShiftCount;
+	    #rightShiftCount := #statRightShiftCount;
+	    #shiftOffsetCounter := #rightShiftCount - #leftShiftCount;
+	  END_REGION Write static values to outputs
+	END_REGION OUTPUTS
+	
+END_FUNCTION_BLOCK
+

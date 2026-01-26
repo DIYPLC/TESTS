@@ -1,0 +1,63 @@
+﻿FUNCTION "LGF_RoundByPrecision" : LReal
+TITLE = LGF_RoundByPrecision
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_Digital_Industry
+FAMILY : LGF
+NAME : LGF_RoundByPrecision
+//This function rounds a floating-point number (LReal) to a specified number of decimal places. 
+   VAR_INPUT 
+      number : LReal;   // Value to be rounded
+      precisionDecimal : UInt;   // Number of decimal places to round the number (1,2,3)
+   END_VAR
+
+   VAR_TEMP 
+      tempFactor : LReal;   // Temporary variable for multiplication value depending on decimal places
+      tempDintNumber : DInt;   // Temporary variable for conversion of the number to DInt data type
+   END_VAR
+
+   VAR CONSTANT 
+      DECIMAL_BASE_VALUE : UInt := 10;   // Base for all decimal places calculations
+   END_VAR
+
+
+BEGIN
+	REGION BLOCK INFO HEADER
+	  //===============================================================================
+	  // SIEMENS AG / (c)Copyright 2025
+	  //-------------------------------------------------------------------------------
+	  // Title:            LGF_RoundByPrecision
+	  // Comment/Function: This function rounds a floating-point number (LReal) to a specified number of decimal places. 
+	  // Library/Family:   LGF (Library General Functions)
+	  // Author:           Siemens Digital Industry Support
+	  // Tested with:      S7-PLCSIM Advanced V5.0
+	  // Engineering:      TIA Portal V17
+	  // Restrictions:     ENO mechanism is not used, Error handling done by error and status
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge       | Changes applied
+	  //----------|------------|------------------------|------------------------------
+	  // 01.00.00 | 30.07.2025 | Siemens Industry Online Support
+	  //                         First released version
+	  //=============================================================================
+	END_REGION Block info header
+	
+	REGION DESCRIPTION
+	  (/*
+	This function rounds a floating-point number (LReal) to a specified number of decimal places.  
+	It scales the value, truncates it to an integer, and then re-scales it to produce the rounded result.
+	*/)
+	END_REGION DESCRIPTION
+	
+	REGION CALCULATION
+	  //Calculation of the exponent depending on the number of decimal places
+	  #tempFactor := #DECIMAL_BASE_VALUE ** #precisionDecimal;
+	  
+	  //Multiplication, rounding and scalation
+	  #tempDintNumber := LREAL_TO_DINT(#number * #tempFactor);
+	  #LGF_RoundByPrecision := #tempDintNumber / #tempFactor;
+	  ENO := TRUE;
+	END_REGION
+	
+END_FUNCTION
+

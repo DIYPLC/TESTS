@@ -1,0 +1,71 @@
+﻿FUNCTION_BLOCK "LGF_DelayProgram"
+TITLE = LGF_DelayProgram
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : 'Simatic Systems Support'
+FAMILY : LGF
+NAME : LGF_DelayProgram
+//Blocking delay to increase/extent PLC Load to simulate program load.
+   VAR_INPUT 
+      delay { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Time := T#1MS;   // Time by which the program is delayed
+   END_VAR
+
+   VAR 
+      instDelay {InstructionName := 'IEC_TIMER'; LibVersion := '1.0'; ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'; S7_SetPoint := 'False'} : IEC_TIMER;   // Instance for time delay / block the program execution
+   END_VAR
+
+
+BEGIN
+	REGION BLOCK INFO HEADER
+	  //===============================================================================
+	  // Siemens AG / (c)Copyright 2020
+	  //-------------------------------------------------------------------------------
+	  // Title:            LGF_DelayProgram
+	  // Comment/Function: Blocking delay to increase/extent PLC Load to simulate program load.
+	  // Library/Family:   LGF - Library of general functions
+	  // Author:           Simatic Systems Support
+	  // Tested with:      S7-1500
+	  // Engineering:      TIA Portal V19
+	  // Restrictions:     ENO mechanism is NOT used - forced TO true.
+	  // Requirements:     PLC S7-1500 / S7-1200
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge | Changes applied
+	  //----------|------------|------------------|------------------------------------
+	  // 01.00.00 | 19.05.2024 | SAG BG           | First Release
+	  //===============================================================================
+	END_REGION
+	
+	REGION DESCRIPTION
+	(/*
+	The function extends the PLC cycle by the time specified at the `delay` input.  
+	Thus makes it easy to simulate PLC program load by increasing the cycle time.
+	
+	---
+	
+	WARNING
+	:    The function achieves the cycle time extension by blocking the cycle for the specified time.
+	:    Use this only to simulate program load and not in productive environments.
+	*/)
+	END_REGION DESCRIPTION
+	
+	REGION Processing
+	  // Call timer with false to ensure a rising edge in operation
+	  #instDelay.TON(IN := FALSE,
+	                 PT := #delay);
+	  
+	  // Call timer iin Loop to Block Programm
+	  WHILE NOT #instDelay.Q DO
+	    #instDelay.TON(IN := TRUE,
+	                   PT := #delay);
+	  END_WHILE;
+	  
+	  // Call timer with false to reset
+	  #instDelay.TON(IN := FALSE,
+	                 PT := #delay);
+	  
+	  // ENO NOT IN USE HERE
+	  ENO := FALSE;
+	END_REGION
+	
+END_FUNCTION_BLOCK
+

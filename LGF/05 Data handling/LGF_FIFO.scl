@@ -1,0 +1,578 @@
+﻿TYPE "LGF_typeDiagnostics"
+TITLE = LGF_typeDiagnostics
+VERSION : 0.1
+//Diagnostic structure to store and transfer diagnostic information from blocks through the interface.
+   STRUCT
+      status { ExternalVisible := 'False'; ExternalWritable := 'False'} : Word;   // Status of the Block or error identification when error occurred
+      subfunctionStatus { ExternalVisible := 'False'; ExternalWritable := 'False'} : Word;   // Status or return value of called FB's, FC's and system blocks
+      stateNumber { ExternalVisible := 'False'; ExternalWritable := 'False'} : DInt;   // State in the state machine of the block where the error occurred
+   END_STRUCT;
+
+END_TYPE
+
+FUNCTION_BLOCK "LGF_FIFO"
+TITLE = LGF_FIFO
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_Industry_Support
+FAMILY : LGF
+NAME : LGF_FIFO
+//FIFO (First-In First-Out / Queue / ring buffer memory)  
+//The function stores incoming data and outputs the oldest unprocessed data.
+//
+   VAR_INPUT 
+      enable : Bool;   // TRUE: Enable functionality of FB
+      enqueue : Bool := false;   // Enqueue item to the buffer
+      dequeue : Bool := false;   // Dequeue item from the buffer and return it on `item`
+      reset : Bool;   // Initializing the buffer (reset the index and the counter)
+      clear : Bool;   // Clearing the buffer and initialize with the initial value `initialItem` (Reset index and counter).
+      initialItem : Variant;   // Value with which the ARRAY of the buffer is initialized  (usually: `0` / default value)
+   END_VAR
+
+   VAR_OUTPUT 
+      valid { ExternalWritable := 'False'} : Bool;   // TRUE: Valid set of output values available at the FB
+      busy { ExternalWritable := 'False'} : Bool;   // TRUE: FB is active and new output values can be expected
+      error { ExternalWritable := 'False'} : Bool;   // FALSE: No error  TRUE: An error occurred during the execution of the FB
+      status { ExternalWritable := 'False'} : Word;   // 16#0000-16#7FFF: Status of the FB  16#8000-16#FFFF: Error identification (see following Table)
+      elementCount { ExternalWritable := 'False'} : DInt := 0;   // Number of elements in the buffer
+      isEmpty { ExternalWritable := 'False'} : Bool := false;   // TRUE: Buffer is empty
+      isFull { ExternalWritable := 'False'} : Bool;   // TRUE: Buffer is full
+      diagnostics { ExternalWritable := 'False'} : "LGF_typeDiagnostics";
+   END_VAR
+
+   VAR_IN_OUT 
+      item : Variant;   // The entry that is either returned from the ring buffer or written into the buffer
+      buffer : Variant;   // The ARRAY that is used as the ring buffer. (Array of…)
+   END_VAR
+
+   VAR 
+      statInternal { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Struct   // Static structure for internal tags
+         enablePrevious { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Previous value of 'enable' input for edge detection
+         valid { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Value for output 'valid'
+         busy { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Value for output 'busy'
+         error { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Value for output 'error'
+         errorUserCleared { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Error occurred that can only be solved by user; rising edge at enable input necessary
+         errorAutoCleared { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Error occurred that can be acknowledged by software while block is still in operation (e.g. reset/acknowledge/automatically by software routine)
+         disablingCompleted { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // TRUE: Disabling has been completed
+         diagnostics { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'; S7_SetPoint := 'False'} : "LGF_typeDiagnostics";
+         emptyDiagnostics { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'; S7_SetPoint := 'False'} : "LGF_typeDiagnostics";   // Empty diagnostics information (for initialization purposes only)
+      END_STRUCT;
+      statEdgesMem { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Struct   // Edge memory to store the previous query's for edge detection
+         enqueue { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Enqueue edge
+         dequeue { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Dequeue edge
+         reset { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Reset edge
+         clear { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Clearing edge
+      END_STRUCT;
+      statBufferSize { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : UDInt;   // Number of array elements in the buffer / buffer size
+      statFirstItemIndex { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Int := -1;   // Index of the oldest entry in the buffer
+      statNextEmptyItemIndex { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Int := 0;   // Index of the next free entry in the buffer
+      statElementCount { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : DInt;   // Number of elements in the buffer
+      statMainState { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : DInt := #FB_STATE_NO_PROCESSING;   // State in the state machine of the FB
+   END_VAR
+
+   VAR_TEMP 
+      tempEnable : Bool;   // Temp value for input 'enable'
+      tempEdges : Struct   // Edge memory to store the query's edges
+         enqueue : Bool;   // Enqueue edge
+         dequeue : Bool;   // Dequeue edge
+         reset : Bool;   // Reset edge
+         clear : Bool;   // Clearing edge
+      END_STRUCT;
+      tempInternalError : Int;   // Error information of internal checks or subfunction calls
+      tempNewFirstItemIndex : Int;   // Variable index
+      tempNewNextEmptyItemIndex : Int;   // Variable index
+      tempCounter : DInt;   // Counter for iterating trough the buffer
+      tempRepeatStateMaschine : Bool;   // Temp variable for repeating the state machine - is used to call the state machine again without waiting for the next cycle
+   END_VAR
+
+   VAR CONSTANT 
+      BUFFER_IS_EMPTY : Int := -1;   // Buffer is empty
+      NO_INTERNAL_ERROR : Int := 0;   // No internal error
+      BUFFER_INITIALIZED : Int := -1;   // Buffer initialized
+      EMPTY_INITIALIZED : Int := 0;   // Empty item index initialized = 0
+      INDEX_BEGINNING : Int := 0;   // Start index for the beginning of the array
+      COUNT_ELEMENTS : UDInt := 1;   // Number of elements to be copied = 1
+      INCREMENT : Int := 1;   // Increment value ONE
+      BUFFER_SIZE_CORRECTION : UDInt := 1;   // Buffer size correction (0-based counting)
+      COUNTER_LOWER_LIMIT : DInt := 0;   // Counter lower limit
+      ZERO_ELEMENTS : DInt := 0;   // Zero elements in buffer
+      FB_STATE_NO_PROCESSING : DInt := 0;   // FB state: No processing
+      FB_STATE_ENABLING : DInt := 1;   // FB state: Enabling
+      FB_STATE_IDLE : DInt := 10;   // FB state: Idle
+      FB_STATE_RESET : DInt := 11;   // FB state: Reset
+      FB_STATE_CLEAR : DInt := 12;   // FB state: Clear
+      FB_STATE_ENQUEUE : DInt := 20;   // FB state: Enqueue
+      FB_STATE_DEQUEUE : DInt := 30;   // FB state: Dequeue
+      FB_STATE_DISABLING : DInt := 90;   // FB state: Disabling
+      STATUS_NO_ERROR : Word := 16#0000;   // Status: Execution finished without errors
+      STATUS_NO_CURRENT_JOBS : Word := 16#7000;   // Status: No current jobs, initial state
+      STATUS_FIRST_CALL : Word := 16#7001;   // First call after incoming new job (rising edge 'enable')
+      STATUS_SUBSEQUENT_CALL : Word := 16#7002;   // Status: Subsequent call during active processing without further details
+      SUB_STATUS_NO_ERROR : Word := 16#0000;   // No error occurred in sub function call
+      ERR_BUFFER_EMPTY : Word := 16#8001;   // Error: The buffer is empty
+      ERR_BUFFER_FULL : Word := 16#8002;   // Error: The buffer is full
+      ERR_NO_ARRAY : Word := 16#8200;   // Error: No array is present at the input `buffer`
+      ERR_WRONG_TYPE_ITEM : Word := 16#8201;   // Error: The data type of the InOut parameter `item` does not correspond to the data type of the array elements of the input `buffer`
+      ERR_WRONG_TYPE_INITIAL_ITEM : Word := 16#8202;   // Error: The data type of the input `initialValue` does not correspond to the data type of the InOut parameter `item`
+      ERR_BOOL_NOT_SUPPORTED : Word := 16#8203;   // Error: Boolean variables and arrays are not supported by `MOVE_BLOCK_VARIANT`. (Use a PLC Datatype instead)
+      ERR_MULTIPLE_COMMANDS_DEDECTED : Word := 16#8204;   // Error: Multiple commands in the same cycle detected
+      ERR_UNDEFINED_STATE : Word := 16#8600;   // Error: Due to an undefined state in state machine
+      ERR_INDEX_IN_ARRAY_LIMITS_1 : Word := 16#8601;   // Error: The tag `statNextEmptyItemIndex` is not within the array limits
+      ERR_INDEX_IN_ARRAY_LIMITS_2 : Word := 16#8602;   // Error: The tag `statFirstItemIndex` is not within the array limits
+      ERR_CLEAR_BUFFER : Word := 16#8610;   // Error: While clearing buffer in block `MOVE_BLK_VARIANT` - check `subFunctionStatus` code
+      ERR_RETURN_FIRST_ENTRY : Word := 16#8611;   // Error: While return first entry of buffer in block `MOVE_BLK_VARIANT` - check `subFunctionStatus` code
+      ERR_REPLACE_ITEM_BY_INIT_VALUE : Word := 16#8612;   // Error: While replace item by initial value in block `MOVE_BLK_VARIANT` - check `subFunctionStatus` code
+      ERR_WRITE_ENTRY : Word := 16#8613;   // Error: While write entry to buffer in block `MOVE_BLK_VARIANT` - check `subFunctionStatus` code
+   END_VAR
+
+
+BEGIN
+	REGION Block info header
+	  //===============================================================================
+	  // SIEMENS AG / (c)Copyright 2019
+	  //-------------------------------------------------------------------------------
+	  // Title:            LGF_FIFO
+	  // Comment/Function: FIFO (First-In First-Out / Queue / ring buffer memory)  
+	  //                   The function stores incoming data AND outputs the oldest unprocessed data.
+	  // Library/Family:   LGF (Library General Functions)
+	  // Author:           Siemens Digital Industry Support
+	  // Tested with:      CPU 1515F-2 PN FW:V2.6
+	  // Engineering:      TIA Portal V15.1 Update 2
+	  // Restrictions:     ENO disabled - error handling done with error and status
+	  //                   Bool array is not supported by `MOVE_BLK_VARIANT`
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge       | Changes applied
+	  //----------|------------|------------------------|------------------------------
+	  // 01.00.00 19.08.2015  Siemens Industry Online Support
+	  //                      First released version
+	  // 01.00.01 16.11.2015  Siemens Industry Online Support
+	  //                      Bug fix resetBuffer
+	  // 01.00.02 02.01.2017  Siemens Industry Online Support
+	  //                      Upgrade: TIA Portal V14 Update 1
+	  // 01.00.03 17.08.2018  Siemens Industry Online Support
+	  //                      Upgrade: TIA V15 Update 2
+	  // 01.00.04 23.11.2018  Siemens Industry Online Support
+	  //                      Upgrade: TIA V15.1
+	  // 02.00.00 29.01.2019  Siemens Industry Online Support
+	  //                      Output "done" removed (not necessary, because block works synchronous)
+	  // 03.00.00 22.10.2019  Simatic Systems Support
+	  //                      Code refactoring, comments added
+	  //                      Interface change (enqueue, dequeue etc.)
+	  //                      Set version to V3.0.0, harmonize the version of the whole library
+	  // 03.00.01 15.02.2021  Simatic Systems Support
+	  //                      Insert documentation
+	  // 04.00.00 04.09.2024  Simatic Systems Support
+	  //                      Rework to PLC Open `Enable` behavior
+	  //                      Add `isFull` outputs
+	  //                      Fix Bug while filling after left shift operation
+	  //                      Rework to diagnostic output datatype
+	  //=============================================================================
+	END_REGION Block info header
+	
+	REGION DESCRIPTION
+	  (/*
+	NOTE
+	:    The status of called commands is output in `subFunctionStatus`. In this case, the output value in `status` indicates which command caused the error. In this case, refer to the TIA Portal Online Help section for information on the respective commands.
+	
+	---
+	
+	NOTE
+	:    In computer science, the queue is also based on the FIFO principle.
+	
+	---
+	
+	With the `enqueue` input, a new item is stored from the InOut parameter `item` in the next free position in the buffer. The output `elementCount` is incremented by one.
+	
+	With the `dequeue` input, the next element to be processed is output to the InOut parameter `item`, and this field in the buffer is replaced by the value in the parameter `initialItem`. The output `elementCount` decremented by one.
+	
+	With the `reset` input, the buffer is initialized, and the index and counter are reset. The `elementCount` output is set to zero and the `isEmpty` output is set to TRUE.
+	
+	With the `clear` input, the buffer is emptied and initialized with the initial value `initialItem`. Index and counter are reset. The `elementCount` output is set to zero and the `isEmpty` output is set to TRUE.
+	*/)
+	END_REGION DESCRIPTION
+	
+	REGION ENABLING/DISABLING
+	  #tempEnable := #enable; // Work with temporary value / create process image
+	  IF (#tempEnable = TRUE) AND (#statInternal.diagnostics.status = #STATUS_NO_CURRENT_JOBS) THEN // Enable FB
+	    // First call; initialize FB
+	    #statInternal.valid := TRUE;
+	    #statInternal.busy := TRUE;
+	    #statInternal.error := FALSE;
+	    #statInternal.errorUserCleared := FALSE;
+	    #statInternal.errorAutoCleared := FALSE;
+	    #statInternal.disablingCompleted := FALSE;
+	    #statInternal.diagnostics := #statInternal.emptyDiagnostics;
+	    #diagnostics := #statInternal.emptyDiagnostics;
+	    #statInternal.diagnostics.status := #STATUS_FIRST_CALL;
+	    // State machine - start processing
+	    #statMainState := #FB_STATE_ENABLING;
+	    
+	  ELSIF (#tempEnable = FALSE) AND (#statInternal.enablePrevious = TRUE) THEN // Disable FB 
+	    #statMainState := #FB_STATE_DISABLING;
+	    
+	  ELSIF (#statInternal.diagnostics.status = #STATUS_FIRST_CALL) THEN // Set status identifier of subsequent call
+	    #statInternal.diagnostics.status := #STATUS_SUBSEQUENT_CALL;
+	  END_IF;
+	  
+	  // Edge detection 'enable' input
+	  #statInternal.enablePrevious := #tempEnable;
+	END_REGION ENABLING/DISABLING
+	
+	IF (#statInternal.diagnostics.status = #STATUS_NO_CURRENT_JOBS) THEN // Nothing to do -> End here to reduce "system load"
+	  RETURN;
+	END_IF;
+	
+	REGION STATE MACHINE
+	  REPEAT
+	    #tempRepeatStateMaschine := FALSE;
+	    
+	    CASE #statMainState OF // State machine of FB
+	      #FB_STATE_NO_PROCESSING:
+	        REGION No Processing
+	          ; // No processing active (Note: this state must always be present and left empty)
+	        END_REGION No Processing
+	        
+	      #FB_STATE_ENABLING: // Enabling active
+	        REGION Enabling
+	          // check whether the item type is BOOL
+	          // Bool is not supported by Systemfunction MOVE BLOCK VARIANT
+	          IF FALSE
+	            OR TypeOf(#item) = Bool
+	            OR TypeOf(#initialItem) = Bool
+	            OR TypeOfElements(#buffer) = Bool
+	          THEN
+	            #statInternal.errorUserCleared := TRUE;
+	            #statInternal.diagnostics.status := #ERR_BOOL_NOT_SUPPORTED;
+	            #statInternal.diagnostics.subfunctionStatus := #STATUS_NO_ERROR;
+	            EXIT;
+	          END_IF;
+	          // check whether the ring #buffer is an ARRAY.
+	          // IF so, the number OF the ARRAY elements is read out.
+	          // IF it is NOT an ARRAY, the program execution is terminated at this point
+	          IF IS_ARRAY(#buffer) THEN
+	            #statBufferSize := CountOfElements(#buffer);
+	          ELSE
+	            #statInternal.errorUserCleared := TRUE;
+	            #statInternal.diagnostics.status := #ERR_NO_ARRAY;
+	            #statInternal.diagnostics.subfunctionStatus := #STATUS_NO_ERROR;
+	            EXIT;
+	          END_IF;
+	          
+	          // check whether the data type OF the ARRAY elements matches
+	          // the data type OF the entry (#item). IF the data types DO NOT match,
+	          // the program execution is terminated at this point
+	          IF (TypeOf(#item) <> TypeOfElements(#buffer)) THEN
+	            #statInternal.errorUserCleared := TRUE;
+	            #statInternal.diagnostics.status := #ERR_WRONG_TYPE_ITEM;
+	            #statInternal.diagnostics.subfunctionStatus := #STATUS_NO_ERROR;
+	            EXIT;
+	          END_IF;
+	          
+	          // check whether the initial value OF the ring #buffer
+	          // matches the entry (tag #item). IF the data types DO NOT match,
+	          // the program execution is terminated at this point
+	          IF (TypeOf(#item) <> TypeOf(#initialItem)) THEN
+	            #statInternal.errorUserCleared := TRUE;
+	            #statInternal.diagnostics.status := #ERR_WRONG_TYPE_INITIAL_ITEM;
+	            #statInternal.diagnostics.subfunctionStatus := #STATUS_NO_ERROR;
+	            EXIT;
+	          END_IF;
+	          
+	          // Store values for edge detection
+	          #statEdgesMem.enqueue := #enqueue;
+	          #statEdgesMem.dequeue := #dequeue;
+	          #statEdgesMem.reset := #reset;
+	          #statEdgesMem.clear := #clear;
+	          
+	          #statMainState := #FB_STATE_IDLE;
+	          #tempRepeatStateMaschine := TRUE;
+	        END_REGION Enabling
+	        
+	      #FB_STATE_IDLE:
+	        REGION IDLE
+	          // Collect edges
+	          #tempEdges.enqueue := #enqueue AND NOT #statEdgesMem.enqueue;
+	          #tempEdges.dequeue := #dequeue AND NOT #statEdgesMem.dequeue;
+	          #tempEdges.reset := #reset AND NOT #statEdgesMem.reset;
+	          #tempEdges.clear := #clear AND NOT #statEdgesMem.clear;
+	          // Store values for edge detection
+	          #statEdgesMem.enqueue := #enqueue;
+	          #statEdgesMem.dequeue := #dequeue;
+	          #statEdgesMem.reset := #reset;
+	          #statEdgesMem.clear := #clear;
+	          
+	          // Reset is allways possible
+	          IF #tempEdges.reset THEN
+	            #statMainState := #FB_STATE_RESET;
+	            #tempRepeatStateMaschine := TRUE;
+	            
+	            // If error Pending - do nothing until error was reseted
+	          ELSIF #statInternal.diagnostics.status.%X15 THEN
+	            ;// Stay here and no further operation possible
+	            
+	            // Check whether the variable indices are within the ARRAY limits.
+	            // IF they are NOT, the program execution is terminated at this point
+	          ELSIF (#statNextEmptyItemIndex >= #statBufferSize) THEN
+	            #statInternal.errorUserCleared := TRUE;
+	            #statInternal.diagnostics.status := #ERR_INDEX_IN_ARRAY_LIMITS_1;
+	            #statInternal.diagnostics.subfunctionStatus := #STATUS_NO_ERROR;
+	          ELSIF (#statFirstItemIndex >= #statBufferSize) THEN
+	            #statInternal.errorUserCleared := TRUE;
+	            #statInternal.diagnostics.status := #ERR_INDEX_IN_ARRAY_LIMITS_2;
+	            #statInternal.diagnostics.subfunctionStatus := #STATUS_NO_ERROR;
+	            
+	            // multiple commands dedected
+	          ELSIF (BOOL_TO_INT(#tempEdges.clear) + BOOL_TO_INT(#tempEdges.dequeue) + BOOL_TO_INT(#tempEdges.enqueue)) > 1 THEN
+	            #statInternal.errorAutoCleared := TRUE;
+	            #statInternal.diagnostics.status := #ERR_MULTIPLE_COMMANDS_DEDECTED;
+	            #statInternal.diagnostics.subfunctionStatus := #STATUS_NO_ERROR;
+	            
+	            // Commands
+	          ELSIF #tempEdges.clear THEN
+	            #statMainState := #FB_STATE_CLEAR;
+	            #tempRepeatStateMaschine := TRUE;
+	          ELSIF #tempEdges.dequeue THEN
+	            #statMainState := #FB_STATE_DEQUEUE;
+	            #tempRepeatStateMaschine := TRUE;
+	          ELSIF #tempEdges.enqueue THEN
+	            #statMainState := #FB_STATE_ENQUEUE;
+	            #tempRepeatStateMaschine := TRUE;
+	          ELSE
+	            #statInternal.diagnostics.status := #STATUS_SUBSEQUENT_CALL;
+	          END_IF;
+	        END_REGION IDLE
+	        
+	      #FB_STATE_CLEAR:
+	        REGION CLEARING
+	          // Reset status
+	          #statInternal.errorAutoCleared := FALSE;
+	          
+	          FOR #tempCounter := #COUNTER_LOWER_LIMIT TO UDINT_TO_DINT(#statBufferSize - #BUFFER_SIZE_CORRECTION) DO
+	            #tempInternalError := MOVE_BLK_VARIANT(SRC := #initialItem,
+	                                                   COUNT := #COUNT_ELEMENTS,
+	                                                   SRC_INDEX := #INDEX_BEGINNING,
+	                                                   DEST_INDEX := #tempCounter,
+	                                                   DEST => #buffer);
+	            
+	            // Checks whether a local error has occurred.
+	            IF (#tempInternalError <> #NO_INTERNAL_ERROR) THEN
+	              #statInternal.errorAutoCleared := TRUE;
+	              #statInternal.diagnostics.status := #ERR_CLEAR_BUFFER;
+	              #statInternal.diagnostics.subfunctionStatus := INT_TO_WORD(#tempInternalError);
+	              EXIT;
+	            END_IF;
+	          END_FOR;
+	          IF #statInternal.errorAutoCleared THEN
+	            EXIT;
+	          END_IF;
+	          
+	          // Reset counters
+	          #statFirstItemIndex := #BUFFER_INITIALIZED;
+	          #statNextEmptyItemIndex := #EMPTY_INITIALIZED;
+	          #statElementCount := #EMPTY_INITIALIZED;
+	          // Set next state
+	          #statMainState := #FB_STATE_IDLE;
+	          #tempRepeatStateMaschine := TRUE;
+	        END_REGION
+	        
+	      #FB_STATE_RESET:
+	        REGION RESET
+	          // Reset Error Auto Cleared
+	          #statInternal.errorAutoCleared := FALSE;
+	          // Set next state
+	          #statMainState := #FB_STATE_IDLE;
+	          #tempRepeatStateMaschine := TRUE;
+	        END_REGION
+	        
+	      #FB_STATE_DEQUEUE:
+	        REGION DEQUEUE
+	          // Check whether the ring #buffer is empty
+	          // IF this is the CASE, program execution is terminated at this point
+	          IF (#statFirstItemIndex = #BUFFER_IS_EMPTY) THEN
+	            #statInternal.errorAutoCleared := TRUE;
+	            #statInternal.diagnostics.status := #ERR_BUFFER_EMPTY;
+	            #statInternal.diagnostics.subfunctionStatus := #STATUS_NO_ERROR;
+	            EXIT;
+	          END_IF;
+	          
+	          // Return the first entry of the ring buffer
+	          #tempInternalError := MOVE_BLK_VARIANT(SRC := #buffer,
+	                                                 COUNT := #COUNT_ELEMENTS,
+	                                                 SRC_INDEX := #statFirstItemIndex,
+	                                                 DEST_INDEX := #INDEX_BEGINNING,
+	                                                 DEST => #item);
+	          
+	          // Check whether a local error has occurred
+	          IF (#tempInternalError <> #NO_INTERNAL_ERROR) THEN
+	            #statInternal.errorAutoCleared := TRUE;
+	            #statInternal.diagnostics.status := #ERR_RETURN_FIRST_ENTRY;
+	            #statInternal.diagnostics.subfunctionStatus := INT_TO_WORD(#tempInternalError);
+	            EXIT;
+	          END_IF;
+	          
+	          // Check whether the ring #buffer contains ARRAY elements
+	          // IF it does, the first entry is passed further on and the index is incremented BY 1
+	          #tempInternalError := MOVE_BLK_VARIANT(SRC := #initialItem,
+	                                                 COUNT := #COUNT_ELEMENTS,
+	                                                 SRC_INDEX := #INDEX_BEGINNING,
+	                                                 DEST_INDEX := #statFirstItemIndex,
+	                                                 DEST => #buffer);
+	          
+	          // Check whether a local error has occurred
+	          IF (#tempInternalError <> #NO_INTERNAL_ERROR) THEN
+	            #statInternal.errorAutoCleared := TRUE;
+	            #statInternal.diagnostics.status := #ERR_REPLACE_ITEM_BY_INIT_VALUE;
+	            #statInternal.diagnostics.subfunctionStatus := INT_TO_WORD(#tempInternalError);
+	            EXIT;
+	          END_IF;
+	          
+	          // Calculate the new index of the first entry
+	          #tempNewFirstItemIndex := #statFirstItemIndex + #INCREMENT;
+	          #tempNewFirstItemIndex := #tempNewFirstItemIndex MOD UDINT_TO_INT(#statBufferSize);
+	          
+	          // Check whether the ring buffer is empty
+	          IF (#statNextEmptyItemIndex = #tempNewFirstItemIndex) THEN
+	            // If the ring buffer is empty, the index is set to 0
+	            #statFirstItemIndex := #BUFFER_INITIALIZED;
+	            #statNextEmptyItemIndex := #EMPTY_INITIALIZED;
+	          ELSE
+	            // The index of the first entry is changed
+	            #statFirstItemIndex := #tempNewFirstItemIndex;
+	          END_IF;
+	          
+	          // Evaluation of the number of elements in the stack
+	          #statElementCount -= #INCREMENT;
+	          // Set next state
+	          #statMainState := #FB_STATE_IDLE;
+	          #tempRepeatStateMaschine := TRUE;
+	        END_REGION
+	        
+	      #FB_STATE_ENQUEUE:
+	        REGION ENQUEUE
+	          // check whether the ring #buffer is full
+	          // IF this is the CASE, program execution is terminated at this point
+	          IF (#statNextEmptyItemIndex = #statFirstItemIndex) THEN
+	            #statInternal.errorAutoCleared := TRUE;
+	            #statInternal.diagnostics.status := #ERR_BUFFER_FULL;
+	            #statInternal.diagnostics.subfunctionStatus := #STATUS_NO_ERROR;
+	            EXIT;
+	          END_IF;
+	          
+	          // write the entry to the ring buffer
+	          #tempInternalError := MOVE_BLK_VARIANT(SRC := #item,
+	                                                 COUNT := #COUNT_ELEMENTS,
+	                                                 SRC_INDEX := #INDEX_BEGINNING,
+	                                                 DEST_INDEX := #statNextEmptyItemIndex,
+	                                                 DEST => #buffer);
+	          
+	          // check whether a local error has occurred
+	          IF (#tempInternalError <> #NO_INTERNAL_ERROR) THEN
+	            #statInternal.errorAutoCleared := TRUE;
+	            #statInternal.diagnostics.status := #ERR_WRITE_ENTRY;
+	            #statInternal.diagnostics.subfunctionStatus := INT_TO_WORD(#tempInternalError);
+	            EXIT;
+	          END_IF;
+	          
+	          // increment the index by 1 and calculates the new empty entry index
+	          #tempNewNextEmptyItemIndex := (#statNextEmptyItemIndex + #INCREMENT) MOD UDINT_TO_INT(#statBufferSize);
+	          #statNextEmptyItemIndex := #tempNewNextEmptyItemIndex;
+	          
+	          // check which index the "#firstItemIndex" tag has
+	          // IF the number = -1, the ring buffer is initialized
+	          // AND the entry is written TO the ring #buffer
+	          // Therefore, "0" must be assigned TO the tag
+	          IF (#statFirstItemIndex = #BUFFER_INITIALIZED) THEN
+	            #statFirstItemIndex := #INDEX_BEGINNING;
+	          END_IF;
+	          
+	          // Evaluation of the number of elements in the stack
+	          #statElementCount += #INCREMENT;
+	          // Set next state
+	          #statMainState := #FB_STATE_IDLE;
+	          #tempRepeatStateMaschine := TRUE;
+	        END_REGION
+	        
+	      #FB_STATE_DISABLING: // Disabling active
+	        REGION Disabling
+	          // Disabling is complete the bit #statDisablingCompleted must be set
+	          #statInternal.disablingCompleted := TRUE;
+	        END_REGION Disabling
+	        
+	      ELSE // Undefined state in state machine reached
+	        REGION Undefined state
+	          #statInternal.diagnostics.status := #ERR_UNDEFINED_STATE;
+	          #statInternal.diagnostics.subfunctionStatus := 16#00;
+	          #statInternal.diagnostics.stateNumber := #statMainState;
+	          #statInternal.errorUserCleared := TRUE;
+	        END_REGION Undefined state
+	    END_CASE;
+	  UNTIL #tempRepeatStateMaschine = false END_REPEAT;
+	END_REGION STATE MACHINE
+	
+	REGION OUTPUTS
+	  // Write outputs
+	  IF (#statInternal.disablingCompleted = TRUE) THEN
+	    REGION Disabling
+	      // Reset outputs if disabling completed
+	      #statInternal.valid := FALSE;
+	      #statInternal.busy := FALSE;
+	      #statInternal.error := FALSE;
+	      #statInternal.errorUserCleared := FALSE;
+	      #statInternal.errorAutoCleared := FALSE;
+	      #statInternal.diagnostics.status := #STATUS_NO_CURRENT_JOBS;
+	      #statMainState := #FB_STATE_NO_PROCESSING;
+	    END_REGION Disabling
+	    
+	  ELSIF (#statInternal.errorUserCleared = TRUE) AND (#statInternal.error = FALSE) THEN
+	    REGION Error user cleared
+	      // Error can only be cleared by user; rising edge at enable input is needed to continue 
+	      #statInternal.valid := FALSE;
+	      #statInternal.busy := FALSE;
+	      #statInternal.error := TRUE;
+	      // Write diagnostics
+	      #diagnostics := #statInternal.diagnostics;
+	      // Execution aborted --> set state no processing
+	      #statMainState := #FB_STATE_NO_PROCESSING;
+	    END_REGION Error user cleared
+	    
+	  ELSIF (#statInternal.errorAutoCleared = TRUE) AND (#statInternal.error = FALSE) THEN
+	    REGION Error auto cleared
+	      // Error can be reset by FB automatically
+	      #statInternal.valid := FALSE;
+	      #statInternal.busy := TRUE;
+	      #statInternal.error := TRUE;
+	      // Write diagnostics
+	      #diagnostics := #statInternal.diagnostics;
+	      // Handling of autocleared error
+	      #statMainState := #FB_STATE_IDLE;
+	      #tempRepeatStateMaschine := TRUE;
+	    END_REGION Error auto cleared
+	    
+	  ELSIF (#statInternal.errorAutoCleared = FALSE) AND (#statInternal.errorUserCleared = FALSE) AND (#statInternal.error = TRUE) THEN
+	    REGION After user/auto cleared or command aborted
+	      // If autocleared error is acknowledged
+	      #statInternal.valid := TRUE;
+	      #statInternal.busy := TRUE;
+	      #statInternal.error := FALSE;
+	      #statInternal.diagnostics.status := #STATUS_SUBSEQUENT_CALL;
+	    END_REGION After user/auto cleared or command aborted
+	  END_IF;
+	  
+	  REGION Write static values to outputs
+	    #valid := #statInternal.valid;
+	    #busy := #statInternal.busy;
+	    #error := #statInternal.error;
+	    #status := #statInternal.diagnostics.status;
+	    // if ENO mechanism is not used / error /& Status output present
+	    ENO := TRUE;
+	    // Write application specific static values to outputs
+	    #elementCount := #statElementCount;
+	    #isEmpty := #statElementCount <= #ZERO_ELEMENTS;
+	    #isFull := #statElementCount >= #statBufferSize;
+	  END_REGION Write static values to outputs
+	END_REGION OUTPUTS
+	
+	
+END_FUNCTION_BLOCK
+

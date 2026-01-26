@@ -1,0 +1,103 @@
+﻿FUNCTION "LGF_IsValueInLimits" : Bool
+TITLE = LGF_IsValueInLimits
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_Digital_Industries
+FAMILY : LGF
+NAME : LGF_IsValueInLimits
+//The function checks whether a value is within a defined value range. The value range is defined with a lower and an upper limit.
+   VAR_INPUT 
+      value : LReal;   // Value to be checked to determine whether it is within the defined value range
+      lowLimit : LReal;   // Low limit where the value is checked against to be greater
+      highLimit : LReal;   // High limit where the value is checked against to to be less
+   END_VAR
+
+   VAR_OUTPUT 
+      overHighLimit : Bool;   // TRUE if the “value” is greater than the upper limit value
+      belowLowLimit : Bool;   // TRUE, if the “value” is less than the lower limit value
+      error : Bool;   // FALSE: No error  TRUE: An error occurred during the execution of the FB
+      status : Word;   // 16#0000-16#7FFF: Status of the FB  16#8000-16#FFFF: Error identification (see following Table)
+   END_VAR
+
+   VAR_TEMP 
+      tempValueOverHighLimit : Bool;   // Input value is over the high limit
+      tempValueUnderLowLimit : Bool;   // Input value is below the low limit
+   END_VAR
+
+   VAR CONSTANT 
+      STATUS_NO_ERROR : Word := 16#0000;   // Status: no error occurred
+      ERR_RANGE_HIGH_BELOW_LOW_LIMIT : Word := 16#8401;   // Error:High limit less then low limit
+   END_VAR
+
+
+BEGIN
+	REGION Block info header
+	  //=============================================================================
+	  // SIEMENS AG / (c)Copyright 2017
+	  //-------------------------------------------------------------------------------
+	  // Title:            LGF_IsValueInLimits
+	  // Comment/Function: Checks if a given value is within specified limits
+	  // Library/Family:   LGF(Library General Functions)
+	  // Author:           Siemens Digital Industry Support
+	  // Tested with:      S7-PLCSIM Advanced V2.0 SP1
+	  // Engineering:      TIA Portal V15 Update 2
+	  // Restrictions:     ENO disabled - error handling done by error and status
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge       | Changes applied
+	  //----------|------------|------------------------|------------------------------
+	  // 01.00.00 10.12.2019  Siemens Industry Support
+	  //                      First released version
+	  //                      Copied from "IsValueInRange"
+	  // 03.00.00 23.04.2020  Siemens Industry Support
+	  //                      Set version to V3.0.0, harmonize the version of the whole library
+	  // 03.00.01 12.11.2020  Simatic Systems Support
+	  //                      Insert documentation
+	  //=============================================================================
+	END_REGION Block info header
+	
+	REGION DESCRIPTION
+	  (/*
+	The variables `lowLimit` and `highLimit` define a value range.  
+	The function checks whether the `value` is below, in or above the value range. The outputs `belowLowLimit`, `Ret_Val`, or `overHighLimit` show where the `value` is located.
+	
+	Figure: Principle of operation
+	
+	![LGF_IsValueInLimits - Principle of operation](LGF_IsValueInLimits.PNG "LGF_IsValueInLimits - Principle of operation")
+	*/)
+	END_REGION DESCRIPTION
+	
+	REGION Initialization and limits check
+	  // check if high limit is less then low limit
+	  IF #highLimit < #lowLimit THEN
+	    #error := true;
+	    #status := #ERR_RANGE_HIGH_BELOW_LOW_LIMIT;
+	    #overHighLimit := false;
+	    #belowLowLimit := false;
+	    #LGF_IsValueInLimits := false;
+	    RETURN;
+	  END_IF;
+	END_REGION
+	
+	REGION Limits evaluation
+	  // Check if the value is higher then the high limit
+	  #tempValueOverHighLimit := #value > #highLimit;
+	  
+	  // Check if the value is lower then the low limit
+	  #tempValueUnderLowLimit := #value < #lowLimit;
+	END_REGION
+	
+	REGION Writing to outputs
+	  // Check if the value is in range and write outputs
+	  #LGF_IsValueInLimits := NOT (#tempValueOverHighLimit OR #tempValueUnderLowLimit);
+	  #overHighLimit := #tempValueOverHighLimit;
+	  #belowLowLimit := #tempValueUnderLowLimit;
+	  
+	  #error := FALSE;
+	  #status := #STATUS_NO_ERROR;
+	  // ENO mechanism is not used
+	  ENO := TRUE;
+	END_REGION
+	
+END_FUNCTION
+

@@ -1,0 +1,96 @@
+﻿FUNCTION "LGF_NthRoot" : LReal
+TITLE = LGF_NthRoot
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_Digital_Industry
+FAMILY : LGF
+NAME : LGF_NthRoot
+//This function extracts the n-th root of a given value.
+//
+//The root is defined as follows:
+//
+//$$
+// result = \sqrt[root]{value} = value^{\frac{1}{root}}
+//$$
+//
+//STEP 7 (TIA Portal) results in the following formula: 
+//
+//$$
+// result = value ** (1 / root)
+//$$
+//
+   VAR_INPUT 
+      value : LReal;   // Value from which the root should be calculated.
+      root : LReal;   // Exponent  of root
+   END_VAR
+
+   VAR_OUTPUT 
+      error : Bool;   // FALSE: No error  TRUE: An error occurred during the execution of the FB
+      status : Word;   // 16#0000-16#7FFF: Status of the FB  16#8000-16#FFFF: Error identification (see following Table)
+   END_VAR
+
+   VAR CONSTANT 
+      ZERO : LReal := 0.0;   // ZERO / 0.0: Used for initialization and as a return value in case of error
+      ONE : LReal := 1.0;   // ONE: Part of math formula to get the nth root from value
+      STATUS_NO_ERROR : Word := 16#0000;   // Execution finished without errors
+      ERR_NEG_VAR : Word := 16#8200;   // Error: Negative value for root exponend not permitted  (Leads to complex numbers)
+   END_VAR
+
+
+BEGIN
+	REGION Block info header
+	  //=============================================================================
+	  // SIEMENS AG / (c)Copyright 2017
+	  //-------------------------------------------------------------------------------
+	  // Title:            LGF_NthRoot
+	  // Comment/Function: This function extracts the n-th root of a given value
+	  // Library/Family:   LGF(Library General Functions)
+	  // Author:           Siemens Digital Industry Support
+	  // Tested with:      S7-PLCSIM Advanced V2.0 SP1
+	  // Engineering:      TIA Portal V15 Update 2
+	  // Restrictions:     ENO disabled - error handling done by error and status
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge       | Changes applied
+	  //----------|------------|------------------------|------------------------------
+	  // 01.00.00 19.08.2015  Siemens Industry Online Support
+	  //                      First released version
+	  // 01.00.01 02.01.2017  Siemens Industry Online Support
+	  //                      Upgrade: TIA Portal V14 Update 1
+	  // 01.00.02 17.08.2018  Siemens Industry Online Support
+	  //                      Upgrade: TIA V15 Update 2
+	  // 01.00.03 23.11.2018  Siemens Industry Online Support
+	  //                      Upgrade: TIA V15.1
+	  // 01.00.04 17.01.2019  Simatic Systems Support
+	  //                      Calculation changed
+	  // 01.00.09 13.11.2019  Simatic Systems Support
+	  //                      Renamed from "LGF_XRoot" to "LGF_NthRoot"
+	  //                      Regions, comments and constants are added
+	  // 03.00.00 23.04.2020  Simatic Systems Support
+	  //                      Set version to V3.0.0, harmonize the version of the whole library
+	  // 03.00.01 12.11.2020  Simatic Systems Support
+	  //                      Insert documentation
+	  //=============================================================================
+	END_REGION
+	
+	REGION Validation
+	  // Check if the variable value is negative 
+	  IF #value < #ZERO THEN
+	    #error := true;
+	    #status := #ERR_NEG_VAR;
+	    #LGF_NthRoot := #ZERO;
+	    RETURN;
+	  END_IF;
+	END_REGION
+	
+	REGION Calculation of the n-th root
+	  #LGF_NthRoot := #value ** (#ONE / #root);
+	  
+	  #error := false;
+	  #status := #STATUS_NO_ERROR;
+	  // ENO mechanism is not used
+	  ENO := TRUE;
+	END_REGION
+	
+END_FUNCTION
+
