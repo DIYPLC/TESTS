@@ -1,0 +1,107 @@
+﻿FUNCTION "LGF_ToLower" : String
+TITLE = LGF_ToLower
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : 'Siemens Industry Online Support'
+FAMILY : LGF
+NAME : LGF_ToLower
+//This function converts the capital letters of a string into their lower case equivalents.
+   VAR_INPUT 
+      In : String;   // String input
+   END_VAR
+
+   VAR_TEMP 
+      tempCurrentCharIndex : UInt;   // Index in the the current string
+      tempStringLength : UInt;   // Maximum string length passed in
+      tempCurrentChar : Char;   // Buffer character to accept the converted ASCII code
+      tempResult : String;   // Temp. resulting string, after the conversion
+   END_VAR
+
+   VAR CONSTANT 
+      TO_UPPER_OFFSET : USInt := 32;   // Offset by which the Index into the ASCII table the characters differ
+      UPPER_CASE_A : Char := 'A';   // First character (ASCII code) to be converted
+      UPPER_CASE_Z : Char := 'Z';   // Last character (ASCII code) to be converted
+      FIRST_CHARACTER_POSITION : UInt := 1;   // First character within the string is at 1 (not zero)
+      NEXT_POSITION : UInt := 1;   // Moving the Index forward to the next position
+   END_VAR
+
+
+BEGIN
+	REGION BLOCK INFO HEADER
+	  //===============================================================================
+	  // SIEMENS AG / (c)Copyright 2023
+	  //-------------------------------------------------------------------------------
+	  // Title:            LGF_ToLower
+	  // Comment/Function: This function converts the capital letters of a string into their lower case equivalents.
+	  // Library/Family:   LGF (Library General Functions)
+	  // Author:           Siemens Digital Industry Support
+	  // Tested with:      S7-PLCSIM Advanced V4.0
+	  // Engineering:      TIA Portal V16.0
+	  // Restrictions:     ENO mechanism is not used, no error handling
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge       | Changes applied
+	  //----------|------------|------------------------|------------------------------
+	  // 01.00.00 | 10.03.2023 | Siemens Industry Online Support
+	  //                         First released version
+	  //=============================================================================
+	END_REGION Block info header
+	
+	REGION DESCRIPTION
+	(/*
+	The conversion of a string to lower case is replacing upper case characters
+	 with their lower case counterparts. Within the ASCII table the upper case characters
+	 are at a lower index to their lower case counter parts. The offset is 32 (20hex)
+	 e.g. ASCII for 'a' is 97 (61 hex) the ASCII code for 'A' is 65 (41 hex).
+	
+	{.imagePageWidth}
+	![ASCII chart from MIL-STD-188-100 (1972)](LGF_USASCII_code_chart.png "ASCII chart from MIL-STD-188-100 (1972)")
+	
+	 That means the conversion is simply an addition of 32 (20hex) to the ASCII code
+	 in question. ASCII codes which are between 'A' and 'Z' are going to be replaced.
+	*/)
+	END_REGION DESCRIPTION
+	
+	REGION INITIALIZATION
+	  // First we clean up the resultstring to avoid returning random data
+	  #tempResult := '';
+	  #tempCurrentChar := '$00';
+	  
+	  // to avoid continuous system calls to LEN, we get the string length only once
+	  // as it doesn't change during the conversion
+	  #tempStringLength := INT_TO_UINT(LEN(#In));
+	  
+	  // we start converting at the beginning of the string. The first index into the string 
+	  // is 1 (not zero based counting)
+	  #tempCurrentCharIndex := #FIRST_CHARACTER_POSITION;
+	END_REGION
+	
+	REGION CONVERSION
+	  WHILE #tempCurrentCharIndex <= #tempStringLength DO
+	    // We check the character at the indexed position in the string
+	    // its ASCII code must be between 'A' and 'Z' (included) to be object of conversion
+	    IF TRUE
+	      AND #UPPER_CASE_A <= #In[#tempCurrentCharIndex]
+	      AND #In[#tempCurrentCharIndex] <= #UPPER_CASE_Z
+	    THEN
+	      // The character is in the range of ASCII codes object to conversion
+	      // Let's convert it into lower case
+	      #tempCurrentChar := USINT_TO_CHAR(CHAR_TO_USINT(#In[#tempCurrentCharIndex]) + #TO_UPPER_OFFSET);
+	    ELSE
+	      // the character is not object to conversion. Therefore, we only copy it into the result string
+	      #tempCurrentChar := #In[#tempCurrentCharIndex];
+	    END_IF;
+	    // Append the buffer character (may be converted) to the result string
+	    #tempResult := CONCAT(IN1 := #tempResult,
+	                          IN2 := #tempCurrentChar);
+	    // Move on to the next character in the string
+	    #tempCurrentCharIndex += #NEXT_POSITION;
+	  END_WHILE;
+	END_REGION
+	
+	// Returning the converted string as function result
+	#LGF_ToLower := #tempResult;
+	ENO := TRUE;
+	
+END_FUNCTION
+

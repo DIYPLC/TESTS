@@ -1,0 +1,139 @@
+﻿FUNCTION "LGF_ConvertTemperature" : Real
+TITLE = LGF_ConvertTemperature
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_Digital_Industry_Support
+FAMILY : LGF
+NAME : LGF_ConvertTemperature
+//This function converts a temperature value from one into another unit by using an appropriate given `mode` parameter.
+   VAR_INPUT 
+      mode : Int;   // 1: Celsius to Fahrenheit,  2: Fahrenheit to Celsius,  3: Celsius to Kelvin,  4: Kelvin to Celsius,  5: Fahrenheit to Kelvin,  6: Kelvin in Fahrenheit,  7: Rankine to Kelvin,  8: Kelvin to Rankine
+      value : Real;   // Temperature value to be converted
+   END_VAR
+
+   VAR_OUTPUT 
+      error : Bool;   // FALSE: No error  TRUE: An error occurred during the execution of the FB
+      status : Word;   // 16#0000-16#7FFF: Status of the FB  16#8000-16#FFFF: Error identification (see following Table)
+   END_VAR
+
+   VAR_TEMP 
+      tempConversionResult : Real;   // Temp result of temperatur conversion
+   END_VAR
+
+   VAR CONSTANT 
+      CELSIUS_TO_FAHRENHEIT : Int := 1;   // CELSIUS_TO_FAHRENHEIT
+      CELSIUS_TO_FAHRENHEIT_GAIN : Real := 1.8;   // Constant gain of conversion: F = C * 1.8 + 32
+      CELSIUS_TO_FAHRENHEIT_OFFSET : Real := 32.0;   // Constant offset of conversion: F = C * 1.8 + 32
+      FAHRENHEIT_TO_CELSIUS : Int := 2;   // FAHRENHEIT_TO_CELSIUS
+      FAHRENHEIT_TO_CELSIUS_GAIN : Real := 1.8;   // Constant gain of conversion: C = (F - 32) / 1.8
+      FAHRENHEIT_TO_CELSIUS_OFFSET : Real := 32.0;   // Constant offset of conversion: C = (F - 32) / 1.8
+      CELSIUS_TO_KELVIN : Int := 3;   // CELSIUS_TO_KELVIN
+      CELSIUS_TO_KELVIN_OFFSET : Real := 273.15;   // Constant offset of conversion: K = C + 273.15
+      KELVIN_TO_CELSIUS : Int := 4;   // KELVIN_TO_CELSIUS
+      KELVIN_TO_CELSIUS_OFFSET : Real := 273.15;   // Constant offset of conversion: C = K - 273.15
+      FAHRENHEIT_TO_KELVIN : Int := 5;   // FAHRENHEIT_TO_KELVIN
+      FAHRENHEIT_TO_KELVIN_GAIN : Real := 1.8;   // Constant gain of conversion: K = (F - 32)/1.8 + 273.15
+      FAHRENHEIT_TO_KELVIN_OFFSET_FAHRENHEIT : Real := 273.15;   // Constant Fahrenheit offset for conversion: K = (F - 32)/1.8 + 273.15
+      FAHRENHEIT_TO_KELVIN_OFFSET : Real := 32.0;   // Constant offset for conversion: K = (F - 32)/1.8 + 273.15
+      KELVIN_TO_FAHRENHEIT : Int := 6;   // KELVIN_TO_FAHRENHEIT
+      KELVIN_TO_FAHRENHEIT_GAIN : Real := 1.8;   // Constant gain of conversion: F = (K - 273.15) * 1.8 + 32.0
+      KELVIN_TO_FAHRENHEIT_OFFSET_KELVIN : Real := 273.15;   // Constant Fahrenheit offset of conversion: F = (K - 273.15) * 1.8 + 32.0
+      KELVIN_TO_FAHRENHEIT_OFFSET : Real := 32.0;   // Constant offset of conversion: F = (K - 273.15) * 1.8 + 32.0
+      RANKINE_TO_KELVIN : Int := 7;   // RANKINE_TO_KELVIN
+      RANKINE_TO_KELVIN_GAIN_NUMERATOR : Real := 5.0;   // Constant numerator gain of conversion: K =  5 / 9 *R
+      RANKINE_TO_KELVIN_GAIN_DENOMINATOR : Real := 9.0;   // Constant denominator gain of conversion: K =  5 / 9 *R
+      KELVIN_TO_RANKINE : Int := 8;   // KELVIN_TO_RANKINE
+      KELVIN_TO_RANKINE_FACTOR : Real := 1.8;   // Constant factor of conversion: R = 9 / 5 * K
+      NO_ERROR : Word := 16#0000;   // Status: Execution finished without errors
+      ERR_WRONG_MODE : Word := 16#8200;   // Error: Incorrect mode on input “mode”,  see description of the input parameters
+   END_VAR
+
+
+BEGIN
+	REGION BLOCK INFO HEADER
+	  //===============================================================================
+	  // SIEMENS AG / (c)Copyright 2017
+	  //-------------------------------------------------------------------------------
+	  // Title:            LGF_ConvertTemperature
+	  // Comment/Function: This function converts the temperature in another unit by using an appropriate mode
+	  // Library/Family:   LGF(Library General Functions)
+	  // Author:           Siemens Digital Industry Support
+	  // Tested with:      CPU1212C DC/DC/DC FW:V4.2
+	  // Engineering:      TIA Portal V15.1
+	  // Restrictions:     ENO disabled - error handling done with done and status (just for a wrong mode)
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge       | Changes applied
+	  //----------|------------|------------------------|------------------------------
+	  // 01.00.00 | 19.08.2015   Siemens Industry Online Support
+	  //                         First released version
+	  // 01.00.01 | 02.01.2017 | Siemens Industry Online Support
+	  //                         Upgrade: TIA Portal V14 Update 1
+	  // 01.00.02 | 17.08.2018 | Siemens Industry Online Support
+	  //                         Upgrade: TIA V15 Update 2
+	  // 01.00.03 | 23.11.2018 | Siemens Industry Online Support
+	  //                         Upgrade: TIA V15.1
+	  // 02.00.00 | 16.12.2018 | Simatic Systems Support
+	  //                         Rename from "LGF_TemperatureConvert" to "LGF_ConvertTemperature"
+	  //                         to start with the verb
+	  //                         include the Rankine conversion
+	  //                         Code refactoring, regions, commends and constants
+	  // 03.00.00 | 23.04.2020 | Simatic Systems Support | Set version to V3.0.0
+	  //                         harmonize the version of the whole library
+	  // 03.00.01 | 22.02.2021 | Simatic Systems Support
+	  //                         Insert documentation
+	  //===============================================================================
+	END_REGION
+	
+	REGION CONVERT
+	  CASE #mode OF
+	    #CELSIUS_TO_FAHRENHEIT:
+	      // F = C * 1.8 + 32
+	      #tempConversionResult := #value * #CELSIUS_TO_FAHRENHEIT_GAIN + #CELSIUS_TO_FAHRENHEIT_OFFSET;
+	      
+	    #FAHRENHEIT_TO_CELSIUS:
+	      // C = (F - 32) / 1.8
+	      #tempConversionResult := (#value - #FAHRENHEIT_TO_CELSIUS_OFFSET) / #FAHRENHEIT_TO_CELSIUS_GAIN;
+	      
+	    #CELSIUS_TO_KELVIN:
+	      // K = C + 273.15
+	      #tempConversionResult := #value + #CELSIUS_TO_KELVIN_OFFSET;
+	      
+	    #KELVIN_TO_CELSIUS:
+	      // C = K - 273.15
+	      #tempConversionResult := #value - #KELVIN_TO_CELSIUS_OFFSET;
+	      
+	    #FAHRENHEIT_TO_KELVIN:
+	      // K := ((C - 32.0) / 1.8) + 273.15
+	      #tempConversionResult := ((#value - #FAHRENHEIT_TO_KELVIN_OFFSET) / #FAHRENHEIT_TO_KELVIN_GAIN) + #FAHRENHEIT_TO_KELVIN_OFFSET_FAHRENHEIT;
+	      
+	    #KELVIN_TO_FAHRENHEIT:
+	      // F := (K - 273.15) * 1.8 + 32.0
+	      #tempConversionResult := ((#value - #KELVIN_TO_FAHRENHEIT_OFFSET_KELVIN) * #KELVIN_TO_FAHRENHEIT_GAIN) + #KELVIN_TO_FAHRENHEIT_OFFSET;
+	      
+	    #RANKINE_TO_KELVIN:
+	      // K =  5 / 9 *R
+	      #tempConversionResult := #RANKINE_TO_KELVIN_GAIN_NUMERATOR * #value / #RANKINE_TO_KELVIN_GAIN_DENOMINATOR;
+	      
+	    #KELVIN_TO_RANKINE:
+	      // R = 9 / 5 * K
+	      #tempConversionResult := #KELVIN_TO_RANKINE_FACTOR * #value;
+	      
+	    ELSE
+	      // no/ wrong mode selected
+	      #LGF_ConvertTemperature := 0.0;
+	      #error := TRUE;
+	      #status := #ERR_WRONG_MODE;
+	      RETURN;
+	  END_CASE;
+	END_REGION
+	
+	REGION OUTPUTS
+	  #LGF_ConvertTemperature := #tempConversionResult;
+	  #error := FALSE;
+	  #status := #NO_ERROR;
+	  // no error handling needed
+	  ENO := TRUE;
+	END_REGION
+END_FUNCTION
+

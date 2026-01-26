@@ -1,0 +1,142 @@
+﻿FUNCTION_BLOCK "LGF_SimpleSmoothingFB"
+TITLE = LGF_SimpleSmoothingFB
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_Digital_Industry
+FAMILY : LGF
+NAME : LGF_SimpleSmoothingFB
+//The function calculates the linear mean value cyclically.
+//
+//The simplest form of smoothing a sequence of measured values is to calculate the linear mean value by three points.
+//
+//The function reads-in a value with each positive edge on the `insert` input. As soon as three values have been read in, the block calculates a smoothed value and outputs it.
+   VAR_INPUT 
+      enable : Bool;   // Activates the block. As long as enable is `TRUE`, the block can accept values on the parameter `value`.
+      insert : Bool;   // Accepts the value at the input `value` at positive edge and outputs a `smoothedValue` if three values have been read in.
+      value : LReal;   // Value that is to be included in the smoothing.
+   END_VAR
+
+   VAR_OUTPUT 
+      smoothedValue { ExternalWritable := 'False'} : LReal;   // The smoothed value.
+      error { ExternalWritable := 'False'} : Bool;   // FALSE: No error  TRUE: An error occurred during the execution of the FB
+      status { ExternalWritable := 'False'} : Word := #STATUS_NO_CALL;   // 16#0000-16#7FFF: Status of the FB  16#8000-16#FFFF: Error identification (see following Table)
+   END_VAR
+
+   VAR 
+      statValues { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Array[0..#MINIMUM_NUMBER_OF_VALUES] of LReal;   // Static array values
+      statCount { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Int;   // Static value for count
+      statSmoothedValue { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : LReal;   // Static value for smoothed lreal
+      statStatus { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Word;   // Static value for status word
+      statEnableOld { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Static old value of enable for edge detection
+      statInsertOld { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Static old value for insert for edge detection
+   END_VAR
+
+   VAR CONSTANT 
+      ZERO_REAL : Real := 0.0;   // Zero constant
+      MINIMUM_NUMBER_OF_VALUES : UDInt := 2;   // The needed minimum number of inserted values (3)
+      NUMBER_OF_VALUES : UDInt := 3;   // Number of averaged values
+      INCREMENT_VALUE : Int := 1;   // Increment value
+      STATUS_NO_CALL : Word := 16#7000;   // Status: No call of FB.  The block waits for activation through the parameter `enable`.
+      STATUS_FIRST_CALL : Word := 16#7001;   // Status: First call of FB after enabling
+      STATUS_SUBSEQUENT_CALL : Word := 16#7002;   // Status: Processing is active.  Subsequent call of FB.
+      STATUS_NOT_ENOUGH_VALUES : Word := 16#7010;   // Status: Not enough values.  The block requires three (3) values to calculate a smoothed value. Transfer additional values with a positive edge on the `insert` input.
+   END_VAR
+
+
+BEGIN
+	REGION Block info header
+	  //============================================================================
+	  // SIEMENS AG / (c)Copyright 2018
+	  //----------------------------------------------------------------------------
+	  // Title:            LGF_SimpleSmoothingFB
+	  // Comment/Function: This function block calculates smoothed values of a variable
+	  // Library/Family:   LGF(Library General Functions)
+	  // Author:           Siemens Digital Industry Support
+	  // Tested with:      S7-PLCSIM Advanced V2.0 SP1
+	  // Engineering:      TIA Portal V15 Update 2
+	  // Restrictions:     ENO disabled, forced to true - error handling done by error and status
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge       | Changes applied
+	  //----------|------------|------------------------|------------------------------
+	  // 01.00.00 | 23.11.2018 | Siemens Industry Online Support
+	  //                       | First released version
+	  // 01.00.03 | 05.11.2019 | Simatic Systems Support
+	  //                       | Regions, comments and constants are added  
+	  // 03.00.00 | 23.04.2020 | Simatic Systems Support
+	  //                       | Set version to V3.0.0, harmonize the version of the whole library
+	  // 03.00.01 | 06.04.2021 | Simatic Systems Support
+	  //                       | Insert documentation
+	  //=============================================================================
+	END_REGION Block info header
+	
+	REGION DESCRIPTION
+	  (/*
+	The function calculates the smoothed values using the following formula:
+	
+	$$
+	  \overline{y(n)} = \frac{y(n-1) + y(n) + y(n+1)}{3}
+	$$
+	
+	The calculated value is output or the calculated values are output at output `smoothedValue`.
+	
+	Based on this formula, the function cannot calculate values for the elements 0 and N.
+	*/)
+	END_REGION DESCRIPTION
+	
+	REGION Check function block call
+	  // Check if FB is triggered - rising edge on enable
+	  IF #enable AND NOT #statEnableOld THEN
+	    // Reset static values
+	    #statCount := 0;
+	    #statValues[0] := #ZERO_REAL;
+	    #statValues[1] := #ZERO_REAL;
+	    #statValues[2] := #ZERO_REAL;
+	    
+	    //Set status for first call
+	    #statStatus := #STATUS_FIRST_CALL;
+	    
+	    // Enabled after edge trigger
+	  ELSIF #enable AND #statEnableOld THEN
+	    REGION Values inserting and smoothing calculation
+	      // positive edge of insert detected 
+	      IF #insert AND NOT #statInsertOld THEN
+	        
+	        // Copy new value
+	        #statValues[0] := #statValues[1];
+	        #statValues[1] := #statValues[2];
+	        #statValues[2] := #value;
+	        
+	        // Check if the minimum needed insered values is reached
+	        // Increase the count of added values
+	        IF #statCount <= #MINIMUM_NUMBER_OF_VALUES THEN
+	          #statCount += #INCREMENT_VALUE;
+	          #statStatus := #STATUS_NOT_ENOUGH_VALUES;
+	        ELSE
+	          // 3 values inserted, calculate smoothed value
+	          #statSmoothedValue := (#statValues[0] + #statValues[1] + #statValues[2]) / #NUMBER_OF_VALUES;
+	          #statStatus := #STATUS_SUBSEQUENT_CALL;
+	        END_IF;
+	      END_IF;
+	    END_REGION
+	  ELSE
+	    #statStatus := #STATUS_NO_CALL;
+	    #statSmoothedValue := #ZERO_REAL;
+	  END_IF;
+	  
+	  // Store previous values for edge dedection
+	  #statEnableOld := #enable;
+	  #statInsertOld := #insert;
+	END_REGION
+	
+	REGION Writting to outputs
+	  #error := #statStatus.%X15;
+	  #status := #statStatus;
+	  #smoothedValue := #statSmoothedValue;
+	  
+	  // ENO mechanism is not used - forced to true.
+	  ENO := TRUE;
+	END_REGION
+	
+END_FUNCTION_BLOCK
+

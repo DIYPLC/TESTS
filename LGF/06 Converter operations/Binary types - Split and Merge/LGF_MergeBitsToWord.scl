@@ -1,0 +1,92 @@
+﻿FUNCTION "LGF_MergeBitsToWord" : Word
+TITLE = LGF_MergeBitsToWord
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_Digital_Industry
+FAMILY : LGF
+NAME : LGF_MergeBitsToWord
+//This function merge 16 Bits / 16 Boolean variables into one Word variable.
+   VAR_INPUT 
+      bit15 : Bool;   // Input Bit 15 - MSB
+      bit14 : Bool;   // Input Bit 14
+      bit13 : Bool;   // Input Bit 13
+      bit12 : Bool;   // Input Bit 12
+      bit11 : Bool;   // Input Bit 11
+      bit10 : Bool;   // Input Bit 10
+      bit9 : Bool;   // Input Bit 9
+      bit8 : Bool;   // Input Bit 8
+      bit7 : Bool;   // Input Bit 7
+      bit6 : Bool;   // Input Bit 6
+      bit5 : Bool;   // Input Bit 5
+      bit4 : Bool;   // Input Bit 4
+      bit3 : Bool;   // Input Bit 3
+      bit2 : Bool;   // Input Bit 2
+      bit1 : Bool;   // Input Bit 1
+      bit0 : Bool;   // Input Bit 0 - LSB
+   END_VAR
+
+   VAR_TEMP 
+      tempWord : Word;   // Temp memory to merge Bits into a Word
+   END_VAR
+
+
+BEGIN
+	REGION BLOCK INFO HEADER
+	  //===============================================================================
+	  // SIEMENS AG / (c)Copyright 2017
+	  //-------------------------------------------------------------------------------
+	  // Title:            LGF_MergeBitsToWord
+	  // Comment/Function: This function merge 16 Bits / 16 Boolean variables into one Word variable.
+	  // Library/Family:   LGF (Library General Functions)
+	  // Author:           Siemens Digital Industry Support
+	  // Tested with:      S7-PLCSIM Advanced V2.0 SP1
+	  // Engineering:      TIA Portal V14 Update 1
+	  // Restrictions:     ENO disabled - no error handling, no failure possible.
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge       | Changes applied
+	  //----------|------------|------------------------|------------------------------
+	  // 01.00.00 | 09.02.2017 | Siemens Industry Online Support
+	  //                         First released version
+	  // 01.00.01 | 17.08.2018 | Siemens Industry Online Support
+	  //                         Upgrade: TIA V15 Update 2
+	  // 01.00.02 | 23.11.2018 | Siemens Industry Online Support
+	  //                         Upgrade: TIA V15.1
+	  // 01.00.03 | 26.07.2019 | Simatic Systems Support
+	  //                         Standard header, style guide
+	  // 01.00.04 | 30.07.2019 | Simatic Systems Support
+	  //                         add ENO handling
+	  // 03.00.00 | 23.04.2020 | Simatic Systems Support | Set version to V3.0.0
+	  //                         harmonize the version of the whole library
+	  // 03.00.01 | 22.02.2021 | Simatic Systems Support
+	  //                         Insert documentation
+	  //=============================================================================
+	END_REGION
+	
+	REGION MERGE
+	  #tempWord.%X15 := #bit15;
+	  #tempWord.%X14 := #bit14;
+	  #tempWord.%X13 := #bit13;
+	  #tempWord.%X12 := #bit12;
+	  #tempWord.%X11 := #bit11;
+	  #tempWord.%X10 := #bit10;
+	  #tempWord.%X9 := #bit9;
+	  #tempWord.%X8 := #bit8;
+	  #tempWord.%X7 := #bit7;
+	  #tempWord.%X6 := #bit6;
+	  #tempWord.%X5 := #bit5;
+	  #tempWord.%X4 := #bit4;
+	  #tempWord.%X3 := #bit3;
+	  #tempWord.%X2 := #bit2;
+	  #tempWord.%X1 := #bit1;
+	  #tempWord.%X0 := #bit0;
+	END_REGION
+	
+	REGION OUTPUT
+	  #LGF_MergeBitsToWord := #tempWord;
+	  // no error handling needed
+	  ENO := TRUE;
+	END_REGION
+	
+END_FUNCTION
+

@@ -1,0 +1,162 @@
+﻿TYPE "LGF_typeRegressionLine"
+TITLE = LGF_typeRegressionLine
+VERSION : 0.1
+//The data type is for transferring datapoints (Key- Value pairs) to `LGF_RegressionLine` and calculate the interpolated linear equation parameters slope and intercept.
+   STRUCT
+      x : Real;   // X-Axis value
+      y : Real;   // Y-Axis value
+   END_STRUCT;
+
+END_TYPE
+
+FUNCTION "LGF_RegressionLine" : Void
+TITLE = LGF_RegressionLine
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_Digital_Industry
+FAMILY : LGF
+NAME : LGF_RegressionLine
+//The simplest case of a regression is the regression line. This means that the assumed relationship between the input and output signal is a linear straight line.
+//
+//Figure: Regression line
+//
+//![LGF_RegressionLine](LGF_RegressionLine.png "LGF_RegressionLine")
+   VAR_OUTPUT 
+      slope : LReal;   // Gradient of straight line
+      intercept : LReal;   // The intersection with the Y axis
+      error : Bool;   // FALSE: No error  TRUE: An error occurred during the execution of the FB
+      status : Word;   // 16#0000-16#7FFF: Status of the FB  16#8000-16#FFFF: Error identification (see following Table)
+   END_VAR
+
+   VAR_IN_OUT 
+      values : Array[*] of "LGF_typeRegressionLine";   // The data points are transferred with their X- and Y-values.  The data type `LGF_typeRegressionLine` has the following structure:  • x (Real)  • y (Real)
+   END_VAR
+
+   VAR_TEMP 
+      tempRegressionPoint : "LGF_typeRegressionLine";   // Temp regression point type to copy from array and work with
+      tempIndex : DInt;   // Temp index counter for loop
+      tempNumberOfElements : DInt;   // Temp number of elements
+      tempLowerBound : DInt;   // Temp lower bound
+      tempUpperBound : DInt;   // Temp upper bound
+      tempSumXY : LReal;   // Temp sum XY
+      tempSumX : LReal;   // Temp sum X
+      tempSumY : LReal;   // Temp sum Y
+      tempSumX2 : LReal;   // Temp sum X2
+      tempIntercept : LReal;   // Temp A for calculation the intercept of the math equation
+      tempSlope : LReal;   // Temp B for calculation the slope of the math equation
+   END_VAR
+
+   VAR CONSTANT 
+      ARRAY_FIRST_DIMENSION : UInt := 1;   // Input array first dimension
+      ELEMENTS_COUNT_CORRECTION : DInt := 1;   // Array elements counting correction
+      ELEMENTS_NUMBER_THRESHOLD : DInt := 2;   // Minimal number of elements
+      STATUS_EXECUTION_FINISHED : Word := 16#0000;   // Status: Execution finished without errors
+      ERR_NOT_ENOUGH_VALUES : Word := 16#8200;   // Error: Not enough Values.  The block requires at least two pairs of values to calculate a regression line. Increase the size of the array at the input parameter `values` in the second dimension.
+   END_VAR
+
+
+BEGIN
+	REGION Block info header
+	  //===============================================================================
+	  // SIEMENS AG / (c)Copyright 2019
+	  //-------------------------------------------------------------------------------
+	  // Title:            LGF_RegressionLine
+	  // Comment/Function: This function calculates the regression line
+	  // Library/Family:   LGF (Library General Functions)
+	  // Author:           Siemens Digital Industry Support
+	  // Tested with:      CPU 1515F-2 PN FW:V2.6
+	  // Engineering:      TIA Portal V15.1 Update 2
+	  // Restrictions:     ENO disabled - error handling done by error and status
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge       | Changes applied
+	  //----------|------------|------------------------|------------------------------
+	  // 01.00.00 | 23.11.2018 | Siemens Industry Online Support
+	  //                       | First released version
+	  // 01.00.04 | 15.11.2019 | Simatic Systems Support
+	  //                       | Code refactoring, comments added
+	  // 03.00.00 | 23.04.2020 | Simatic Systems Support
+	  //                       | Set version to V3.0.0, harmonize the version of the whole library
+	  // 03.00.01 | 06.04.2021 | Simatic Systems Support
+	  //                       | Insert documentation
+	  //=============================================================================
+	END_REGION Block info header
+	
+	REGION DESCRIPTION
+	  (/*
+	The block calculates the regression line with the following line equation:  
+	$ f(x) = m \cdot x + t $  
+	$m$: Gradient of straight line  
+	$t$: Intersection with y-axis  
+	$N$: number of array elements
+	
+	The gradient $m$ is calculated using the following equation:
+	
+	$$
+	   m = \frac{n \cdot \sum_{1}^{N}(x(n) \cdot y(n)) - (\sum_{1}^{N}x(n) \cdot \sum_{1}^{N}y(n))}{n \cdot \sum_{1}^{N} x^2(n) - (\sum_{1}^{N}x(n))^2}
+	$$
+	
+	The intersection $t$ with the Y axis is calculated using the following equation:
+	
+	$$
+	   t = \frac{\sum_{1}^{N} y(n)}{N} - b \cdot \frac{\sum_{1}^{N} x(n)}{N}
+	$$
+	*/)
+	END_REGION DESCRIPTION
+	
+	REGION Initialization and input data processing
+	  //calculate number of elements
+	  #tempLowerBound := LOWER_BOUND(ARR := #values, DIM := #ARRAY_FIRST_DIMENSION);
+	  #tempUpperBound := UPPER_BOUND(ARR := #values, DIM := #ARRAY_FIRST_DIMENSION);
+	  
+	  // Array elements calculation
+	  // (example: 6 - 2 = 4; but real number of elements is 5)
+	  #tempNumberOfElements := #tempUpperBound - #tempLowerBound + #ELEMENTS_COUNT_CORRECTION;
+	  
+	  // Check whether the array contains less than the maximum possible amount of elements
+	  IF #tempNumberOfElements < #ELEMENTS_NUMBER_THRESHOLD THEN
+	    #slope := 0.0;
+	    #intercept := 0.0;
+	    #error := TRUE;
+	    #status := #ERR_NOT_ENOUGH_VALUES;
+	    RETURN;
+	  END_IF;
+	END_REGION
+	
+	REGION Regression line calculation
+	  // caluclate sum of all needed values
+	  FOR #tempIndex := #tempLowerBound TO #tempUpperBound DO
+	    // make a temp copy first
+	    #tempRegressionPoint := #values[#tempIndex];
+	    
+	    // Sum of x(n) * y(n)
+	    #tempSumXY += #tempRegressionPoint.x * #tempRegressionPoint.y;
+	    // Sum of x(n) 
+	    #tempSumX += #tempRegressionPoint.x;
+	    // Sum of y(n)
+	    #tempSumY += #tempRegressionPoint.y;
+	    // Sum of x²(n)
+	    #tempSumX2 += SQR(#tempRegressionPoint.x);
+	  END_FOR;
+	  
+	  // b = (n * ∑(x(n) * y(n) - ( ∑x(n) * ∑y(n)))/
+	  //    (n * (∑x(n)^2) -(∑x(n) * ∑x(n)))
+	  #tempSlope := (#tempNumberOfElements * #tempSumXY - (#tempSumX * #tempSumY)) / (#tempNumberOfElements * #tempSumX2 - (#tempSumX * #tempSumX));
+	  
+	  // a = Y - bX : X and Y are the average values of x and y
+	  #tempIntercept := #tempSumY / #tempNumberOfElements - (#tempSlope * (#tempSumX / #tempNumberOfElements));
+	END_REGION
+	
+	REGION Outputs assignment
+	  // f(x)= a + b*x
+	  #slope := #tempSlope;
+	  #intercept := #tempIntercept;
+	  
+	  #error := false;
+	  #status := #STATUS_EXECUTION_FINISHED;
+	  // ENO not in use - force to true
+	  ENO := TRUE;
+	END_REGION
+	
+END_FUNCTION
+

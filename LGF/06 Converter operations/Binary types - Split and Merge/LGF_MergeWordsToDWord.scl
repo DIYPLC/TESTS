@@ -1,0 +1,57 @@
+﻿FUNCTION "LGF_MergeWordsToDWord" : DWord
+TITLE = LGF_MergeWordsToDWord
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_Digital_Industry
+FAMILY : LGF
+NAME : LGF_BitLogicOperations
+//This function merge 2 Word variables into one DWord variable.
+   VAR_INPUT 
+      word1 : Word;   // Input Word 1 - MSB
+      word0 : Word;   // Input Word 0 - LSB
+   END_VAR
+
+   VAR_TEMP 
+      tempDWord : DWord;   // Temp memory to merge Words into a DWord
+   END_VAR
+
+
+BEGIN
+	REGION BLOCK INFO HEADER
+	  //===============================================================================
+	  // SIEMENS AG / (c)Copyright 2018
+	  //-------------------------------------------------------------------------------
+	  // Title:            LGF_MergeWordsToDWord
+	  // Comment/Function: This function merge 2 Word variables into one DWord variable.
+	  // Library/Family:   LGF (Library General Functions)
+	  // Author:           Siemens Digital Industry Support
+	  // Tested with:      S7-PLCSIM Advanced V2.0 SP1
+	  // Engineering:      TIA Portal V14 / V14SP1
+	  // Restrictions:     ENO disabled - no error handling, no failure possible.
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge       | Changes applied
+	  //----------|------------|------------------------|------------------------------
+	  // 01.00.00 | 20.06.2019 | Simatic Systems Support
+	  //                         First release
+	  // 03.00.00 | 23.04.2020 | Simatic Systems Support | Set version to V3.0.0
+	  //                         harmonize the version of the whole library
+	  // 03.00.01 | 22.02.2021 | Simatic Systems Support
+	  //                         Insert documentation
+	  //=============================================================================
+	END_REGION
+	
+	REGION MERGE
+	  // set the words by slice access
+	  #tempDWord.%W1 := #word1;
+	  #tempDWord.%W0 := #word0;
+	END_REGION
+	
+	REGION OUTPUT
+	  #LGF_MergeWordsToDWord := #tempDWord;
+	  // no error handling needed
+	  ENO := TRUE;
+	END_REGION
+	
+END_FUNCTION
+

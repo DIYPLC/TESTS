@@ -1,0 +1,88 @@
+﻿FUNCTION "LGF_SplitWordToBits" : Void
+TITLE = LGF_SplitWordToBits
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_Digital_Industry
+FAMILY : LGF
+NAME : LGF_SplitWordToBits
+//This function splits a Word variable into 16 Boolean / 16 Bit variables.
+   VAR_INPUT 
+      "word" : Word;   // Bit sequence to be split
+   END_VAR
+
+   VAR_OUTPUT 
+      bit15 : Bool;   // Output Bit 15 - MSB
+      bit14 : Bool;   // Output Bit 14
+      bit13 : Bool;   // Output Bit 13
+      bit12 : Bool;   // Output Bit 12
+      bit11 : Bool;   // Output Bit 11
+      bit10 : Bool;   // Output Bit 10
+      bit9 : Bool;   // Output Bit 9
+      bit8 : Bool;   // Output Bit 8
+      bit7 : Bool;   // Output Bit 7
+      bit6 : Bool;   // Output Bit 6
+      bit5 : Bool;   // Output Bit 5
+      bit4 : Bool;   // Output Bit 4
+      bit3 : Bool;   // Output Bit 3
+      bit2 : Bool;   // Output Bit 2
+      bit1 : Bool;   // Output Bit 1
+      bit0 : Bool;   // Output Bit 0 - LSB
+   END_VAR
+
+
+BEGIN
+	REGION BLOCK INFO HEADER
+	  //===============================================================================
+	  // SIEMENS AG / (c)Copyright 2017
+	  //-------------------------------------------------------------------------------
+	  // Title:            LGF_SplitWordToBits
+	  // Comment/Function: This function splits a Word variable into 16 Boolean / 16 Bit variables.
+	  // Library/Family:   LGF (Library General Functions)
+	  // Author:           Siemens Digital Industry Support
+	  // Tested with:      S7-PLCSIM Advanced V2.0 SP1
+	  // Engineering:      TIA Portal V14 Update 1
+	  // Restrictions:     ENO disabled - no error handling, no failure possible.
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge       | Changes applied
+	  //----------|------------|------------------------|------------------------------
+	  // 01.00.00 | 09.02.2017 | Siemens Industry Online Support
+	  //                         First released version
+	  // 01.00.01 | 17.08.2018 | Siemens Industry Online Support
+	  //                         Upgrade: TIA V15 Update 2
+	  // 01.00.02 | 23.11.2018 | Industry Online Support
+	  //                         Upgrade: TIA V15.1
+	  // 01.00.03 | 26.07.2019 | Simatic Systems Support
+	  //                         Standard header, style guide
+	  // 01.00.04 | 30.07.2019 | Simatic Systems Support
+	  //                         add ENO handling
+	  // 03.00.00 | 23.04.2020 | Simatic Systems Support | Set version to V3.0.0
+	  //                         harmonize the version of the whole library
+	  // 03.00.01 | 22.02.2021 | Simatic Systems Support
+	  //                         Insert documentation
+	  //=============================================================================
+	END_REGION
+	
+	REGION OUTPUT
+	  #bit15 := #word.%X15;
+	  #bit14 := #word.%X14;
+	  #bit13 := #word.%X13;
+	  #bit12 := #word.%X12;
+	  #bit11 := #word.%X11;
+	  #bit10 := #word.%X10;
+	  #bit9 := #word.%X9;
+	  #bit8 := #word.%X8;
+	  #bit7 := #word.%X7;
+	  #bit6 := #word.%X6;
+	  #bit5 := #word.%X5;
+	  #bit4 := #word.%X4;
+	  #bit3 := #word.%X3;
+	  #bit2 := #word.%X2;
+	  #bit1 := #word.%X1;
+	  #bit0 := #word.%X0;
+	  // no error handling needed
+	  ENO := TRUE;
+	END_REGION
+	
+END_FUNCTION
+

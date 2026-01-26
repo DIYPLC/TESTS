@@ -1,0 +1,173 @@
+﻿FUNCTION "LGF_TaddrToString" : String
+TITLE = LGF_TaddrToString
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_Digital_Industry
+FAMILY : LGF
+NAME : LGF_TaddrToString
+//The system data type `TADDR_Param` contains address information consisting of an IPV4 address and the port number.
+//
+//The `LGF_TaddrToString` function converts a `TADDR_Param` system data type variable to a `String` data type variable.
+   VAR_INPUT 
+      ipAdressTaddr {InstructionName := 'TADDR_Param'; LibVersion := '1.0'} : TADDR_Param;   // IP-Address and Port number to convert into string
+   END_VAR
+
+   VAR_TEMP 
+      tempIpAddressString : String[#MAX_IP_ADDRESS_STRING_LENGHT];   // Temp string to store the converted IP Address and Port number
+      tempSpacePosition : Int;   // Temp index to iterate trough string searching and deleting blanks
+   END_VAR
+
+   VAR CONSTANT 
+      CONVERT_SIZE_OF_IP : USInt := 3;   // Number of character positions in IP adress
+      CONVERT_SIZE_OF_PORT : USInt := 5;   // Number of character positions in Port number
+      CONVERT_PREC : USInt := 0;   // Number of decimal places
+      CONVERT_FORMAT_TO_INTEGER : Word := 16#0000;   // Output format of the characters
+      CONVERT_START_POSITION_OCTET_1 : UInt := 1;   // Character starting at which the result is written
+      CONVERT_START_POSITION_OCTET_2 : UInt := 5;   // Character starting at which the result is written
+      CONVERT_START_POSITION_OCTET_3 : UInt := 9;   // Character starting at which the result is written
+      CONVERT_START_POSITION_OCTET_4 : UInt := 13;   // Character starting at which the result is written
+      CONVERT_START_POSITION_PORT : UInt := 17;   // Character starting at which the result is written
+      DOT_POSITION_OCTET_1 : UInt := 4;   // Position of dot after first octet
+      DOT_POSITION_OCTET_2 : UInt := 8;   // Position of dot after second octet
+      DOT_POSITION_OCTET_3 : UInt := 12;   // Position of dot after third octet
+      COLON_POSITION_PORT_ADDRESS : Int := 16;   // Position of colon for port in the IP address string
+      OCTET_1 : UInt := 1;   // Index of first octet
+      OCTET_2 : UInt := 2;   // Index of second octet
+      OCTET_3 : UInt := 3;   // Index of third octet
+      OCTET_4 : UInt := 4;   // Index of fourth octet
+      CHAR_DOT : Char := '.';   // Character Dot '.' as seperator for ip adress octets
+      CHAR_COLON : Char := ':';   // Character Colon ':' as seperator for port from ip adress octets
+      CHAR_BLANK : Char := ' ';   // Character Blank ' ' (Withespace)
+      MAX_IP_ADDRESS_STRING_LENGHT : DInt := 21;   // Maximum lenght of the ip address string including a five digit port number
+      NO_BLANK_SPACE_FOUND : Int := 0;   // Black/whitespace found in string
+      NUMBER_OF_CHAR_TO_DEL : Int := 1;   // Number of characters to be deleted
+   END_VAR
+
+
+BEGIN
+	REGION BLOCK INFO HEADER
+	  //===============================================================================
+	  // SIEMENS AG / (c)Copyright 2017
+	  //-------------------------------------------------------------------------------
+	  // Title:            LGF_TaddrToString
+	  // Comment/Function: This function converts a TADDR Parameter format into a string IP Address.
+	  // Library/Family:   LGF (Library General Functions)
+	  // Author:           Siemens Digital Industry Support
+	  // Tested with:      CPU1212C DC/DC/DC FW:V4.2
+	  // Engineering:      TIA Portal V14 Update 1
+	  // Restrictions:     ENO mechanism is not used, no error handling
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge       | Changes applied
+	  //----------|------------|------------------------|------------------------------
+	  // 01.00.00 | 19.01.2017 | Siemens Industry Online Support
+	  //                         First released version
+	  // 01.00.01 | 17.08.2018 | Siemens Industry Online Support
+	  //                         Upgrade: TIA V15 Update 2
+	  // 01.00.02 | 23.11.2018 | Industry Online Support
+	  //                         Upgrade: TIA V15.1
+	  // 01.00.03 | 17.06.2019 | Simatic Systems Support
+	  //                         Standard header and block parameters update
+	  // 01.00.04 | 10.07.2019 | Simatic Systems Support
+	  //                         Refactoring of While to Do/While and constants inserted
+	  // 01.00.05 | 30.07.2019 | Simatic Systems Support
+	  //                         Add ENO handling
+	  // 03.00.00 | 23.04.2020 | Simatic Systems Support | Set version to V3.0.0
+	  //                         Harmonize the version of the whole library
+	  // 03.00.01 | 23.02.2021 | Simatic Systems Support
+	  //                         Insert documentation
+	  //===============================================================================
+	END_REGION Block info header
+	
+	REGION DESCRIPTION
+	  (/*
+	The function converts the IPV4 address with or without port number. The system data type `TADDR_Param` is a structured data type. This structure contains the variable `REM_PORT_NR`. If this variable is 0, no port is written to the parameter `Ret_Val`.
+	
+	##### Example Result at `Ret_Val`:
+	
+	* The standard string format for an IPV4 address without port number:  
+	`192.168.11.11`
+	* The standard string format for an IPV4 address with port number:  
+	`192.168.11.11:3294`
+	*/)
+	END_REGION DESCRIPTION
+	
+	REGION Initialization
+	  #tempIpAddressString := '';
+	END_REGION
+	
+	REGION Convert octets
+	  // Convert the first IP-V4 Octet to a string
+	  VAL_STRG(IN     := #ipAdressTaddr.REM_IP_ADDR[#OCTET_1],
+	           SIZE   := #CONVERT_SIZE_OF_IP,
+	           PREC   := #CONVERT_PREC,
+	           FORMAT := #CONVERT_FORMAT_TO_INTEGER,
+	           P      := #CONVERT_START_POSITION_OCTET_1,
+	           OUT    => #tempIpAddressString);
+	  
+	  #tempIpAddressString[#DOT_POSITION_OCTET_1] := #CHAR_DOT;
+	  
+	  // Convert the second IP-V4 Octet to a string
+	  VAL_STRG(IN     := #ipAdressTaddr.REM_IP_ADDR[#OCTET_2],
+	           SIZE   := #CONVERT_SIZE_OF_IP,
+	           PREC   := #CONVERT_PREC,
+	           FORMAT := #CONVERT_FORMAT_TO_INTEGER,
+	           P      := #CONVERT_START_POSITION_OCTET_2,
+	           OUT    => #tempIpAddressString);
+	  
+	  #tempIpAddressString[#DOT_POSITION_OCTET_2] := #CHAR_DOT;
+	  
+	  // Convert the third IP-V4 Octet to a string
+	  VAL_STRG(IN     := #ipAdressTaddr.REM_IP_ADDR[#OCTET_3],
+	           SIZE   := #CONVERT_SIZE_OF_IP,
+	           PREC   := #CONVERT_PREC,
+	           FORMAT := #CONVERT_FORMAT_TO_INTEGER,
+	           P      := #CONVERT_START_POSITION_OCTET_3,
+	           OUT    => #tempIpAddressString);
+	  
+	  #tempIpAddressString[#DOT_POSITION_OCTET_3] := #CHAR_DOT;
+	  
+	  // Convert the fourth IP-V4 Octet to a string
+	  VAL_STRG(IN     := #ipAdressTaddr.REM_IP_ADDR[#OCTET_4],
+	           SIZE   := #CONVERT_SIZE_OF_IP,
+	           PREC   := #CONVERT_PREC,
+	           FORMAT := #CONVERT_FORMAT_TO_INTEGER,
+	           P      := #CONVERT_START_POSITION_OCTET_4,
+	           OUT    => #tempIpAddressString);
+	END_REGION
+	
+	REGION Port number
+	  // If the Port number is specified, copy it to the string following the ':' seperator
+	  IF #ipAdressTaddr.REM_PORT_NR > 0 THEN
+	    // add colon as seperator sign
+	    #tempIpAddressString[#COLON_POSITION_PORT_ADDRESS] := #CHAR_COLON;
+	    //Convert the port number to string
+	    VAL_STRG(IN     := #ipAdressTaddr.REM_PORT_NR,
+	             SIZE   := #CONVERT_SIZE_OF_PORT,
+	             PREC   := #CONVERT_PREC,
+	             FORMAT := #CONVERT_FORMAT_TO_INTEGER,
+	             P      := #CONVERT_START_POSITION_PORT,
+	             OUT    => #tempIpAddressString);
+	  END_IF;
+	END_REGION
+	
+	REGION Delete spaces  
+	  REPEAT // run trough String and delete all spaces
+	    // search for blank's
+	    #tempSpacePosition := FIND(IN1 := #tempIpAddressString, IN2 := #CHAR_BLANK);
+	    // blank found, delet it from string
+	    IF #tempSpacePosition > #NO_BLANK_SPACE_FOUND THEN
+	      #tempIpAddressString := DELETE(IN := #tempIpAddressString, L := #NUMBER_OF_CHAR_TO_DEL, P := #tempSpacePosition);
+	    END_IF;
+	    // run until no more blanks found in string
+	  UNTIL #tempSpacePosition <= #NO_BLANK_SPACE_FOUND END_REPEAT;
+	END_REGION
+	
+	REGION Output
+	  #LGF_TaddrToString := #tempIpAddressString;
+	  //ENO mechanism is not used - forced to true.
+	  ENO := TRUE;
+	END_REGION
+	
+END_FUNCTION
+

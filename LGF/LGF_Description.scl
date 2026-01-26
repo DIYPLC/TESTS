@@ -1,0 +1,312 @@
+﻿FUNCTION "LGF_Description" : Void
+TITLE = LGF_Description
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : 'Siemens Industry Support'
+NAME : LGF_Description
+//Block for the Libray description
+
+BEGIN
+	
+	REGION INFO
+	  (/*
+	title: Library of General Functions (LGF)
+	subTitle: STEP 7 Basic/Professional (TIA PORTAL) / SIMATIC S7-1200 / S7-1500
+	shortDescription: TIA Portal has an extensive number of "ready-to-use" instructions (mathematical functions, times, counters, etc.). In addition, there are other useful basic functions. These functions are provided in the form of a library and they can be used freely. The finished functions are freely customizable and can therefore be used universally.
+	type: Application Example
+	fileName: LGF_DOC
+	siosId: 109479728
+	link: https://support.industry.siemens.com/cs/ww/en/view/109479728
+	classification:   
+	# " " "Frei verwendbar" "Unrestricted" "Intern" "Restricted" "Vertraulich" "Confidential" "Streng vertraulich" "Strictly Confidential"
+	 */)
+	END_REGION INFO
+	
+	REGION PREAMBLE
+	  (/*
+	# Library overview
+	
+	## General information
+	
+	TIA Portal has an extensive number of "ready-to-use" instructions (mathematical functions, times, counters, etc.). In addition, there are other useful basic functions.
+	
+	These functions are provided in the form of a library and they can be used freely. The finished functions are freely customizable and can therefore be used universally.
+	
+	The library described here is versioned and it will be continuously extended. For information on versioning, see Chapter "Versioning".
+	
+	## Hardware and software requirements
+	
+	#### Requirements for this library
+	
+	In order to be able to use the functionality of the library described here, the following hardware and software requirements must be met.
+	
+	#### Hardware
+	
+	All blocks (FB, FC, DB, ...) in the library can be used universally with the following controllers:
+	* SIMATIC S7-1200 and SIMATIC S7-1200 F product family  
+	(from firmware V4.2)
+	* SIMATIC S7-1500 and SIMATIC S7-1500 F product family  
+	(from firmware V2.0)
+	* Simulation with SIMATIC S7-PLCSIM  
+	(from V14)
+	
+	#### Software
+	
+	* SIMATIC STEP 7 Basic/Professional (TIA PORTAL)
+	
+	---
+	
+	NOTE
+	:    In general, it is possible to open a library with STEP 7 Basic, although STEP 7 Professional elements (e.g. SIMATIC S7-1500 controller) are included. In this case you will be informed with a message when opening the library.
+	:    All elements (types and copy templates) can be used if they are supported by the hardware installed in the TIA Portal.
+	:    If you try to copy elements with STEP 7 Basic from the library that are not supported (e.g. SIMATIC S7-1500 controller), an error message is displayed.
+	*/)
+	  
+	  (/*
+	# Working with the library
+	
+	## General information
+	
+	All blocks in the "LGF" library can be used freely in conjunction with SIMATIC S7-1200 and SIMATIC S7-1500 controllers.
+	
+	Most of the blocks are stored as types in the library. This means that the blocks are versioned and can thus use all advantages.
+	* Central update function for library elements
+	* Versioning of library elements
+	
+	---
+	
+	Note
+	:    Information on the general handling of libraries is provided in the Guideline for Library Handling  
+	https://support.industry.siemens.com/cs/ww/en/view/109747503  
+	:    and in the Programming Guideline for S7-1200/1500 in the chapter "Libraries".  
+	https://support.industry.siemens.com/cs/ww/en/view/81318674
+	  
+	---
+	  
+	Note
+	:    All blocks in the LGF were created in accordance with the Programming Style Guide.  
+	https://support.industry.siemens.com/cs/ww/en/view/81318674
+	
+	---
+	
+	For more information on libraries, visit the TIA Portal:
+	* Libraries in the TIA Portal  
+	  https://support.industry.siemens.com/cs/ww/en/view/109738702
+	
+	* How do you open libraries in STEP 7 (TIA Portal)?  
+	https://support.industry.siemens.com/cs/ww/en/view/37364723
+	
+	* Automate in less than 10 minutes TIA Portal: Time Savers – Global libraries  
+	  https://support.industry.siemens.com/cs/ww/en/view/78529894
+	
+	* Which elements from STEP 7 (TIA Portal) can be stored in a library as a type or as a copy template?  
+	  https://support.industry.siemens.com/cs/ww/en/view/109476862
+	
+	* How can you automatically open a global library when starting TIA Portal V13 or higher and use it e.g. as a corporate library?  
+	  https://support.industry.siemens.com/cs/ww/en/view/100451450
+	
+	* Library with PLC data types for IO module / technology modules and PROFIdrive drives (LPD)  
+	  https://support.industry.siemens.com/cs/ww/en/view/109482396
+	
+	------
+	
+	## Simulation capability with SIMATIC S7-PLCSIM Advanced
+	
+	Simulation with SIMATIC S7-PLCSIM Advanced is already activated in the
+	properties of the LGF blocks.
+	
+	![Block properties](LIB_Simulation_01.PNG)
+	
+	After translation with SIMATIC S7-PLCSIM Advanced, proceed as follows so that
+	the blocks can be simulated.
+	
+	1. Open the properties of your project and activate the option "Support simulation during block compilation" in the "Protection" tab.
+	
+	![Project properties](LIB_Simulation_00.PNG)
+	
+	---
+	
+	Note
+	:    Blocks with activated simulation capability take up more memory space in the PLC.
+	
+	------
+	
+	## User-defined documentation (user help)
+	
+	In order to explain the principle of operation and use of the blocks to users of the LGF library, user-defined documentation has been created for each block.  
+	The user-defined documentation per block is available in German and English as a PDF file. The PDF files are stored in the following directories of the LGF library.
+	
+	* German: `"UserFiles\UserDocumentation\en-DE\Library Types"`
+	* English: `"UserFiles\UserDocumentation\en-US\Library Types"`
+	
+	The user-defined documentation for a block can be called up in the Task Card "Library" and in the library view with the key combination `<Shift+F1>`.  
+	The respective PDF is always opened with the standard program defined in Microsoft Windows.
+	
+	So that the user-defined documentation of the blocks can also be called up in the project navigation, you must copy the directories with the PDF files into the project directory `UserFiles`.
+	
+	---
+	
+	Note
+	:    For user-defined documentation, you require SIMATIC STEP 7 Basic / Professional V15.1 Update 1.
+	
+	#### Central directory for user-defined documentation
+	
+	Alternatively, you can store the user-defined documentation in a central directory for all projects. To define a central storage location for user help, proceed as follows:
+	
+	1. In the "Options" menu, select the "Settings" command.
+	2. Open the area "General > General".
+	3. Navigate to the "User documentation" section.
+	4. Activate the checkbox "Display call log for user-defined documentation" to display a log of the call-up of the user-defined documentation in the Inspector window.
+	5. Activate the "Search for user-defined documentation in a central directory" checkbox to store user-defined documentation in a central directory for projects.
+	6. In the "Central directory for user-defined documentation" field, specify the path where you want to store cross-project documentation.
+	
+	------
+	
+	![Central directory for user defined documentation](LIB_UserDokumentation.PNG)
+	
+	---
+	
+	Note
+	:    Do not change the names of the PDF, because the file name must precisely match the name of the object in the TIA Portal.
+	  
+	---
+	  
+	Note
+	:    Further information on the user-defined documentation can be found in the system manual "SIMATIC STEP 7 Basic/Professional V15.1 and SIMATIC WinCC V15.1":  
+	https://support.industry.siemens.com/cs/ww/en/view/109755202/114872699275
+	*/)
+	  
+	  (/*
+	# Explanation of the blocks
+	
+	The chapters below describe all blocks of the library, "Library of General Functions".  
+	The chapters have the same structure as the library itself.
+	
+	All blocks are divided into application areas or categories:
+	* Bit logic operations
+	* Date and timer operations
+	* Counter operations
+	* Comparator operations
+	* Math operations
+	* Data handling
+	* Converter operations
+	* Signal generators
+	* Technology operations
+	* Measurement operations
+	
+	![Global Library (LGF)](LGF_ProjectTree.PNG)
+	*/)
+	END_REGION PREAMBLE
+	
+	REGION APPENDIX
+	  (/*
+	# Appendix
+	
+	{!appendixENSiemens.md!}
+	
+	*/)
+	  
+	  (/*
+	## Links and Literature
+	+-----+-----------------------------------------------------------------------+
+	| No. |Topic     
+	+=====+=======================================================================+
+	| \1\ | Siemens Industry Online Support
+	|     | https://sieportal.siemens.com  
+	+-----+-----------------------------------------------------------------------+
+	| \2\ | Link to the entry page of the application example
+	|     | https://support.industry.siemens.com/cs/ww/en/view/109479728
+	+-----+-----------------------------------------------------------------------+
+	| \3\ | Programming Guidelines and Programming Style guide for SIMATIC S7-1200 and S7-1500
+	|     | https://support.industry.siemens.com/cs/ww/en/view/81318674
+	+-----+-----------------------------------------------------------------------+
+	| \4\ | Library with PLC data types (LPD) for STEP 7 (TIA Portal) and SIMATIC S7-1200 / S7-1500
+	|     | https://support.industry.siemens.com/cs/ww/en/view/109482396
+	+-----+-----------------------------------------------------------------------+
+	| \5\ | Guideline on Library Handling in Tia Portal
+	|     | https://support.industry.siemens.com/cs/ww/en/view/109747503
+	+-----+-----------------------------------------------------------------------+
+	| \6\ | Libraries in the TIA Portal
+	|     | https://support.industry.siemens.com/cs/ww/en/view/109738702
+	
+	------
+	*/)
+	  
+	  (/*
+	## Change documentation
+	
+	#### Versioning of the library
+	The library and library elements are maintained in accordance with the table below:
+	
+	+----+-------------------------------------------+-----------------------------------------+--------------------+
+	| P  | 1.                                        | 2.                                      | 3.                 |
+	+====+===========================================+=========================================+====================+
+	|    | Non-compatible change                     | Compatible change                       | Error correction   |
+	+----+-------------------------------------------+-----------------------------------------+--------------------+
+	|    | * Reduction of interfaces                 | * Extension of the interfaces           | * Bug fix          |
+	|    | * Changing the interfaces                 | * Compatible extension of functionality |                    |
+	|    | * Incompatible extension of functionality |                                         |                    |
+	
+	#### Versioning example
+	
+	Example for version numbers and their use
+	
+	+-------------+---------+---------+---------+---------+----------------------------------+
+	| Library     | FB1     | FB2     | FC1     | FC2     | Comment                          |
+	+=============+=========+=========+=========+=========+==================================+
+	|  1.0.0      |  1.0.0  |  1.0.0  |  1.0.0  |  -      | Released                         |
+	+-------------+---------+---------+---------+---------+----------------------------------+
+	| `1.0.1`     | `1.0.1` |  1.0.0  |  1.0.0  |  -      | Troubleshooting of FB1           |
+	+-------------+---------+---------+---------+---------+----------------------------------+
+	| `1.0.2`     |  1.0.1  | `1.0.1` |  1.0.0  |  -      | Optimization of FB2              |
+	+-------------+---------+---------+---------+---------+----------------------------------+
+	| `1.0.3`     |  1.0.1  | `1.0.2` |  1.0.0  |  -      | Adjusting Documentation of FB2   |
+	+-------------+---------+---------+---------+---------+----------------------------------+
+	| `1.1.0`     | `1.1.0` |  1.0.1  |  1.0.0  |  -      | Compatible functional extension to FB1
+	+-------------+---------+---------+---------+---------+----------------------------------+
+	| `1.2.0`     | `1.2.0` |  1.0.1  |  1.0.0  |  -      | Compatible functional extension to FB1
+	+-------------+---------+---------+---------+---------+----------------------------------+
+	| `2.0.0`     | `2.0.0` |  1.0.1  | `2.0.0` |  -      | Incompatible functional extension on FB1 and FC1
+	+-------------+---------+---------+---------+---------+----------------------------------+
+	| `2.0.1`     |  2.0.0  | `1.0.2` |  2.0.0  |  -      | Troubleshooting FB2              |
+	+-------------+---------+---------+---------+---------+----------------------------------+
+	| (`3.0.0`)   |  2.0.0  |  1.0.2  |  2.0.0  | `1.0.0` | New function FC2, can be labeled as a major or minor release
+	| `3.0.0`     |         |         |         |         |                                  |
+	+-------------+---------+---------+---------+---------+----------------------------------+
+	| `3.0.1`     |  2.0.0  |  1.0.2  | `2.0.1` | `1.0.1` | Troubleshooting                  |
+	+-------------+---------+---------+---------+---------+----------------------------------+
+	
+	 */)
+	END_REGION APPENDIX
+	
+	REGION ChangeLog
+	(*
+	Version  | Date       | Expert in charge       | Changes applied
+	---------|------------|------------------------|------------------------------
+	05.02.00 | 23.02.2025 | Siemens Digital Industry
+	         |            | Reduce number of templates, all others can be derived from the present templates
+	*)
+	END_REGION
+	
+	// Description for the TIA Package Manager.
+	REGION DETAILSPM
+	(*en-us
+	TIA Portal has an extensive number of "ready-to-use" instructions (mathematical functions, times, counters, etc.). In addition, there are other useful basic functions.
+	
+	These functions are provided in the form of a library and they can be used freely. The finished functions are freely customizable and can therefore be used universally.
+	
+	The library described here is versioned and it will be continuously extended. For information on versioning, see Chapter "Versioning".
+	*)
+	END_REGION
+	
+	// Keywords for the TIA Package Manager.
+	REGION KEYWORDS
+	(*en-us
+	- Code2Docu
+	- Library of General Functions
+	- LGF
+	- Generic functions
+	- General functions
+	*)
+	END_REGION
+END_FUNCTION
+

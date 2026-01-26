@@ -1,0 +1,53 @@
+﻿FUNCTION "LGF_SplitWordToBytes" : Void
+TITLE = LGF_SplitWordToBytes
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_Digital_Industry
+FAMILY : LGF
+NAME : LGF_SplitWordToBytes
+//This function splits a Word variable into 2 Byte variables.
+   VAR_INPUT 
+      "word" : Word;   // Bit sequence to be split
+   END_VAR
+
+   VAR_OUTPUT 
+      byte1 : Byte;   // Output Byte 1 - MSB
+      byte0 : Byte;   // Output Byte 0 - LSB
+   END_VAR
+
+
+BEGIN
+	REGION BLOCK INFO HEADER
+	  //===============================================================================
+	  // SIEMENS AG / (c)Copyright 2018
+	  //-------------------------------------------------------------------------------
+	  // Title:            LGF_SplitWordToBytes
+	  // Comment/Function: This function splits a Word variable into 2 Byte variables.
+	  // Library/Family:   LGF (Library General Functions)
+	  // Author:           Siemens Digital Industry Support
+	  // Tested with:      S7-PLCSIM Advanced V2.0 SP1
+	  // Engineering:      TIA Portal V14 / V14SP1
+	  // Restrictions:     ENO disabled - no error handling, no failure possible.
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge       | Changes applied
+	  //----------|------------|------------------------|------------------------------
+	  // 01.00.00 | 20.06.2019 | Simatic Systems Support
+	  //                         First release
+	  // 03.00.00 | 23.04.2020 | Simatic Systems Support | Set version to V3.0.0
+	  //                         harmonize the version of the whole library
+	  // 03.00.01 | 22.02.2021 | Simatic Systems Support
+	  //                         Insert documentation
+	  //=============================================================================
+	END_REGION
+	
+	REGION OUTPUT
+	  // get the bytes by slice access
+	  #byte1 := #word.%B1;
+	  #byte0 := #word.%B0;
+	  // no error handling needed
+	  ENO := TRUE;
+	END_REGION
+	
+END_FUNCTION
+

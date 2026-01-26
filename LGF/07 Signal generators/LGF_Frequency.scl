@@ -1,0 +1,149 @@
+﻿FUNCTION_BLOCK "LGF_Frequency"
+TITLE = LGF_Frequency
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_Industry_Support
+FAMILY : LGF
+NAME : LGF_Frequency
+//This function generates a signal that changes between the values `FALSE` and `TRUE` depending on a defined frequency and a pulse pause ratio.
+   VAR_INPUT 
+      frequency : Real := 0.0;   // Clock frequency in Hz.
+      pulsePauseRatio : Real := 1.0;   // Pulse pause ratio (standard: 1.0 corresponds to 1:1).
+   END_VAR
+
+   VAR_OUTPUT 
+      clock { ExternalWritable := 'False'} : Bool;   // Output changes with defined frequency.
+      countdown { ExternalWritable := 'False'} : Time;   // Remaining time of the current `clock` state.
+   END_VAR
+
+   VAR 
+      instTofTimePulse {InstructionName := 'TOF_TIME'; LibVersion := '1.0'; ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'; S7_SetPoint := 'False'} : TOF_TIME;   // Timer instance for the Pulse signal (Period of time the clock signal is true)
+      instTofTimePause {InstructionName := 'TOF_TIME'; LibVersion := '1.0'; ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'; S7_SetPoint := 'False'} : TOF_TIME;   // Timer instance for the Pause signal (Period of time the clock signal is false)
+      statFrequencyOld { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Real;   // Static Old/Current value of the frequency input
+      statPulsePauseRatioOld { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Real;   // Static Old/Current value of the pulsePauseRatio input
+      statTimePulse { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Time;   // Static calculated for me the pulse duration of the clock
+      statTimePause { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Time;   // Static calculated for me the pause duration of the clock
+   END_VAR
+
+   VAR_TEMP 
+      tempPulseRate : Real;   // Static calculation of pulse rate - needed for passing value between calculations
+      tempPauseRate : Real;   // Static calculation of pause rate - needed for passing value between calculations
+      tempCountdown : Time;   // Static countdown until next ON/OFF value of the clock signal
+   END_VAR
+
+   VAR CONSTANT 
+      ZERO : Real := 0.0;   // Numeric zero constant
+      ZERO_TIME : Time := T#0ms;   // Time zero constant
+      SECOND_IN_MS : Real := 1000.0;   // One second written in miliseconds. Needed in calculation in formulas
+      ONE : Real := 1.0;   // 100% - One hundred procent
+   END_VAR
+
+
+BEGIN
+	REGION Block info header
+	  //=============================================================================
+	  // SIEMENS AG / (c)Copyright 2017
+	  //-----------------------------------------------------------------------------
+	  // Title:            LGF_Frequency
+	  // Comment/Function: This function generates a signal that changes between the values `FALSE` and `TRUE` depending on a defined frequency and a pulse pause ratio.
+	  // Library/Family:   LGF(Library General Functions)
+	  // Author:           Siemens Digital Industry Support
+	  // Tested with:      S7-PLCSIM Advanced V2.0 SP1
+	  // Engineering:      TIA Portal V15 Update 2
+	  // Restrictions:     ENO disabled - error handling done by error and status
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge       | Changes applied
+	  //----------|------------|------------------------|------------------------------
+	  // 01.00.00 19.08.2015  Siemens Industry Online Support
+	  //                      First released version
+	  // 01.01.00 25.05.2016  Siemens Industry Online Support
+	  //                      New function: pulse pause ratio
+	  // 01.01.01 26.05.2016  Siemens Industry Online Support
+	  //                      Add comments
+	  // 01.01.02 02.01.2017  Siemens Industry Online Support
+	  //                      Upgrade: TIA Portal V14 Update 1
+	  // 01.01.03 17.08.2018  Siemens Industry Online Support
+	  //                      Upgrade: TIA V15 Update 2
+	  // 01.01.04 23.11.2018  Siemens Industry Online Support
+	  //                      Upgrade: TIA V15.1
+	  // 01.00.07 20.09.2019  Simatic Systems Support
+	  //                      Code refactoring, regions and more comments added
+	  // 03.00.00 23.04.2020  Simatic Systems Support
+	  //                      Set version to V3.0.0, harmonize the version of the whole library
+	  // 03.00.01 15.02.2021  Simatic Systems Support
+	  //                      Insert documentation
+	  //=============================================================================
+	END_REGION Block info header
+	
+	REGION DESCRIPTION
+	  (/*
+	The `clock` output is a Boolean value that toggles at the desired frequency. The `pulsePauseRatio` input is used to set the pulse pause ratio.
+	
+	The output `countdown` outputs the remaining time of the current state of `clock`.
+	
+	If the desired frequency or pulse pause ratio is less than or equal to `0.0`, the output `clock` = FALSE and `countdown` = `0s`.
+	
+	------
+	
+	#### Example
+	
+	![LGF_Frequency](LGF_Frequency.png "LGF_Frequency")
+	
+	---
+	
+	Note
+	:    The `clock` of the FB LGF_Frequency depends on the cycle time of the OB
+	Main. To increase the accuracy, the FB can also be called in a cyclic interrupt
+	OB with a low time interval.
+	*/)
+	END_REGION DESCRIPTION
+	
+	REGION Calculation of settings and program execution
+	  // If input <= 0.0 the block is disabled
+	  IF (#frequency <= #ZERO) OR (#pulsePauseRatio <= #ZERO) THEN
+	    #clock := FALSE;
+	    #tempCountdown := #ZERO_TIME;
+	  ELSE
+	    
+	    //Calculating function frequency and pulse pause ratio only when an input is changed
+	    IF #statFrequencyOld <> #frequency OR #statPulsePauseRatioOld <> #pulsePauseRatio THEN
+	      RESET_TIMER(TIMER := #instTofTimePause);
+	      RESET_TIMER(TIMER := #instTofTimePulse);
+	      
+	      #tempPulseRate := #pulsePauseRatio / (#pulsePauseRatio + #ONE); // Calculate pulse rate   
+	      #tempPauseRate := #ONE - #tempPulseRate;                      // Calculate pause rate   
+	      #statTimePulse := UDINT_TO_TIME(REAL_TO_UDINT((#SECOND_IN_MS * #tempPulseRate / #frequency))); // Calculate pulse time   
+	      #statTimePause := UDINT_TO_TIME(REAL_TO_UDINT((#SECOND_IN_MS * #tempPauseRate / #frequency))); // Calculate pause time
+	      #statFrequencyOld := #frequency;
+	      #statPulsePauseRatioOld := #pulsePauseRatio;
+	    END_IF;
+	    
+	    //Two time off-delay timers that are resetting each other on expiration
+	    #instTofTimePulse(IN := NOT #instTofTimePause.Q,
+	                      PT := #statTimePulse);
+	    
+	    //If timer for pulse is running, remaining time of the PULSE is calculated
+	    #tempCountdown := #statTimePulse - #instTofTimePulse.ET;
+	    
+	    #instTofTimePause(IN := #instTofTimePulse.Q,
+	                      PT := #statTimePause);
+	    
+	    //If timer for pulse is NOT running, remaining time of the PAUSE is calculated
+	    IF #tempCountdown = #ZERO_TIME THEN
+	      #tempCountdown := #statTimePause - #instTofTimePause.ET;
+	    END_IF;
+	    
+	  END_IF;
+	END_REGION
+	
+	REGION Writing to outputs
+	  // Assigning value of the pulse timer to the clock output
+	  #clock := #instTofTimePulse.Q;
+	  #countdown := #tempCountdown;
+	  //ENO mechanism is not used - forced to true.
+	  ENO := TRUE;
+	END_REGION
+	
+END_FUNCTION_BLOCK
+

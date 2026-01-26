@@ -1,0 +1,555 @@
+﻿FUNCTION_BLOCK "LGF_ShellSort_DInt"
+TITLE = LGF_ShellSort_DInt
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_Industry_Support
+FAMILY : LGF
+NAME : LGF_ShellSort_DInt
+//This block sorts an array of type `DInt` with any number of elements (max. 1000) in ascending or descending order and returns the sorted version of the array in the same variable.
+   VAR_INPUT 
+      sortDirection : Bool;   // FALSE: Sort ascending; TRUE: Sort descending
+   END_VAR
+
+   VAR_OUTPUT 
+      error { ExternalWritable := 'False'} : Bool;   // FALSE: No error  TRUE: An error occurred during the execution of the FB
+      status { ExternalWritable := 'False'} : Word;   // 16#0000-16#7FFF: Status of the FB  16#8000-16#FFFF: Error identification (see following Table)
+   END_VAR
+
+   VAR_IN_OUT 
+      "array" : Array[*] of DInt;   // Array to be sorted
+   END_VAR
+
+   VAR 
+      tempArray { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Array[1..#MAX_ARRAY_ELEMENTS] of DInt;   // Temporary array for sorting purposes
+   END_VAR
+
+   VAR_TEMP 
+      tempLowerLimit : DInt;   // Lower limit of input array
+      tempUpperLimit : DInt;   // Upper limit of input array
+      tempNoOfElements : DInt;   // Number of elements in array
+      tempGap : DInt;   // Selected gap size
+      tempLoopIndex : DInt;   // FOR loop index
+      tempExchangeIndex : DInt;   // Index of temporary exchange value
+      tempExchangeVariable : DInt;   // Temporary exchange value
+      tempArrayOffset : DInt;   // Index offset of temporary array (e.g. in case of negative index in array[*])
+   END_VAR
+
+   VAR CONSTANT 
+      ARRAY_FIRST_DIMENSION : UInt := 1;   // Input array first dimension
+      ARRAY_START_INDEX : UInt := 1;   // Temp array start index
+      SINGLE_ARRAY_ELEMENT : DInt := 1;   // Array containing just one element
+      GAP_INIT : Int := 1;   // Gap size initialization
+      GAP_THRESHOLD : Int := 1;   // Gap threshold for cycle termination
+      GAP_RATIO : DInt := 3;   // Maximal gap ratio
+      INCREMENT : Int := 1;   // Increment value ONE
+      ELEMENTS_COUNT_CORRECTION : DInt := 1;   // Array counter size correction (0-based counting)
+      MAX_ARRAY_ELEMENTS : Int := 1000;   // Max array elements allowed
+      STATUS_NO_ERROR : Word := 16#0000;   // Status: Execution finished without errors
+      ERR_NO_ARRAY : Word := 16#8200;   // Error: Actual parameter at the `array` input has only one element.
+      ERR_TOO_MANY_ELEMENTS : Word := 16#8201;   // Error: Actual parameter at the `array` input has too many elements (maximum is 1000).
+   END_VAR
+
+
+BEGIN
+	REGION Block info header
+	  //===============================================================================
+	  // SIEMENS AG / (c)Copyright 2019
+	  //-------------------------------------------------------------------------------
+	  // Title:            LGF_ShellSort_DInt
+	  // Comment/Function: This block sorts an array with any number of elements (max. 1000)
+	  //                   in ascending or descending order and returns the sorted version of the array in the same variable.
+	  // Library/Family:   LGF (Library General Functions)
+	  // Author:           Siemens Digital Industry Support
+	  // Tested with:      CPU 1515F-2 PN FW:V2.6
+	  // Engineering:      TIA Portal V15.1 Update 2
+	  // Restrictions:     ENO disabled - error handling done with error and status
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge       | Changes applied
+	  //----------|------------|------------------------|------------------------------
+	  // 01.00.00 19.08.2015  Siemens Industry Online Support
+	  //                      First released version
+	  // 01.01.00 19.05.2016  Siemens Industry Online Support
+	  //                      New function: reverse sort
+	  // 01.01.01 02.01.2017  Siemens Industry Online Support
+	  //                      Upgrade: TIA Portal V14 Update 1
+	  // 01.01.02 17.08.2018  Siemens Industry Online Support
+	  //                      Upgrade: TIA V15 Update 2
+	  // 01.01.03 23.11.2018  Siemens Industry Online Support
+	  //                      Upgrade: TIA V15.1
+	  // 02.00.00 29.01.2019  Siemens Industry Online Support
+	  //                      Output "done" removed (not necessary, because only one cycle)
+	  // 02.00.01 15.10.2019  Simatic Systems Support
+	  //                      Code refactoring, comments added,
+	  //                      change data type from Int to DInt
+	  // 03.00.00 23.04.2020  Simatic Systems Support
+	  //                      Set version to V3.0.0, harmonize the version of the whole library
+	  // 03.00.01 15.02.2021  Simatic Systems Support
+	  //                      Insert documentation
+	  //=============================================================================
+	END_REGION Block info header
+	
+	REGION DESCRIPTION
+	  (/*
+	The block sorts according to the shell sort procedure. Note that the execution time of the block depends significantly on how many elements the array to be sorted has. The overview below shows several measured values of the block depending on the number of array elements.
+	
+	Average steps needed for execution: $ \mathcal{O}( n \cdot \log (n)^2 ) $
+	
+	Table: Execution times of the block `LGF_ShellSort…`
+	
+	| Number of array elements  | S7-1212C DC/DC/DC | S7-1516-3 PN/DP |
+	|-----|-----|-----|
+	| 100 | approx. 11-16 ms | approx. 1-2 ms |
+	| 1000 | approx. 185-205 ms | approx. 10-12 ms |
+	
+	Note
+	:    The block is executed synchronously and is not split over several PLC cycles. Thus the execution time has a direct effect on the PLC cycle time. Note this behavior for your project of the controller used and adjust the monitoring time of the controller if necessary.
+	*/)
+	END_REGION DESCRIPTION
+	
+	REGION Special description
+	  // Space note: If you wish to reduce the space of this block, you may reduce the
+	  // size OF the tempArray<Type> TO one just big enough FOR your specific purpose
+	  // It is not recommended to increase the size significantly.
+	END_REGION
+	
+	REGION Initialization and input data processing
+	  // Input array size calculation
+	  #tempLowerLimit := LOWER_BOUND(ARR := #array, DIM := #ARRAY_FIRST_DIMENSION);
+	  #tempUpperLimit := UPPER_BOUND(ARR := #array, DIM := #ARRAY_FIRST_DIMENSION);
+	  
+	  // Array elements calculation
+	  // (for example: 6 - 2 = 4; but real number of elements is 5)
+	  #tempNoOfElements := #tempUpperLimit - #tempLowerLimit + #ELEMENTS_COUNT_CORRECTION;
+	  
+	  // Shift array index to range 1..MAX_ARRAY_ELEMENTS
+	  #tempArrayOffset := - #tempLowerLimit + #ARRAY_START_INDEX;
+	  
+	  // Check whether the array contains less than the maximum possible amount of elements
+	  IF #tempNoOfElements > #MAX_ARRAY_ELEMENTS THEN
+	    #error := true;
+	    #status := #ERR_TOO_MANY_ELEMENTS;
+	    RETURN;
+	  ELSIF #tempNoOfElements <= #SINGLE_ARRAY_ELEMENT THEN
+	    // If there are 0 elements in the array, set status to "Error: Parameter is an empty array"
+	    #error := true;
+	    #status := #ERR_NO_ARRAY;
+	    RETURN;
+	  END_IF;
+	END_REGION
+	
+	REGION Sorting
+	  // Read the elements of the incoming array and write into the local array
+	  FOR #tempLoopIndex := #tempLowerLimit TO #tempUpperLimit DO
+	    #tempArray[#tempLoopIndex + #tempArrayOffset] := #array[#tempLoopIndex];
+	  END_FOR;
+	  
+	  REGION Shell sort algorithm
+	    #tempGap := #GAP_INIT;
+	    
+	    // Evaluation of the maximal gap size
+	    REPEAT
+	      #tempGap := (#GAP_RATIO * #tempGap) + #INCREMENT;
+	    UNTIL #tempGap > #tempNoOfElements END_REPEAT;
+	    
+	    REPEAT
+	      #tempGap := #tempGap / #GAP_RATIO;
+	      
+	      FOR #tempLoopIndex := #tempGap + #INCREMENT TO #tempNoOfElements DO
+	        #tempExchangeVariable := #tempArray[#tempLoopIndex];
+	        #tempExchangeIndex := #tempLoopIndex;
+	        
+	        // sort descending 
+	        IF #sortDirection THEN
+	          WHILE ((#tempArray[#tempExchangeIndex - #tempGap] < #tempExchangeVariable)) DO
+	            #tempArray[#tempExchangeIndex] := #tempArray[#tempExchangeIndex - #tempGap];
+	            #tempExchangeIndex := #tempExchangeIndex - #tempGap;
+	            
+	            IF (#tempExchangeIndex <= #tempGap) THEN
+	              EXIT;
+	            END_IF;
+	          END_WHILE;
+	          
+	          // sort ascending
+	        ELSE
+	          WHILE ((#tempArray[#tempExchangeIndex - #tempGap] > #tempExchangeVariable)) DO
+	            #tempArray[#tempExchangeIndex] := #tempArray[#tempExchangeIndex - #tempGap];
+	            #tempExchangeIndex := #tempExchangeIndex - #tempGap;
+	            
+	            IF (#tempExchangeIndex <= #tempGap) THEN
+	              EXIT;
+	            END_IF;
+	          END_WHILE;
+	        END_IF;
+	        
+	        #tempArray[#tempExchangeIndex] := #tempExchangeVariable;
+	      END_FOR;
+	      
+	    UNTIL #tempGap <= #GAP_THRESHOLD END_REPEAT;
+	  END_REGION
+	  
+	  // Write the elements of the local array back to the inOut array
+	  FOR #tempLoopIndex := #tempLowerLimit TO #tempUpperLimit DO
+	    #array[#tempLoopIndex] := #tempArray[#tempLoopIndex + #tempArrayOffset];
+	  END_FOR;
+	  
+	  // Set "No error" status
+	  #error := false;
+	  #status := #STATUS_NO_ERROR;
+	  
+	  // no error handling needed
+	  ENO := TRUE;
+	END_REGION
+	
+END_FUNCTION_BLOCK
+
+FUNCTION_BLOCK "LGF_Boxplot_DInt"
+TITLE = LGF_Boxplot_DInt
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_Digital_Industry
+FAMILY : LGF
+NAME : LGF_Boxplot_DInt
+//If you want to get an overview of existing data, you can use a Boxplot diagram. A Boxplot shows you in which area the data is located and how it is distributed over this area. A Boxplot consists of the following parameters:
+//
+//* Minimum (smallest occurring value of the sample)
+//* Lower or first quartile (below this value are 25% of the sample values)
+//* Median or second quartile (below this value are 50% of the sample values)
+//* Upper or third quartile (below this value are 75% of the sample values)
+//* Maximum (largest occurring value of the sample)
+//
+//Figure: Boxplot
+//
+//![LGF_Boxplot](LGF_Boxplot.png "LGF_Boxplot")
+//
+//#### WinCC-Control
+//To visualize the Boxplot, the Siemens Industry Online Support offers you a Net-Control, which you can use in conjunction with WinCC Runtime Professional. You can find the controls in the `UserFiles` folder of this library.
+//
+//Figure: .Net Control "Boxplot"
+//
+//![LGF_Boxplot - WinCC .NET Control](LGF_Boxplot_Control.png "LGF_Boxplot - WinCC .NET Control")
+//
+//------
+   VAR_INPUT 
+      execute : Bool;   // Activation of the calculation with each positive edge.
+      rangeOutlier : LReal := 1.5;   // Outlier detection:  * 0: Outlier detection is deactivated  * 0-1: Invalid value  * >1: Outlier detection is activated.
+   END_VAR
+
+   VAR_OUTPUT 
+      error { ExternalWritable := 'False'} : Bool;   // FALSE: No error  TRUE: An error occurred during the execution of the FB
+      status { ExternalWritable := 'False'} : Word := #STATUS_NO_CALL;   // 16#0000-16#7FFF: Status of the FB  16#8000-16#FFFF: Error identification (see following Table)
+      subfunctionStatus { ExternalWritable := 'False'} : Word;   // Status or return value of called FB's, FC's and system blocks
+      outlierMax { ExternalWritable := 'False'} : LReal;   // Upper outliers in %.
+      max { ExternalWritable := 'False'} : DInt;   // Maximum Value, not an outlier.
+      q75 { ExternalWritable := 'False'} : LReal;   // 3rd quartile or Q75 of the data series.
+      median { ExternalWritable := 'False'} : LReal;   // 2nd quartile or Median of the data series.
+      q25 { ExternalWritable := 'False'} : LReal;   // 1st quartile or Q25 of the data series.
+      min { ExternalWritable := 'False'} : DInt;   // Minimum Value, not an outlier.
+      outlierMin { ExternalWritable := 'False'} : LReal;   // Lower outliers in %.
+      skewness { ExternalWritable := 'False'} : LReal;   // Skewness of the data series.
+   END_VAR
+
+   VAR_IN_OUT 
+      values : Array[*] of DInt;   // The array containing the data series that is to be used for the calculation
+   END_VAR
+
+   VAR 
+      statMaxNew { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : DInt;   // Static value for Max New
+      statMinNew { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : DInt;   // Static value for Min New
+      statStatus { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Word;   // Static value for output status
+      statSubfuncStatus { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Word;   // Static value for output subfunction status
+      statExecuteOld { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Static value for execute
+      instShellSort { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'; S7_SetPoint := 'False'} : "LGF_ShellSort_DInt";   // Instance of LGF_ShellSort_DInt
+      statMin { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : DInt;   // Static value for min
+      statMax { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : DInt;   // Static value for max
+      statQuartil25 { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : LReal;   // Static value for quartil25
+      statQuartil75 { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : LReal;   // Static value for quartil75
+      statNumberOfElements { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : DInt;   // Static value for number of elements
+      statMedian { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : LReal;   // Static value for median
+      statDeltaQuartil { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : LReal;   // Static value for delta quartil
+      statOutlierMin { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : LReal;   // Static value for outlier min
+      statOutlierMax { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : LReal;   // Static value for outlier max
+      statSkewness { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : LReal;   // Static value for skewness
+      statCounter { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Int;   // Static value for counter
+      statBorderOutlier { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : LReal;   // Static value for border outlier
+   END_VAR
+
+   VAR_TEMP 
+      tempK : LReal;   // Temp value for calculation formula coefficients
+      tempValueDInt : DInt;   // Temp value for calculation
+      tempValueDInt1 : DInt;   // Temp value for calculation
+      tempArrLowBound : DInt;   // Temp value for number of lowerbound of the input array
+      tempArrUppBound : DInt;   // Temp value for number of upperbound of the input array
+   END_VAR
+
+   VAR CONSTANT 
+      ZERO_LREAL : LReal := 0.0;   // Zero constant in LReal format
+      ZERO_DINT : DInt := 0;   // Zero constant in DInt format
+      RANGE_OUTLIER_LOWER_BORDER : LReal := 1.0;   // Lower border for range outlier
+      ELEMENTS_COUNT_CORRECTION : Int := 1;   // Count also the starting element. e.g. [0.. 9] = 10 elements
+      CONVERT_TO_PERCENT : Int := 100;   // Multiply by 100 when calculating to %
+      DIMENSION_ONE : UDInt := 1;   // First dimension of one dimensional array
+      NO_REMAINDER : Int := 0;   // No remainder from devision by 2
+      SUB_STATUS_NO_ERROR : Word := 16#0000;   // SubStatus: No error
+      STATUS_EXECUTION_FINISHED : Word := 16#0000;   // Status: Execution finished without errors
+      STATUS_NO_CALL : Word := 16#7000;   // Status: No call of FB.  The block waits for activation through the parameter `enable`.
+      STATUS_FIRST_CALL : Word := 16#7001;   // Status: First call of FB after enabling
+      ERR_NEG_ARR_BOUND : Word := 16#8200;   // Error: Negative array boundary not allowed.  Check the array at the input `values`.
+      ERR_SHELL_SORT : Word := 16#8600;   // Error: Error in command `LGF_ShellSort_DInt`.  Check `subFunctionStatus` code
+      ERR_RANGE_NOT_OK : Word := 16#9101;   // Error: The parameter `rangeOutlier` type is invalid.  Enter a valid `rangeOutlier` value for the parameter:  * 0: Outlier detection is deactivated  * >1 Valid value.
+   END_VAR
+
+
+BEGIN
+	REGION Block info header
+	  //============================================================================
+	  // SIEMENS AG / (c)Copyright 2025
+	  //----------------------------------------------------------------------------
+	  // Title:            LGF_Boxplot_Dint
+	  // Comment/Function: The function block sorts the data row and calculates
+	  //                   the so-called "five point summary" for an array of double integers
+	  //                   Auto ENO disabled, forced to true - error handling done by error and status
+	  // Library/Family:   LGF(Library General Functions)
+	  // Author:           Siemens Digital Industry Support
+	  // Tested with:      S7-PLCSIM Advanced V5.0 
+	  // Engineering:      TIA Portal V17
+	  // Restrictions:     ENO disabled, forced to true - error handling done by error and status
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //----------|------------|------------------------|----------------------------
+	  // Version  | Date       | Expert in charge       | Changes applied
+	  //----------|------------|------------------------|----------------------------
+	  // 01.00.00 | 23.11.2018 | Siemens Industry Online Support
+	  //                       | First released version
+	  // 01.00.01 | 05.11.2019 | Simatic Systems Support
+	  //                       | Code reworked, regions, comments and constants are added
+	  // 03.00.00 | 23.04.2020 | Simatic Systems Support
+	  //                       | Set version to V3.0.0, harmonize the version of the whole library
+	  // 03.00.01 | 06.04.2021 | Simatic Systems Support
+	  //                       | Insert documentation
+	  // 03.00.02 | 05.09.2024 | Simatic Systems Support
+	  //                       | Fixed bug for array starting index
+	  // 03.00.03 | 16.07.2025 | Simatic Systems Support
+	  //                       | Fixed comments and block info header                    
+	  //=============================================================================
+	END_REGION Block info header
+	
+	REGION DESCRIPTION
+	    (/*
+	The block sorts the data series and then calculates the so-called “five-point summary”:
+	
+	Table: Five-point summary
+	
+	| Characteristic value of the five-point summary | Output parameter of the block |
+	| --- | --- |
+	| Minimum (smallest occurring value of the sample) | `min` |
+	| Lower or first quartile (below this value are 25% of the sample values) | `q25` |
+	| Median or second quartile (below this value are 50% of the sample values) | `median` |
+	| Upper or third quartile (below this value are 75% of the sample values) | `q75` |
+	| Maximum (largest occurring value of the sample) | `max` |
+	
+	If outlier detection is activated, the block first calculates the limits. From these limit values, the values are recognized as outliers:
+	
+	$Bound^{upper} = q_{75} + rangeOutlier \cdot (q_{75} - q_{25})$
+	
+	$Bound_{lower} = q_{25} - rangeOutlier \cdot (q_{75} - q_{25})$
+	
+	The block then calculates new values for the parameters `max` and `min`, which lie within the outlier limits. The outliers are counted and output as a percentage.
+	
+	------
+	
+	To make it easier to judge how the data is distributed, the block also calculates the skew. The skewness lies between the values `-1` and `1` with the following meaning:
+	* `-1`: extremely left skewed distribution
+	* `0`: symmetrical distribution
+	* `1`: extreme right-skew distribution
+	
+	The elements of the passed array are sorted in ascending order by the block. The `LGF_Shellsort_DInt` block is used for sorting.
+	
+	The parameters are calculated as follows:
+	
+	Table: Boxplot formulas Parameters Formula
+	
+	+--------------------+-----------------------------------------------------------------------+
+	| Parameters         | Formula                                                               |
+	+====================+=======================================================================+
+	| q25 (1st quartile) | $q_{25} = x_{(k)} \qquad with \qquad k = \frac{\left[ \frac{1}{2} (n+1) \right] + 1}{2} = \frac{n + 3}{4}$
+	+--------------------+-----------------------------------------------------------------------+
+	| q50 (2nd quartile) | $q_{50} = x_{(\frac{n+1}{2})}$
+	| median             | 
+	+--------------------+-----------------------------------------------------------------------+
+	| q75 (3rd quartile) | $q_{75} = x_{(n+1-k)} \qquad with \qquad (n + 1 - k) = \frac{3n+1}{4}$  
+	|                    |  
+	|                    | $n$ := number of samples (size of array)
+	|                    |  
+	|                    | If the result of the element to be determined (from which the quartiles can be derived) is not an integer, the quartile is calculated from the linear fraction between the two adjacent samples.
+	+--------------------+-----------------------------------------------------------------------+
+	| skewness           | $skewness= \frac{(q_{75} + q_{25}) - 2 \cdot q_{50}}{q_{75} - q_{25}}$  
+	|                    |  
+	|                    | Note: This is just an approximation.
+	+--------------------+-----------------------------------------------------------------------+
+	*/)
+	END_REGION DESCRIPTION
+	
+	REGION Dectect execution bit
+	    //Positive edge detection
+	    IF #execute AND NOT #statExecuteOld THEN
+	        //count array elements
+	        #tempArrLowBound := LOWER_BOUND(ARR := #values, DIM := #DIMENSION_ONE);
+	        #tempArrUppBound := UPPER_BOUND(ARR := #values, DIM := #DIMENSION_ONE);
+	        
+	        //Reset outputs and statics
+	        #statStatus := #STATUS_FIRST_CALL;
+	        #statSubfuncStatus := #SUB_STATUS_NO_ERROR;
+	        #statQuartil25 := #ZERO_LREAL;
+	        #statMedian := #ZERO_LREAL;
+	        #statQuartil75 := #ZERO_LREAL;
+	        #statOutlierMax := #ZERO_LREAL;
+	        #statOutlierMin := #ZERO_LREAL;
+	        #statSkewness := #ZERO_LREAL;
+	        #statMaxNew := #ZERO_DINT;
+	        #statMinNew := #ZERO_DINT;
+	        #statMin := #ZERO_DINT;
+	        #statMax := #ZERO_DINT;
+	        
+	        //FB is currently inactive
+	    ELSIF NOT #execute THEN
+	        #statStatus := #STATUS_NO_CALL;
+	        #statSubfuncStatus := #SUB_STATUS_NO_ERROR;
+	    END_IF;
+	    #statExecuteOld := #execute;
+	END_REGION
+	
+	REGION Validation
+	    //Check rangeOutlier
+	    IF #statStatus = #STATUS_FIRST_CALL THEN
+	        //Value is not ok. Range have to be > 1.0 or 0.0
+	        IF #rangeOutlier <> #ZERO_LREAL AND #rangeOutlier <= #RANGE_OUTLIER_LOWER_BORDER THEN
+	            #statStatus := #ERR_RANGE_NOT_OK;
+	            
+	            //Check array boundry
+	        ELSIF #tempArrLowBound < 0 THEN
+	            #statStatus := #ERR_NEG_ARR_BOUND;
+	        END_IF;
+	    END_IF;
+	END_REGION
+	
+	REGION Boxplot calculation
+	    IF #statStatus = #STATUS_FIRST_CALL THEN
+	        //Get number of elents of the array
+	        #statNumberOfElements := (#tempArrUppBound - #tempArrLowBound + #ELEMENTS_COUNT_CORRECTION);
+	        
+	        //Sort array
+	        #instShellSort(array := #values);
+	        
+	        IF #instShellSort.error THEN
+	            #statStatus := #ERR_SHELL_SORT;
+	            #statSubfuncStatus := #instShellSort.status;
+	        ELSE
+	            #statMin := #values[#tempArrLowBound];
+	            #statMax := #values[#tempArrUppBound];
+	            //calculate median (Q50) - different calculation if the Number of Elements is even or odd 
+	            IF (#statNumberOfElements MOD 2) = #NO_REMAINDER THEN
+	                // if n is even -> calculate MEDIAN = (x(n/2)+x(n/2+1))/2 
+	                #tempValueDInt := #values[((#statNumberOfElements - #ELEMENTS_COUNT_CORRECTION) / 2) + #tempArrLowBound];
+	                #tempValueDInt1 := #values[(((#statNumberOfElements - #ELEMENTS_COUNT_CORRECTION) / 2) + 1) + #tempArrLowBound];
+	                #statMedian := DINT_TO_LREAL(((#tempValueDInt1 + #tempValueDInt) / 2));
+	            ELSE
+	                // if n is odd -> MEDIAN = x(n+1/2)
+	                #statMedian := DINT_TO_LREAL(#values[((#statNumberOfElements + 1 - #ELEMENTS_COUNT_CORRECTION) / 2) + #tempArrLowBound]);
+	            END_IF;
+	            
+	            //calculate 1.quartil(Q25)
+	            // q1 = x(k) with  k=(n+3)/4 
+	            #tempK := (DINT_TO_LREAL(#statNumberOfElements + 3 - #ELEMENTS_COUNT_CORRECTION) / 4.0) + #tempArrLowBound;
+	            
+	            
+	            
+	            #tempValueDInt := #values[TRUNC(#tempK)];
+	            #tempValueDInt1 := #values[TRUNC(#tempK) + 1];
+	            #statQuartil25 := DINT_TO_LREAL(#tempValueDInt) + (FRAC_LREAL(#tempK) * DINT_TO_LREAL(#tempValueDInt1 - #tempValueDInt));
+	            
+	            //calculate 3.quartil(Q75)
+	            //q3 = x(n+1-k) with k=(3n+1)/4
+	            #tempK := (3 * DINT_TO_LREAL(#statNumberOfElements - #ELEMENTS_COUNT_CORRECTION + 1) / 4.0) + #tempArrLowBound;
+	            
+	            #tempValueDInt := #values[TRUNC(#tempK)];
+	            #tempValueDInt1 := #values[TRUNC(#tempK) + 1];
+	            #statQuartil75 := DINT_TO_LREAL(#tempValueDInt) + FRAC_LREAL(#tempK) * DINT_TO_REAL(#tempValueDInt1 - #tempValueDInt);
+	            
+	            //only if RANGE_OUTLIER is not zero
+	            IF #rangeOutlier <> 0 THEN
+	                //calculate Delta Q75-Q25
+	                #statDeltaQuartil := #statQuartil75 - #statQuartil25;
+	                
+	                //check for min outlier
+	                //calculate border for outlier
+	                #statBorderOutlier := #statQuartil25 - #rangeOutlier * #statDeltaQuartil;
+	                
+	                //search in array for values outside the border
+	                FOR #statCounter := 0 TO DINT_TO_INT(#statNumberOfElements - #ELEMENTS_COUNT_CORRECTION) DO
+	                    #tempValueDInt := #values[#statCounter + #tempArrLowBound];
+	                    IF #tempValueDInt < LREAL_TO_DINT(#statBorderOutlier) THEN
+	                        //detected a value as outlier, check next value
+	                        ;
+	                    ELSE
+	                        //all outlier detected. Calulate new Min Value in range and calulate outlier in %
+	                        #statOutlierMin := DINT_TO_LREAL((#CONVERT_TO_PERCENT * #statCounter)) / DINT_TO_LREAL(#statNumberOfElements);
+	                        #statMinNew := #tempValueDInt;
+	                        EXIT;
+	                    END_IF;
+	                END_FOR;
+	                
+	                //check for max outlier
+	                //calculate border for outlier
+	                #statBorderOutlier := #statQuartil75 + #rangeOutlier * #statDeltaQuartil;
+	                //search in array for values outside the border 
+	                FOR #statCounter := DINT_TO_INT(#statNumberOfElements - #ELEMENTS_COUNT_CORRECTION) TO 0 BY - 1 DO
+	                    #tempValueDInt := #values[#statCounter + #tempArrLowBound];
+	                    IF #tempValueDInt > LREAL_TO_DINT(#statBorderOutlier) THEN
+	                        //detected a value as outlier, check next value
+	                        ;
+	                    ELSE
+	                        //all outlier detected. Calulate new Max Value in range and calulate outliers in %
+	                        #statOutlierMax := DINT_TO_REAL((#CONVERT_TO_PERCENT * (#statNumberOfElements - INT_TO_DINT(#statCounter) - #ELEMENTS_COUNT_CORRECTION))) / DINT_TO_REAL(#statNumberOfElements);
+	                        #statMaxNew := #tempValueDInt;
+	                        EXIT;
+	                    END_IF;
+	                END_FOR;
+	            END_IF;
+	            
+	            //calculate Skewness
+	            //S= ((Q25 + Q75)-2*Q50) / (Q75 - Q25)
+	            #statSkewness := (#statQuartil75 + #statQuartil25 - 2.0 * #statMedian) / (#statQuartil75 - #statQuartil25);
+	            
+	            #statStatus := #STATUS_EXECUTION_FINISHED;
+	            #statSubfuncStatus := #SUB_STATUS_NO_ERROR;
+	            
+	        END_IF;
+	    END_IF;
+	END_REGION
+	
+	REGION Write Outputs
+	    IF #rangeOutlier <> #ZERO_LREAL THEN
+	        #min := #statMinNew;
+	        #max := #statMaxNew;
+	    ELSE
+	        #min := #statMin;
+	        #max := #statMax;
+	    END_IF;
+	    
+	    #q25 := #statQuartil25;
+	    #median := #statMedian;
+	    #q75 := #statQuartil75;
+	    #outlierMin := #statOutlierMin;
+	    #outlierMax := #statOutlierMax;
+	    #skewness := #statSkewness;
+	    
+	    #error := #statStatus.%X15;
+	    #status := #statStatus;
+	    #subfunctionStatus := #statSubfuncStatus;
+	    
+	    // ENO mechanism is not used - forced to true.
+	    ENO := TRUE;
+	END_REGION
+	
+	
+END_FUNCTION_BLOCK
+

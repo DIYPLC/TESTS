@@ -1,0 +1,60 @@
+﻿FUNCTION "LGF_RankineToKelvin" : Real
+TITLE = LGF_RankineToKelvin
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_Digital_Industry_Support
+FAMILY : LGF
+NAME : LGF_RankineToKelvin
+//This function converts a temperature value - from °Rankine to °Kelvin.
+   VAR_INPUT 
+      value : Real;   // Temperature to be converted in °Rankine
+   END_VAR
+
+   VAR_TEMP 
+      tempKelvinTemperature : Real;   // Temp result of temperatur conversion
+   END_VAR
+
+   VAR CONSTANT 
+      TEMPERATURE_GAIN_NUMERATOR : Real := 5.0;   // Constant numerator gain of conversion: K =  5 / 9 *R
+      TEMPERATURE_GAIN_DENOMINATOR : Real := 9.0;   // Constant denominator gain of conversion: K =  5 / 9 *R
+   END_VAR
+
+
+BEGIN
+	REGION BLOCK INFO HEADER
+	  //===============================================================================
+	  // SIEMENS AG / (c)Copyright 2019
+	  //-------------------------------------------------------------------------------
+	  // Title:            LGF_RankineToKelvin
+	  // Comment/Function: This function converts a temperature value - from °Rankine to °Kelvin
+	  // Library/Family:   LGF(Library General Functions)
+	  // Author:           Siemens Digital Industry Support
+	  // Tested with:      S7-PLCSIM Advanced V2.0 SP1
+	  // Engineering:      TIA Portal V15.1
+	  // Restrictions:     ENO disabled - no error handling
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge       | Changes applied
+	  //----------|------------|------------------------|------------------------------
+	  // 01.00.00 | 20.06.2019 | Simatic Systems Support
+	  //                         First release
+	  // 03.00.00 | 23.04.2020 | Simatic Systems Support | Set version to V3.0.0
+	  //                         harmonize the version of the whole library
+	  // 03.00.01 | 22.02.2021 | Simatic Systems Support
+	  //                         Insert documentation
+	  //===============================================================================
+	END_REGION
+	
+	
+	REGION CONVERT
+	  #tempKelvinTemperature := (#TEMPERATURE_GAIN_NUMERATOR / #TEMPERATURE_GAIN_DENOMINATOR) * #value;
+	END_REGION
+	
+	REGION OUTPUTS
+	  #LGF_RankineToKelvin := #tempKelvinTemperature;
+	  // no error handling needed
+	  ENO := TRUE;
+	END_REGION
+	
+END_FUNCTION
+

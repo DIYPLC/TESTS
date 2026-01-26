@@ -1,0 +1,269 @@
+﻿FUNCTION_BLOCK "EnableTemplate"
+TITLE = Enable Template
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : '(department/personInCharge/contact)'
+FAMILY : '(family)'
+//Template for an FB with Enable / Valid handling based on PLCopen standard "Function Blocks for Motion Control" V2.0
+   VAR_INPUT 
+      enable : Bool;   // TRUE: Enable functionality of FB
+   END_VAR
+
+   VAR_OUTPUT 
+      valid { ExternalWritable := 'False'} : Bool;   // TRUE: Valid set of output values available at the FB
+      busy { ExternalWritable := 'False'} : Bool;   // TRUE: Commanded functionality has been completed successfully
+      commandAborted { ExternalWritable := 'False'} : Bool;   // TRUE: Commanded functionality has been completed successfully
+      error { ExternalWritable := 'False'} : Bool;   // TRUE: An error occurred during the execution of the FB
+      status { ExternalWritable := 'False'} : Word := #STATUS_NO_CALL;   // 16#0000 - 16#7FFF: Status of the FB, 16#8000 - 16#FFFF: Error identification
+      diagnostics { ExternalWritable := 'False'} : "typeDiagnostics";   // Diagnostics information of FB
+   END_VAR
+
+   VAR 
+      statInternal { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Struct   // Internal function flags
+         enablePrevious { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Previous value of 'enable' input for edge detection
+         valid { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Static value for output 'valid'
+         busy { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Static value for output 'busy'
+         commandAborted { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Static value for output 'commandAborted'
+         error { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Static value for output 'error'
+         errorUserCleared { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Error occurred that can only be solved by user; rising edge at enable input necessary
+         errorAutoCleared { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Error occurred that can be acknowledged by software while block is still in operation (e.g. reset/acknowledge/automatically by software routine)
+         disablingCompleted { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // TRUE: Disabling has been completed
+         diagnostics { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'; S7_SetPoint := 'False'} : "typeDiagnostics" := (#STATUS_NO_CALL, (), ());
+         emptyDiagnostics { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'; S7_SetPoint := 'False'} : "typeDiagnostics";   // Empty diagnostics information (for initialization purposes only)
+      END_STRUCT;
+      statMainState { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : DInt := #FB_STATE_NO_PROCESSING;   // State in the state machine of the FB
+   END_VAR
+
+   VAR_TEMP 
+      tempEnable : Bool;   // Temporary variable for input 'enable'
+   END_VAR
+
+   VAR CONSTANT 
+      FB_STATE_NO_PROCESSING : DInt := 0;   // FB state: No processing
+      FB_STATE_ENABLING : DInt := 10;   // FB state: Enabling
+      FB_STATE_PROCESSING : DInt := 50;   // FB state: Processing
+      FB_STATE_DISABLING : DInt := 90;   // FB state: Disabling
+      STATUS_NO_CALL : Word := 16#7000;   // No job being currently processed
+      STATUS_FIRST_CALL : Word := 16#7001;   // First call after incoming new job (rising edge 'enable')
+      STATUS_SUBSEQUENT_CALL : Word := 16#7002;   // Subsequent call during active processing without further details
+      STATUS_COMMAND_ABORTED : Word := 16#7FFF;   // Commanded functionality has been aborted by another command
+      SUB_STATUS_NO_ERROR : Word := 16#0000;   // NO error occurred in sub function call
+      ERR_UNDEFINED_STATE : Word := 16#8600;   // Error due to an undefined state in state machine
+      STATUSRANGE_DEFINITIONS_ERR_IN_BLOCK_OPERATION : Word := 16#8001;   // Status range definitions along to SIMATIC StyleGuide --> Error: Wrong operation of the function block
+      STATUSRANGE_DEFINITIONS_ERR_PARAMETRIZATION : Word := 16#8200;   // Status range definitions along to SIMATIC StyleGuide --> Error: during parameterization
+      STATUSRANGE_DEFINITIONS_ERR_PROCESSING_EXTERN : Word := 16#8400;   // Status range definitions along to SIMATIC StyleGuide --> Error: While processing from outside (e. g. wrong I/O signals, axis not referenced)
+      STATUSRANGE_DEFINITIONS_ERR_PROCESSING_INTERN : Word := 16#8600;   // Status range definitions along to SIMATIC StyleGuide --> Error: While processing internally (e. g. when calling a system function)
+      STATUSRANGE_DEFINITIONS_ERR_AREA_RESERVED : Word := 16#8800;   // Status range definitions along to SIMATIC StyleGuide --> Error: Reserved area
+      STATUSRANGE_DEFINITIONS_ERR_USER_DEFINED_CLASSES : Word := 16#9000;   // Status range definitions along to SIMATIC StyleGuide --> Error: User-defined error classes
+   END_VAR
+
+
+BEGIN
+	REGION BLOCK INFO HEADER
+	  //===============================================================================
+	  // (c)Copyright (company) (year)
+	  //-------------------------------------------------------------------------------
+	  // Title:            (Title of this Block / Enable Template)
+	  // Comment/Function: (that is implemented in the block)
+	  //                   (Template for an FB with Enable / Valid handling based on PLCopen standard "Function Blocks for Motion Control" V2.0)
+	  // Library/Family:   (that the source is dedicated to)
+	  // Author:           (department / person in charge / contact)
+	  // Tested with:      (test system with FW version)
+	  // Engineering:      TIA Portal (SW version)
+	  // Restrictions:     (OB types, etc.)
+	  // Requirements:     (hardware, technological package, memory needed, etc.)
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge       | Changes applied
+	  //----------|------------|------------------------|------------------------------
+	  // 01.00.00 | yyyy-mm-dd | (name of expert)       | First released version
+	  //===============================================================================
+	END_REGION BLOCK INFO HEADER
+	
+	REGION DESCRIPTION
+	(/*
+	
+	*/)
+	END_REGION DESCRIPTION
+	
+	REGION ENABLING/DISABLING
+	  #tempEnable := #enable; // Work with temporary value / create process image
+	  IF (#tempEnable = TRUE) AND (#statInternal.diagnostics.status = #STATUS_NO_CALL) THEN // Enable FB
+	    // First call; initialize FB
+	    #statInternal.valid := TRUE;
+	    #statInternal.busy := TRUE;
+	    #statInternal.commandAborted := FALSE;
+	    #statInternal.error := FALSE;
+	    #statInternal.errorUserCleared := FALSE;
+	    #statInternal.errorAutoCleared := FALSE;
+	    #statInternal.disablingCompleted := FALSE;
+	    #statInternal.diagnostics := #statInternal.emptyDiagnostics;
+	    #diagnostics := #statInternal.emptyDiagnostics;
+	    #statInternal.diagnostics.status := #STATUS_FIRST_CALL;
+	    // State machine - start processing
+	    #statMainState := #FB_STATE_ENABLING;
+	    
+	    // TODO: Initialize functionality: reset of variables, diagnostics, etc.
+	    
+	    // TODO: Initialize functionality: call subsidiary FBs with FALSE
+	    //      #instFB(execute := FALSE);
+	    
+	  ELSIF (#tempEnable = FALSE) AND (#statInternal.enablePrevious = TRUE) THEN // Disable FB 
+	    #statMainState := #FB_STATE_DISABLING;
+	    
+	  ELSIF (#statInternal.diagnostics.status = #STATUS_FIRST_CALL) THEN // Set status identifier of subsequent call
+	    #statInternal.diagnostics.status := #STATUS_SUBSEQUENT_CALL;
+	  END_IF;
+	  
+	  // Edge detection 'enable' input
+	  #statInternal.enablePrevious := #tempEnable;
+	END_REGION ENABLING/DISABLING
+	
+	IF (#statInternal.diagnostics.status = #STATUS_NO_CALL) THEN // Nothing to do -> End here to reduce "system load"
+	  RETURN;
+	END_IF;
+	
+	REGION STATE MACHINE
+	  CASE #statMainState OF // State machine of FB
+	    #FB_STATE_NO_PROCESSING:
+	      REGION No Processing
+	        ; // No processing active (Note: this state must always be present and left empty)
+	      END_REGION No Processing
+	      
+	    #FB_STATE_ENABLING: // Enabling active
+	      REGION Enabling
+	        // TODO: Use this state for application specific code, e.g. set preconditions of further processing (establish connections, etc.)
+	        // Call subsidiary FB or functionality
+	        // #instFB(execute := TRUE);
+	        // IF (#instFB.done) THEN // Subsidiary FB finished successfully
+	        //   // Continue processing with next state e.g.
+	        //   #statMainState := #FB_STATE_PROCESSING;
+	        
+	        // ELSIF (#instFB.error) THEN // Error occurred in subsidiary FB
+	        //   // If the error occurred needs separate handling (e.g. close connection)
+	        //   // please set the error output only when this error handling completed successfully
+	        //   #statInternal.diagnostics.status := #ERR_XYZ; // Set correct status that identifies error clearly
+	        //   #statInternal.diagnostics.subfunctionStatus := #instFB.status; // Status or return value of called FBs, FCs and system blocks
+	        //   #statInternal.diagnostics.stateNumber := #statMainState; // Set error state number for diagnostic 
+	        //   #statInternal.errorAutoCleared OR #statInternal.ErrorUserCleared // Set error type
+	        //   // TODO: Error handling
+	        // ELSIF (#instFB.commandAborted) THEN // Commanded functionality has been aborted by another command
+	        //   // Set block status
+	        //   #statInternal.diagnostics.status := #STATUS_COMMAND_ABORTED;
+	        //   // if that must be reported external
+	        //   // #statSubfunctionStatus := #instFB.status // Status or return value of called FBs, FCs and system blocks
+	        //   // #statFBErrorState := #statFBState; // Set error state number for diagnostic 
+	        //   // TODO: Error handling
+	        // END_IF;
+	        
+	        // TODO: Set #statInternal.errorAutoCleared := FALSE; if autocleared is acknowledged
+	        ;
+	      END_REGION Enabling
+	      
+	    #FB_STATE_PROCESSING: // Processing active
+	      REGION Processing
+	        // Further processing state
+	        // TODO: Use this state for further application specific code
+	        ;
+	      END_REGION Processing
+	      
+	    #FB_STATE_DISABLING: // Disabling active
+	      REGION Disabling
+	        // TODO: Disabling, e.g. closing connections, etc.
+	        // When disabling is complete the bit #statDisablingCompleted must be set
+	        #statInternal.disablingCompleted := TRUE;
+	      END_REGION Disabling
+	      
+	    ELSE // Undefined state in state machine reached
+	      REGION Undefined state
+	        #statInternal.diagnostics.status := #ERR_UNDEFINED_STATE;
+	        #statInternal.diagnostics.subfunctionStatus := 16#00;
+	        #statInternal.diagnostics.stateNumber := #statMainState;
+	        #statInternal.errorUserCleared := TRUE;
+	      END_REGION Undefined state
+	  END_CASE;
+	END_REGION STATE MACHINE
+	
+	REGION OUTPUTS
+	  // Write outputs
+	  IF (#statInternal.disablingCompleted = TRUE) THEN
+	    REGION Disabling
+	      // Reset outputs if disabling completed
+	      #statInternal.valid := FALSE;
+	      #statInternal.busy := FALSE;
+	      #statInternal.commandAborted := FALSE;
+	      #statInternal.error := FALSE;
+	      #statInternal.errorUserCleared := FALSE;
+	      #statInternal.errorAutoCleared := FALSE;
+	      #statInternal.diagnostics.status := #STATUS_NO_CALL;
+	      #statMainState := #FB_STATE_NO_PROCESSING;
+	      // TODO: Reset application specific outputs
+	      // 
+	    END_REGION Disabling
+	    
+	  ELSIF (#statInternal.errorUserCleared = TRUE) AND (#statInternal.error = FALSE) THEN
+	    REGION Error user cleared
+	      // Error can only be cleared by user; rising edge at enable input is needed to continue 
+	      #statInternal.valid := FALSE;
+	      #statInternal.busy := FALSE;
+	      #statInternal.commandAborted := FALSE;
+	      #statInternal.error := TRUE;
+	      // Write diagnostics
+	      //#diagnostics := #statDiagnostic;
+	      #diagnostics := #statInternal.diagnostics;
+	      // execution aborted --> set state no processing
+	      #statMainState := #FB_STATE_NO_PROCESSING;
+	    END_REGION Error user cleared
+	    
+	  ELSIF (#statInternal.errorAutoCleared = TRUE) AND (#statInternal.error = FALSE) THEN
+	    REGION Error auto cleared
+	      // Error can be reset by FB automatically
+	      #statInternal.valid := FALSE;
+	      #statInternal.busy := TRUE;
+	      #statInternal.commandAborted := FALSE;
+	      #statInternal.error := TRUE;
+	      // Write diagnostics
+	      #diagnostics := #statInternal.diagnostics;
+	      // TODO: Handling of autocleared error
+	      // 
+	    END_REGION Error auto cleared
+	    
+	  ELSIF (#statInternal.diagnostics.status = #STATUS_COMMAND_ABORTED) AND (#statInternal.commandAborted = FALSE) THEN
+	    REGION Command aborted
+	      // Commanded functionality has been aborted by another command
+	      #statInternal.valid := FALSE;
+	      #statInternal.busy := FALSE;
+	      #statInternal.commandAborted := TRUE;
+	      #statInternal.error := FALSE;
+	      // Write diagnostics
+	      #diagnostics := #statInternal.diagnostics;
+	      // execution aborted --> set state no processing
+	      #statMainState := #FB_STATE_NO_PROCESSING;
+	    END_REGION Command aborted
+	    
+	  ELSIF (#statInternal.errorAutoCleared = FALSE) AND (#statInternal.errorUserCleared = FALSE) AND (#statInternal.commandAborted = FALSE) AND (#statInternal.error = TRUE) THEN
+	    REGION After user/auto cleared or command aborted
+	      // If autocleared error is acknowledged
+	      #statInternal.valid := TRUE;
+	      #statInternal.busy := TRUE;
+	      #statInternal.commandAborted := FALSE;
+	      #statInternal.error := FALSE;
+	      // TODO: remove this line if more detailed status information is used instead of "#STATUS_SUBSEQUENT_CALL"
+	      #statInternal.diagnostics.status := #STATUS_SUBSEQUENT_CALL;
+	    END_REGION After user/auto cleared or command aborted
+	  END_IF;
+	  
+	  REGION Write static values to outputs
+	    #valid := #statInternal.valid;
+	    #busy := #statInternal.busy;
+	    #commandAborted := #statInternal.commandAborted;
+	    #error := #statInternal.error;
+	    #status := #statInternal.diagnostics.status;
+	    // if ENO mechanism is not used / not wanted replace the following line by --> ENO := TRUE;
+	    ENO := NOT #statInternal.error;
+	    // TODO: Write application specific static values to outputs
+	    // 
+	  END_REGION Write static values to outputs
+	END_REGION OUTPUTS
+	
+END_FUNCTION_BLOCK
+

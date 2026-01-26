@@ -1,0 +1,22 @@
+﻿FUNCTION "LGF_08_Technology_Description" : Void
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+
+BEGIN
+	REGION PREAMBLE
+	  (/*
+	*/)
+	END_REGION PREAMBLE
+	                          
+	REGION APPENDIX
+	  (/*
+	# Rules of simulated controlled systems
+	
+	In the entry “Closed-Loop Control of Simulated Controlled Systems” you will find the block library “LSim” for simulation of controlled systems for the controller families SIMATIC S7-1200 and SIMATIC S7-1500.
+	
+	https://support.industry.siemens.com/cs/ww/en/view/79047707
+	*/)
+	END_REGION APPENDIX
+	                          
+END_FUNCTION
+

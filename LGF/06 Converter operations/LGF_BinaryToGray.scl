@@ -1,0 +1,62 @@
+﻿FUNCTION "LGF_BinaryToGray" : DWord
+TITLE = LGF_BinaryToGray
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_Digital_Industry
+FAMILY : LGF
+NAME : LGF_BinaryToGray
+//This function converts a binary coded value into a Gray-coded value.
+   VAR_INPUT 
+      variableBinary : DWord;   // Binary coded value to convert to Gray code
+   END_VAR
+
+   VAR CONSTANT 
+      BIT_SHIFT_1 : USInt := 1;   // The number (1) of bit positions by which the specified value should be shifted.
+   END_VAR
+
+
+BEGIN
+	REGION BLOCK INFO HEADER
+	  //===============================================================================
+	  // SIEMENS AG / (c)Copyright 2017
+	  //-------------------------------------------------------------------------------
+	  // Title:            LGF_BinaryToGray
+	  // Comment/Function: This function converts a binary value to a gray coded value
+	  // Library/Family:   LGF(Library General Functions)
+	  // Author:           Siemens Digital Industry Support
+	  // Tested with:      CPU1212C DC/DC/DC FW:V4.2
+	  // Engineering:      TIA Portal V14 Update 1
+	  // Restrictions:     ENO disabled - no error handling needed
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge       | Changes applied
+	  //----------|------------|------------------------|------------------------------
+	  // 01.00.00 | 19.08.2015 | Siemens Industry Online Support
+	  //                         First released version
+	  // 01.00.01 | 28.10.2015 | Siemens Industry Online Support
+	  //                         Name changed
+	  // 01.00.02 | 02.01.2017 | Siemens Industry Online Support
+	  //                         Upgrade: TIA Portal V14 Update 1
+	  // 01.00.03 | 17.08.2018 | Siemens Industry Online Support
+	  //                         Upgrade: TIA V15 Update 2
+	  // 01.00.04 | 23.11.2018 | Siemens Industry Online Support
+	  //                         Upgrade: TIA V15.1
+	  // 01.00.05 | 11.06.2019 | Simatic Systems Support
+	  //                         Standard header and block parameters update
+	  //                         Add ENO handling
+	  // 03.00.00 | 23.04.2020 | Simatic Systems Support | Set version to V3.0.0
+	  //                         Harmonize the version of the whole library
+	  // 03.00.01 | 23.02.2021 | Simatic Systems Support
+	  //                         Insert documentation
+	  //===============================================================================
+	END_REGION Block info header
+	
+	REGION OUTPUTS
+	  #LGF_BinaryToGray := #variableBinary XOR SHR(IN := #variableBinary, N := #BIT_SHIFT_1);
+	  
+	  // no error handling needed
+	  ENO := TRUE;
+	END_REGION
+	
+END_FUNCTION
+

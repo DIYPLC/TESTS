@@ -1,0 +1,799 @@
+﻿TYPE "LGF_typeDiagnostics"
+TITLE = LGF_typeDiagnostics
+VERSION : 0.1
+//Diagnostic structure to store and transfer diagnostic information from blocks through the interface.
+   STRUCT
+      status { ExternalVisible := 'False'; ExternalWritable := 'False'} : Word;   // Status of the Block or error identification when error occurred
+      subfunctionStatus { ExternalVisible := 'False'; ExternalWritable := 'False'} : Word;   // Status or return value of called FB's, FC's and system blocks
+      stateNumber { ExternalVisible := 'False'; ExternalWritable := 'False'} : DInt;   // State in the state machine of the block where the error occurred
+   END_STRUCT;
+
+END_TYPE
+
+TYPE "LGF_typeActDeactMonitorDeviceParameter"
+TITLE = LGF_typeActDeactMonitorDeviceParameter
+VERSION : 0.1
+//This UDT belongs to the Module `LGF_ActDeactMonitorDeviceParameter` and lists all possible parameter to configure its behavior.
+   STRUCT
+      activationRetries { S7_SetPoint := 'True'} : SInt := 100;   // Number of activation & deactiviation retries until an error is set.
+      timeOutActDeact { S7_SetPoint := 'True'} : Time := T#5S;   // Time to monitor the commands `activate` and `deactivate`  should be greater than the configured `configuration time` in the PLC hardware configuration section `Startup`
+      timeOutStateMonitoring { S7_SetPoint := 'True'} : Time := T#100ms;   // Time to monitor the device state while the device is activated  After time has expired an error is present as long as the state is faulty.
+      enableAndDeactivate { S7_SetPoint := 'True'} : Bool := TRUE;   // TRUE: Disable / Deactivate device during startup / enabling  (prior to `enableAndActive`)  FALSE: Keep actual state or `enableAndActivate`
+      enableAndActivate { S7_SetPoint := 'True'} : Bool;   // TRUE: Enable / Activate device during startup / enabling  FALSE: Keep actual state or `enableAndDeactivate`
+      disableAndDeactivate { S7_SetPoint := 'True'} : Bool := TRUE;   // TRUE: Disable / Deactivate device during disabling of the module  FALSE: Keep actual state
+   END_STRUCT;
+
+END_TYPE
+
+FUNCTION_BLOCK "LGF_ActDeactMonitorDevice"
+TITLE = LGF_ActDeactMonitorDevice
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : 'Simatic Systems Support'
+FAMILY : LGF
+NAME : LGF_ActDeactMonitorDevice
+//`LGF_ActDeactMonitorDevice` implements a compact state machine to activate and monitor or deactivate a decentral IO device.  
+//The module monitors the device connection and error state as well after activation.
+   VAR_INPUT 
+      enable : Bool;   // TRUE: Enable functionality of FB
+      deactivate : Bool;   // Rising edge: Deactivate device given by `hwId`
+      activate : Bool;   // Rising edge: Activate device given by `hwId`
+      hwId { S7_PredefinedAssignment := '"HW ID of Device (`Device~PnIf~IODevice`)"'} : HW_DEVICE;   // Hardware ID of the device which should be activated / deactivated (`Device~PnIf~IODevice`)
+      parameter : "LGF_typeActDeactMonitorDeviceParameter";   // Parameter dataset for the function `LGF_ActDeactMonitorDevice`
+   END_VAR
+
+   VAR_OUTPUT 
+      valid { ExternalWritable := 'False'} : Bool;   // TRUE: Valid set of output values available at the FB
+      busy { ExternalWritable := 'False'} : Bool;   // TRUE: FB is not finished and new output values can be expected
+      done { ExternalWritable := 'False'} : Bool;   // TRUE: Commanded functionality has been completed successfully
+      error { ExternalWritable := 'False'} : Bool;   // TRUE: An error occurred during the execution of the FB
+      status { ExternalWritable := 'False'} : Word := #STATUS_NO_CALL;   // 16#0000 - 16#7FFF: Status of the FB, 16#8000 - 16#FFFF: Error identification
+      deactivatingActive { ExternalWritable := 'False'} : Bool;   // TRUE: Deactivating of device active
+      activatingActive { ExternalWritable := 'False'} : Bool;   // TRUE: Activation of device active
+      isDeactivated { ExternalWritable := 'False'} : Bool;   // TRUE: Device deactivated
+      isActivated { ExternalWritable := 'False'} : Bool;   // TRUE: Device activated
+      deviceStateOK { ExternalWritable := 'False'} : Bool;   // TRUE: Device is activated and connected to IO-System  FALSE: Device is faulty or not connected, depends on `isActivated`
+      diagnostics { ExternalWritable := 'False'} : "LGF_typeDiagnostics";
+   END_VAR
+
+   VAR 
+      statInternal { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Struct   // Static structure for internal tags
+         enablePrevious { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Previous value of 'enable' input for edge detection
+         activatePrevious { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Previous value of 'activate' input for edge detection
+         deactivatePrevious { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Previous value of 'deactivate' input for edge detection
+         valid { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Value for output 'valid'
+         busy { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Value for output 'busy'
+         error { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Value for output 'error'
+         errorUserCleared { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Error occurred that can only be solved by user; rising edge at enable input necessary
+         errorAutoCleared { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Error occurred that can be acknowledged by FB
+         disablingCompleted { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // TRUE: Disabling has been completed
+         status { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Word := #STATUS_NO_CALL;   // Status of the Block or error identification when error occurred
+         diagnostics { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'; S7_SetPoint := 'False'} : "LGF_typeDiagnostics" := (#STATUS_NO_CALL, (), ());
+         internalDiagnostics { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'; S7_SetPoint := 'False'} : "LGF_typeDiagnostics" := (#STATUS_NO_CALL, (), ());
+         emptyDiagnostics { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'; S7_SetPoint := 'False'} : "LGF_typeDiagnostics";   // Empty diagnostics information (for initialization purposes only)
+      END_STRUCT;
+      statActDeact { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Struct   // Static structure for internal act/deact device data
+         request { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Request activation or deactivation of device
+         busy { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // `D_ACT_DP` is processing previously set request
+         hasPreviousError { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // `D_ACT_DP` has an error in the previous cycle
+         remainingRetries { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : SInt;   // Number of remaining retries
+         neededRetrieCyclesUntilActivation { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : SInt;   // Number of cycles until device was activated
+         hwIdDevice { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : HW_DEVICE;   // HW ID for the device to activate and deactivate, stored from input trough enabling
+         mode { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : USInt;   // Mode for `D_ACT_DP` to activate or deactivate or call the info of the device
+         result { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Word;   // Result of `D_ACT_DP` operation
+      END_STRUCT;
+      statDeviceState { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Struct   // Static structure for internal device state data
+         geoAddr {InstructionName := 'GEOADDR'; LibVersion := '1.0'; ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'; S7_SetPoint := 'False'} : GEOADDR;   // Dataset to read the geo address in IO-System from device `hwId`
+         geoAddrIoSystem {InstructionName := 'GEOADDR'; LibVersion := '1.0'; ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'; S7_SetPoint := 'False'} : GEOADDR := (1, (), (), (), (), ());   // Dataset to read the IO-System address from device `geoAddr`
+         devicesState { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Array[0..1024] of Bool;   // Device states for all devices in the IO-System (PN or DP)
+         hwIdIoSystem { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : HW_IOSYSTEM;   // HW ID for the io system the device is connected to - needed to read the device states
+         resultDeviceStates { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Word;   // Result of `DeviceStates` operation
+         resultLog2Geo { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Word;   // Result of `Log2Geo` operation
+         resultGeo2Log { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Word;   // Result of `Geo2Log` operation
+         deviceStateOK { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Device state is ok - Device connection is established and not broken
+      END_STRUCT;
+      instWatchdog {InstructionName := 'IEC_TIMER'; LibVersion := '1.0'; ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'; S7_SetPoint := 'False'} : IEC_TIMER;   // Watchdog timer to monitor deactivating, activating, and active timeouts
+      instWatchdogReintegration {InstructionName := 'IEC_TIMER'; LibVersion := '1.0'; ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'; S7_SetPoint := 'False'} : IEC_TIMER;   // Watchdog to monitor a stable connection before reintegration after connection loss (`NOT deviceStateOK`)
+      statMainState { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : DInt := #FB_STATE_NO_PROCESSING;   // State in the state machine of the FB
+   END_VAR
+
+   VAR_TEMP 
+      tempEnable : Bool;   // Temporary value for input 'enable'
+   END_VAR
+
+   VAR CONSTANT 
+      MODE_INFORMATION : USInt := 0;   // Retrieve info's about the device's activation state
+      MODE_ACTIVATE : USInt := 1;   // Activates the device
+      MODE_DEACTIVATE : USInt := 2;   // Deactivates the device
+      DEVICE_IS_ACTIVE : Word := 16#0001;   // Device is activated
+      DEVICE_IS_PASSIVE : Word := 16#0002;   // Device is deactivated
+      DEVICE_ACTIVATION_TIMEOUT : Word := 16#80A7;   // Activation takes too long, device may be not reachable
+      RESULT_SUCCESS : Word := 16#0000;   // Activation result success
+      SLAVE_EXISTS : UInt := 4;   // IO Device Slave exist
+      SLAVE_FAULTY : UInt := 2;   // IO Device Slave exist
+      SLAVE_DISBALED : UInt := 3;   // IO Device Slave disbaled
+      FB_STATE_NO_PROCESSING : DInt := 0;   // FB state: No processing
+      FB_STATE_ENABLING_START : DInt := 10;   // FB state: Enabling
+      FB_STATE_ENABLING_WAIT : DInt := 11;   // FB state: Enabling
+      FB_STATE_DEACTIVATE_INIT : DInt := 40;   // FB state: Processing
+      FB_STATE_DEACTIVATE_INIT_WAIT : DInt := 41;   // FB state: Processing
+      FB_STATE_DEACTIVATE_START : DInt := 44;   // FB state: Processing
+      FB_STATE_DEACTIVATE_WAIT : DInt := 45;   // FB state: Processing
+      FB_STATE_DEACTIVATE_DONE : DInt := 49;   // FB state: Processing
+      FB_STATE_DEACTIVATED : DInt := 50;   // FB state: Processing
+      FB_STATE_ACTIVATE_INIT : DInt := 60;   // FB state: Processing
+      FB_STATE_ACTIVATE_INIT_WAIT : DInt := 61;   // FB state: Processing
+      FB_STATE_ACTIVATE_START : DInt := 64;   // FB state: Processing
+      FB_STATE_ACTIVATE_WAIT : DInt := 65;   // FB state: Processing
+      FB_STATE_ACTIVATE_DONE : DInt := 69;   // FB state: Processing
+      FB_STATE_ACTIVATED : DInt := 70;   // FB state: Processing
+      FB_STATE_DISABLING_START : DInt := 90;   // FB state: Disabling start
+      FB_STATE_DISABLING_WAIT : DInt := 91;   // FB state: Disabling wait
+      STATUS_NO_CALL : Word := 16#7000;   // No job being currently processed
+      STATUS_FIRST_CALL : Word := 16#7001;   // First call after incoming new job (rising edge 'enable')
+      STATUS_SUBSEQUENT_CALL : Word := 16#7002;   // Subsequent call during active processing without further details
+      STATUS_DEACTIVATED : Word := 16#0000;   // Device deactivation done
+      STATUS_ACTIVATED : Word := 16#0001;   // Device activation done
+      STATUS_DEACTIVATION : Word := 16#7040;   // Processing device deactivation
+      STATUS_ACTIVATION : Word := 16#7060;   // Processing device activation
+      SUB_STATUS_NO_ERROR : Word := 16#0000;   // NO error occurred in sub function call
+      ERR_UNDEFINED_STATE : Word := 16#8600;   // Error: Due to an undefined state in state machine
+      ERR_LOG2GEO : Word := 16#8601;   // Error: Log2Geo, may the HW ID for the device is wrong,  please see `diagnostics.subFunctionStatus` for more detailed information
+      ERR_GEO2LOG : Word := 16#8602;   // Error: Geo2Log, may the HW ID for the device is wrong,  please see `diagnostics.subFunctionStatus` for more detailed information
+      ERR_DEVICE_DEACTIVATING : Word := 16#8640;   // Error: Deactivation (D_ACT_DP) of device,  please see `diagnostics.subFunctionStatus` for more detailed information
+      ERR_DEVICE_DEACTIVATING_TIME_OUT : Word := 16#8641;   // Error: Deactivation of device - watchdog time expired
+      ERR_DEVICE_DEACTIVATING_RETRIES_REACHED : Word := 16#8642;   // Error: Deactivation of device cause max retries reached
+      ERR_READ_ACTIVATION_STATE_WHILE_DEACTIVATED : Word := 16#8650;   // Error: Deactivation state (D_ACT_DP) of device is wrong,  desired is `16#0000` or `16#0002`,  please see `diagnostics.subFunctionStatus` for more detailed information
+      ERR_DEVICE_ACTIVATING : Word := 16#8660;   // Error: Activation (D_ACT_DP) of device,  please see `diagnostics.subFunctionStatus` for more detailed information
+      ERR_DEVICE_ACTIVATING_TIME_OUT : Word := 16#8661;   // Error: Activation of device cause watchdog time expired.  Can be a broken device connection
+      ERR_DEVICE_ACTIVATING_RETRIES_REACHED : Word := 16#8662;   // Error: Activation of device cause max retries reached.  Can be a broken device connection
+      ERR_READ_DEVICES_STATES_DURING_ACTIVATION : Word := 16#8663;   // Error: Read Device states (DeviceStates) during device activation,  please see `diagnostics.subFunctionStatus` for more detailed information
+      ERR_READ_DEVICES_STATES_WHILE_ACTIVE : Word := 16#8670;   // Error: Read Device states (DeviceStates) while device active,  please see `diagnostics.subFunctionStatus` for more detailed information
+      ERR_DEVICE_STATE_WHILE_ACTIVE : Word := 16#8671;   // Error: Device states present error and is unreachable, faulty Device or IO-System
+      ERR_READ_ACTIVATION_STATE_WHILE_ACTIVE : Word := 16#8672;   // Error: Activation state (D_ACT_DP) of device is wrong,  desired is `16#0000` or `16#0001`,  please see `diagnostics.subFunctionStatus` for more detailed information
+      ERR_DISABLING_DEACT_DEVICE : Word := 16#8690;   // Error: Deactivation (D_ACT_DP) of device throws an error while disabling,  please see `diagnostics.subFunctionStatus` for more detailed information
+      ERR_DISABLING_WATCHDOG : Word := 16#8691;   // Error: Watchdog timer expired while disabling
+   END_VAR
+
+
+BEGIN
+	REGION BLOCK INFO HEADER
+	  //===============================================================================
+	  // (C)Copyright Siemens 2023 - 2025
+	  //-------------------------------------------------------------------------------
+	  // Title:            LGF_ActDeactMonitorDevice
+	  // Comment/Function: `LGF_ActDeactMonitorDevice` implements an compact statemaschine to activate and monitor or deactivate decentral devices.  
+	  //                   The modul monitors as well the device connection and error state after activation.  
+	  //                   It works for PN (S7-1200 / S7-1500) and DP (S7-1500) devices.
+	  // Library/Family:   LGF - library of general functions
+	  // Author:           Simatic Systems Support
+	  // Tested with:      S7-1200 V4.6 / S7-1500 V2.9
+	  // Engineering:      TIA Portal (V17)
+	  // Restrictions:     ---
+	  // Requirements:     Decentral PN / DP Device
+	  //--------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge        | Changes applied
+	  //----------|------------|-------------------------|------------------------------
+	  // 01.00.00 | 06.04.2024 | Simatic Systems Support | First released version in different project
+	  // 02.00.00 | 10.03.2025 | Simatic Systems Support | Refactoring & Improve Code for LGF Integration
+	  //          |            |                         | Thats why we start here with V2.0 for the LGF integration
+	  //================================================================================
+	END_REGION BLOCK INFO HEADER
+	
+	REGION DESCRIPTION
+	(/*
+	The module provides the procedure for activating and deactivating a remote IO-Device in the Profinet (PN, S7-1500 & S7-1200) and Profibus (DP, S7-1500) network.
+	
+	The activation of the device (defined at `hwId`) is initiated by a rising edge at `activate`, after complete activation this is indicated at the output `isActivated` and `deviceStateOK`. After that the connection status is displayed at the `deviceStateOK` output.  
+	The connection is monitored and in case of a failure of this of more than the set monitoring time `timeOutStateMonitoring` at the output and reported as an error. After successful recovery of the connection by the system, the configured time is also waited until the error is reset to ensure stability.
+	
+	---
+	
+	Note
+	:    The connection status of the decentralized device is as well displayed in the TIA Portal project navigation in the PLC, which is the controller, under the item 'Distributed I/O', if online with the engineering system.
+	
+	---
+	
+	Deactivation of the device (defined at `hwId`) is initiated by a rising edge at `deactivate`, after complete activation this is indicated at the output `isDeactivated`.
+	
+	It is possible to define the states for switching on and off, as well as the monitoring times for activating and deactivating and the connection monitoring.
+	
+	All errors are automatically reset as soon as the faulty state is eliminated.  
+	The exception to this are errors that can only be corrected by an intervention in the software, such as an incorrect or non-existent hardware ID of a non-existent decentralized IO device. 
+	
+	------
+	
+	Note
+	:    The parameter `timeOutActDeact` for monitoring the activation and deactivation sequence should always be set higher than the parameterized value in the `Device configuration` / `Startup` / `Configuration time`. 
+	
+	---
+	
+	![Parameterization PLC](LGF_ActDeactDevice.png)
+	*/)
+	END_REGION DESCRIPTION
+	
+	REGION ENABLING/DISABLING
+	  #tempEnable := #enable; // Work with temporary value / create process image
+	  IF (#tempEnable = TRUE) AND (#statInternal.status = #STATUS_NO_CALL) THEN // Enable FB
+	    // First call; initialize FB
+	    #statInternal.busy := TRUE;
+	    #statInternal.error := FALSE;
+	    #statInternal.errorUserCleared := FALSE;
+	    #statInternal.errorAutoCleared := FALSE;
+	    #statInternal.disablingCompleted := FALSE;
+	    #statInternal.diagnostics := #statInternal.emptyDiagnostics;
+	    #statInternal.internalDiagnostics := #statInternal.emptyDiagnostics;
+	    #diagnostics := #statInternal.emptyDiagnostics;
+	    #statInternal.status := #STATUS_FIRST_CALL;
+	    // State machine - start processing
+	    #statMainState := #FB_STATE_ENABLING_START;
+	    
+	    // Initialize functionality: reset of variables, diagnostics, etc.
+	    #statActDeact.request := FALSE;
+	    #statActDeact.mode := #MODE_INFORMATION;
+	    
+	  ELSIF (#tempEnable = FALSE) AND (#statInternal.enablePrevious = TRUE) THEN // Disable FB 
+	    #statMainState := #FB_STATE_DISABLING_START;
+	    
+	  ELSIF (#statInternal.status = #STATUS_FIRST_CALL) THEN // Set status identifier of subsequent call
+	    #statInternal.status := #STATUS_SUBSEQUENT_CALL;
+	  END_IF;
+	  
+	  // Edge detection 'enable' input
+	  #statInternal.enablePrevious := #tempEnable;
+	END_REGION ENABLING/DISABLING
+	
+	IF (#statInternal.status = #STATUS_NO_CALL) THEN // Nothing to do -> End here to reduce "system load"
+	  RETURN;
+	END_IF;
+	
+	REGION Command dedection
+	  IF TRUE
+	    AND (#statMainState > #FB_STATE_ENABLING_WAIT)
+	    AND (#statMainState < #FB_STATE_DISABLING_START)
+	  THEN
+	    IF #deactivate AND NOT #statInternal.deactivatePrevious THEN
+	      #statActDeact.request := FALSE;
+	      #statActDeact.hasPreviousError := FALSE;
+	      #statActDeact.remainingRetries := #parameter.activationRetries;
+	      #statMainState := #FB_STATE_DEACTIVATE_INIT;
+	      
+	    ELSIF #activate AND NOT #statInternal.activatePrevious THEN
+	      #statActDeact.request := FALSE;
+	      #statActDeact.hasPreviousError := FALSE;
+	      #statActDeact.remainingRetries := #parameter.activationRetries;
+	      #statActDeact.neededRetrieCyclesUntilActivation := 0;
+	      #statMainState := #FB_STATE_ACTIVATE_INIT;
+	    ELSE
+	      ;
+	    END_IF;
+	  END_IF;
+	  #statInternal.deactivatePrevious := #deactivate;
+	  #statInternal.activatePrevious := #activate;
+	END_REGION
+	
+	REGION STATE MACHINE
+	  CASE #statMainState OF // State machine of FB
+	    #FB_STATE_NO_PROCESSING:
+	      REGION No Processing
+	        ; // No processing active (Note: this state must always be present and left empty)
+	      END_REGION No Processing
+	      
+	    #FB_STATE_ENABLING_START..
+	    #FB_STATE_ENABLING_WAIT:
+	      REGION Enabling
+	        CASE #statMainState OF
+	          #FB_STATE_ENABLING_START:
+	            REGION Enabling start
+	              // Store HW ID internal
+	              #statActDeact.hwIdDevice := #hwId;
+	              #statActDeact.request := FALSE;
+	              
+	              // Gets the station number of the given device by its HW ID
+	              #statDeviceState.resultLog2Geo := INT_TO_WORD(LOG2GEO(LADDR := #statActDeact.hwIdDevice, GEOADDR := #statDeviceState.geoAddr));
+	              
+	              // Gets the IO System HW ID for the given device connection by the device HW ID / Geo Information
+	              #statDeviceState.geoAddrIoSystem.AREA := #statDeviceState.geoAddr.AREA;
+	              #statDeviceState.geoAddrIoSystem.IOSYSTEM := #statDeviceState.geoAddr.IOSYSTEM;
+	              #statDeviceState.resultGeo2Log := INT_TO_WORD(GEO2LOG(GEOADDR := #statDeviceState.geoAddrIoSystem, LADDR => #statDeviceState.hwIdIoSystem));
+	              
+	              IF (#statDeviceState.resultLog2Geo <> #RESULT_SUCCESS) THEN
+	                #statInternal.diagnostics.status := #ERR_LOG2GEO;
+	                #statInternal.diagnostics.subfunctionStatus := #statDeviceState.resultLog2Geo;
+	                #statInternal.diagnostics.stateNumber := #statMainState;
+	                #statInternal.errorUserCleared := TRUE;
+	                
+	              ELSIF (#statDeviceState.resultGeo2Log <> #RESULT_SUCCESS) THEN
+	                #statInternal.diagnostics.status := #ERR_GEO2LOG;
+	                #statInternal.diagnostics.subfunctionStatus := #statDeviceState.resultGeo2Log;
+	                #statInternal.diagnostics.stateNumber := #statMainState;
+	                #statInternal.errorUserCleared := TRUE;
+	                
+	              ELSIF NOT #statActDeact.busy THEN
+	                #statActDeact.request := TRUE;
+	                #statActDeact.mode := #MODE_INFORMATION;
+	                
+	                #statMainState := #FB_STATE_ENABLING_WAIT;
+	              END_IF;
+	            END_REGION
+	            
+	          #FB_STATE_ENABLING_WAIT:
+	            REGION Enabling wait
+	              IF NOT #statActDeact.busy THEN
+	                #statActDeact.request := FALSE;
+	                
+	                IF FALSE
+	                  OR #parameter.enableAndDeactivate
+	                  OR (TRUE
+	                  AND (#statActDeact.result = #DEVICE_IS_PASSIVE)
+	                  AND NOT #parameter.enableAndActivate
+	                  )
+	                THEN
+	                  #statMainState := #FB_STATE_DEACTIVATE_INIT;
+	                  #statInternal.valid := TRUE;
+	                  
+	                ELSIF FALSE
+	                  OR #parameter.enableAndActivate
+	                  OR (#statActDeact.result = #DEVICE_IS_ACTIVE)
+	                THEN
+	                  #statMainState := #FB_STATE_ACTIVATE_INIT;
+	                  #statInternal.valid := TRUE;
+	                ELSE
+	                  #statMainState := #FB_STATE_ENABLING_START;
+	                END_IF;
+	              END_IF;
+	            END_REGION
+	        END_CASE;
+	      END_REGION Enabling
+	      
+	    #FB_STATE_DEACTIVATE_INIT..
+	    #FB_STATE_DEACTIVATE_DONE:
+	      REGION Deactivate
+	        CASE #statMainState OF
+	          #FB_STATE_DEACTIVATE_INIT:
+	            REGION Deactivate init
+	              #statActDeact.request := FALSE;
+	              #statActDeact.mode := #MODE_DEACTIVATE;
+	              #statActDeact.remainingRetries -= 1;
+	              IF #statActDeact.remainingRetries < 0 THEN
+	                #statActDeact.remainingRetries := 0;
+	              END_IF;
+	              
+	              #statInternal.status := #STATUS_DEACTIVATION;
+	              #statMainState := #FB_STATE_DEACTIVATE_INIT_WAIT;
+	            END_REGION
+	            
+	          #FB_STATE_DEACTIVATE_INIT_WAIT:
+	            REGION Deactivate init wait
+	              IF TRUE
+	                AND NOT #statActDeact.busy
+	              THEN
+	                #statMainState := #FB_STATE_DEACTIVATE_START;
+	              END_IF;
+	            END_REGION
+	            
+	          #FB_STATE_DEACTIVATE_START:
+	            REGION Deactivate start
+	              #statActDeact.request := TRUE;
+	              #statActDeact.mode := #MODE_DEACTIVATE;
+	              
+	              #statMainState := #FB_STATE_DEACTIVATE_WAIT;
+	            END_REGION
+	            
+	          #FB_STATE_DEACTIVATE_WAIT:
+	            REGION Deactivate wait
+	              #statActDeact.request := FALSE;
+	              
+	              // Device deactivation completed successfully
+	              IF TRUE
+	                AND NOT #statActDeact.busy
+	                AND (FALSE
+	                OR (#statActDeact.result = #DEVICE_IS_PASSIVE)
+	                OR (#statActDeact.result = #RESULT_SUCCESS)
+	                )
+	              THEN
+	                #statInternal.errorAutoCleared := FALSE;
+	                #statMainState := #FB_STATE_DEACTIVATE_DONE;
+	                
+	              ELSIF #statActDeact.result.%X15 THEN // Error occured first time
+	                // Write infos into internal Diagnostic buffer for info reasons
+	                #statInternal.internalDiagnostics.status := #ERR_DEVICE_DEACTIVATING;
+	                #statInternal.internalDiagnostics.subfunctionStatus := #statActDeact.result;
+	                #statInternal.internalDiagnostics.stateNumber := #statMainState;
+	                #statMainState := #FB_STATE_DEACTIVATE_INIT;
+	                // Set flag that error has happend
+	                // This is to detect if the error is still present over more than one cycle
+	                #statActDeact.hasPreviousError := TRUE;
+	                
+	                // Watchdog or retries reached and previously dedected error occured
+	              ELSIF TRUE
+	                AND #statInternal.internalDiagnostics.status.%X15
+	                AND (FALSE
+	                OR #instWatchdog.Q
+	                OR #statActDeact.remainingRetries <= 0
+	                )
+	              THEN
+	                #statInternal.diagnostics := #statInternal.internalDiagnostics;
+	                #statInternal.errorAutoCleared := TRUE;
+	                #statMainState := #FB_STATE_DEACTIVATE_INIT;
+	                
+	                // Watchdog or retries reached and previously dedected error occured
+	              ELSIF #statActDeact.remainingRetries <= 0 THEN
+	                #statInternal.diagnostics.status := #ERR_DEVICE_DEACTIVATING_RETRIES_REACHED;
+	                #statInternal.diagnostics.subfunctionStatus := #SUB_STATUS_NO_ERROR;
+	                #statInternal.diagnostics.stateNumber := #statMainState;
+	                #statInternal.errorAutoCleared := TRUE;
+	                #statMainState := #FB_STATE_DEACTIVATE_INIT;
+	                
+	              ELSIF #instWatchdog.Q THEN
+	                #statInternal.diagnostics.status := #ERR_DEVICE_DEACTIVATING_TIME_OUT;
+	                #statInternal.diagnostics.subfunctionStatus := #SUB_STATUS_NO_ERROR;
+	                #statInternal.diagnostics.stateNumber := #statMainState;
+	                #statInternal.errorAutoCleared := TRUE;
+	                #statMainState := #FB_STATE_DEACTIVATE_INIT;
+	                
+	              ELSIF NOT #statActDeact.busy THEN
+	                #statInternal.errorAutoCleared := FALSE;
+	                #statInternal.status := #STATUS_DEACTIVATION;
+	                #statMainState := #FB_STATE_DEACTIVATE_INIT;
+	              END_IF;
+	            END_REGION
+	            
+	          #FB_STATE_DEACTIVATE_DONE:
+	            REGION Activate done
+	              IF NOT #deactivate THEN
+	                #statActDeact.request := FALSE;
+	                #statActDeact.mode := #MODE_INFORMATION;
+	                
+	                #statInternal.status := #STATUS_DEACTIVATED;
+	                #statMainState := #FB_STATE_DEACTIVATED;
+	              END_IF;
+	            END_REGION
+	        END_CASE;
+	      END_REGION
+	      
+	    #FB_STATE_DEACTIVATED:
+	      REGION Deactivated
+	        // Toggle actDeactRequest to get information about status
+	        #statActDeact.request := NOT #statActDeact.request;
+	        
+	        IF TRUE
+	          AND (#statActDeact.result <> #DEVICE_IS_PASSIVE)
+	          AND (#statActDeact.result <> #RESULT_SUCCESS)
+	          AND (#statActDeact.result <> #STATUS_NO_CALL)
+	          AND (#statActDeact.result <> #STATUS_FIRST_CALL)
+	          AND (#statActDeact.result <> #STATUS_SUBSEQUENT_CALL)
+	        THEN
+	          #statInternal.diagnostics.status := #ERR_READ_ACTIVATION_STATE_WHILE_DEACTIVATED;
+	          #statInternal.diagnostics.subfunctionStatus := #statActDeact.result;
+	          #statInternal.diagnostics.stateNumber := #statMainState;
+	          #statInternal.errorAutoCleared := TRUE;
+	          
+	        ELSE
+	          #statInternal.errorAutoCleared := FALSE;
+	          #statInternal.status := #STATUS_DEACTIVATED;
+	        END_IF;
+	      END_REGION
+	      
+	    #FB_STATE_ACTIVATE_INIT..
+	    #FB_STATE_ACTIVATE_DONE:
+	      REGION Activate
+	        CASE #statMainState OF
+	          #FB_STATE_ACTIVATE_INIT:
+	            REGION Activate init
+	              #statActDeact.request := FALSE;
+	              #statActDeact.mode := #MODE_ACTIVATE;
+	              #statActDeact.neededRetrieCyclesUntilActivation += 1;
+	              #statActDeact.remainingRetries -= 1;
+	              IF #statActDeact.remainingRetries < 0 THEN
+	                #statActDeact.remainingRetries := 0;
+	              END_IF;
+	              
+	              #statInternal.status := #STATUS_ACTIVATION;
+	              #statMainState := #FB_STATE_ACTIVATE_INIT_WAIT;
+	            END_REGION
+	            
+	          #FB_STATE_ACTIVATE_INIT_WAIT:
+	            REGION Activate init wait
+	              IF TRUE
+	                AND NOT #statActDeact.busy
+	              THEN
+	                #statMainState := #FB_STATE_ACTIVATE_START;
+	              END_IF;
+	            END_REGION
+	            
+	          #FB_STATE_ACTIVATE_START:
+	            REGION Activate start
+	              #statActDeact.request := TRUE;
+	              #statActDeact.mode := #MODE_ACTIVATE;
+	              
+	              #statMainState := #FB_STATE_ACTIVATE_WAIT;
+	            END_REGION
+	            
+	          #FB_STATE_ACTIVATE_WAIT:
+	            REGION Activate wait
+	              #statActDeact.request := FALSE;
+	              
+	              // Device activation completed successfully
+	              IF TRUE
+	                AND #statDeviceState.deviceStateOK
+	                AND NOT #statActDeact.busy
+	                AND (FALSE
+	                OR (#statActDeact.result = #DEVICE_IS_ACTIVE)
+	                OR (#statActDeact.result = #RESULT_SUCCESS)
+	                )
+	              THEN
+	                #statInternal.errorAutoCleared := FALSE;
+	                #statMainState := #FB_STATE_ACTIVATE_DONE;
+	                
+	              ELSIF #statActDeact.result.%X15 THEN // Error occured first time in Activation SFC
+	                // Write infos into internal Diagnostic buffer for info reasons
+	                #statInternal.internalDiagnostics.status := #ERR_DEVICE_ACTIVATING;
+	                #statInternal.internalDiagnostics.subfunctionStatus := #statActDeact.result;
+	                #statInternal.internalDiagnostics.stateNumber := #statMainState;
+	                #statMainState := #FB_STATE_ACTIVATE_INIT;
+	                // Set flag that error has happend
+	                // This is to detect if the error is still present over more than one cycle
+	                #statActDeact.hasPreviousError := TRUE;
+	                
+	              ELSIF #statDeviceState.resultDeviceStates.%X15 THEN // Error occured first time in Device state SFC
+	                #statInternal.internalDiagnostics.status := #ERR_READ_DEVICES_STATES_DURING_ACTIVATION;
+	                #statInternal.internalDiagnostics.subfunctionStatus := #statDeviceState.resultDeviceStates;
+	                #statInternal.internalDiagnostics.stateNumber := #statMainState;
+	                #statMainState := #FB_STATE_ACTIVATE_INIT;
+	                // Set flag that error has happend
+	                // This is to detect if the error is still present over more than one cycle
+	                #statActDeact.hasPreviousError := TRUE;
+	                
+	                // Watchdog or retries reached and previously dedected error occured
+	              ELSIF TRUE
+	                AND #statInternal.internalDiagnostics.status.%X15
+	                AND (FALSE
+	                OR #instWatchdog.Q
+	                OR #statActDeact.remainingRetries <= 0
+	                )
+	              THEN
+	                #statInternal.diagnostics := #statInternal.internalDiagnostics;
+	                #statInternal.errorAutoCleared := TRUE;
+	                #statMainState := #FB_STATE_ACTIVATE_INIT;
+	                
+	                // Watchdog or retries reached and previously dedected error occured
+	              ELSIF #statActDeact.remainingRetries <= 0 THEN
+	                #statInternal.diagnostics.status := #ERR_DEVICE_ACTIVATING_RETRIES_REACHED;
+	                #statInternal.diagnostics.subfunctionStatus := #SUB_STATUS_NO_ERROR;
+	                #statInternal.diagnostics.stateNumber := #statMainState;
+	                #statInternal.errorAutoCleared := TRUE;
+	                #statMainState := #FB_STATE_ACTIVATE_INIT;
+	                
+	              ELSIF #instWatchdog.Q THEN
+	                #statInternal.diagnostics.status := #ERR_DEVICE_ACTIVATING_TIME_OUT;
+	                #statInternal.diagnostics.subfunctionStatus := #SUB_STATUS_NO_ERROR;
+	                #statInternal.diagnostics.stateNumber := #statMainState;
+	                #statInternal.errorAutoCleared := TRUE;
+	                #statMainState := #FB_STATE_ACTIVATE_INIT;
+	                
+	              ELSIF NOT #statActDeact.busy THEN
+	                #statInternal.errorAutoCleared := FALSE;
+	                #statInternal.status := #STATUS_ACTIVATION;
+	                #statMainState := #FB_STATE_ACTIVATE_INIT;
+	              END_IF;
+	            END_REGION
+	            
+	          #FB_STATE_ACTIVATE_DONE:
+	            REGION Activate done
+	              IF NOT #activate THEN
+	                #statActDeact.request := FALSE;
+	                #statActDeact.mode := #MODE_INFORMATION;
+	                
+	                #statInternal.status := #STATUS_ACTIVATED;
+	                #statMainState := #FB_STATE_ACTIVATED;
+	              END_IF;
+	            END_REGION
+	        END_CASE;
+	      END_REGION
+	      
+	    #FB_STATE_ACTIVATED:
+	      REGION Activated
+	        // Toggle actDeactRequest to get information about status
+	        #statActDeact.request := NOT #statActDeact.request;
+	        
+	        IF #instWatchdogReintegration.Q THEN
+	          #statInternal.diagnostics.status := #ERR_DEVICE_STATE_WHILE_ACTIVE;
+	          #statInternal.diagnostics.subfunctionStatus := #statDeviceState.resultDeviceStates;
+	          #statInternal.diagnostics.stateNumber := #statMainState;
+	          #statInternal.errorAutoCleared := TRUE;
+	          
+	        ELSIF #statDeviceState.resultDeviceStates.%X15 THEN
+	          #statInternal.diagnostics.status := #ERR_READ_DEVICES_STATES_WHILE_ACTIVE;
+	          #statInternal.diagnostics.subfunctionStatus := #statDeviceState.resultDeviceStates;
+	          #statInternal.diagnostics.stateNumber := #statMainState;
+	          #statInternal.errorAutoCleared := TRUE;
+	          
+	        ELSIF TRUE
+	          AND (#statActDeact.result <> #DEVICE_IS_ACTIVE)
+	          AND (#statActDeact.result <> #RESULT_SUCCESS)
+	          AND (#statActDeact.result <> #STATUS_NO_CALL)
+	          AND (#statActDeact.result <> #STATUS_FIRST_CALL)
+	          AND (#statActDeact.result <> #STATUS_SUBSEQUENT_CALL)
+	        THEN
+	          #statInternal.diagnostics.status := #ERR_READ_ACTIVATION_STATE_WHILE_ACTIVE;
+	          #statInternal.diagnostics.subfunctionStatus := #statActDeact.result;
+	          #statInternal.diagnostics.stateNumber := #statMainState;
+	          #statInternal.errorAutoCleared := TRUE;
+	          
+	        ELSE
+	          #statInternal.errorAutoCleared := FALSE;
+	          #statInternal.status := #STATUS_ACTIVATED;
+	        END_IF;
+	      END_REGION
+	      
+	    #FB_STATE_DISABLING_START..
+	    #FB_STATE_DISABLING_WAIT:
+	      REGION Disabling
+	        CASE #statMainState OF
+	          #FB_STATE_DISABLING_START:
+	            REGION Disabling start
+	              IF #parameter.disableAndDeactivate THEN
+	                #statActDeact.mode := #MODE_DEACTIVATE;
+	              ELSE
+	                #statActDeact.mode := #MODE_INFORMATION;
+	              END_IF;
+	              
+	              #statActDeact.request := TRUE;
+	              #statMainState := #FB_STATE_DISABLING_WAIT;
+	            END_REGION
+	            
+	          #FB_STATE_DISABLING_WAIT:
+	            REGION Disabling wait
+	              IF NOT #statActDeact.busy THEN
+	                #statActDeact.request := FALSE;
+	                
+	                IF FALSE
+	                  OR (#statActDeact.result = #RESULT_SUCCESS)
+	                  OR (#statActDeact.result = #DEVICE_IS_PASSIVE)
+	                  OR #statInternal.errorAutoCleared
+	                THEN
+	                  // When disabling is complete the bit #statDisablingCompleted must be set
+	                  #statInternal.disablingCompleted := TRUE;
+	                  
+	                ELSIF #statActDeact.result.%X15 THEN
+	                  #statInternal.diagnostics.status := #ERR_DISABLING_DEACT_DEVICE;
+	                  #statInternal.diagnostics.subfunctionStatus := #statActDeact.result;
+	                  #statInternal.diagnostics.stateNumber := #statMainState;
+	                  #statInternal.errorAutoCleared := TRUE;
+	                  
+	                ELSIF #instWatchdog.Q THEN
+	                  #statInternal.diagnostics.status := #ERR_DISABLING_WATCHDOG;
+	                  #statInternal.diagnostics.subfunctionStatus := #statActDeact.result;
+	                  #statInternal.diagnostics.stateNumber := #statMainState;
+	                  #statInternal.errorAutoCleared := TRUE;
+	                  
+	                ELSE
+	                  #statMainState := #FB_STATE_DISABLING_START;
+	                END_IF;
+	              END_IF;
+	            END_REGION
+	        END_CASE;
+	      END_REGION Disabling
+	      
+	    ELSE // Undefined state in state machine reached
+	      REGION Undefined state
+	        #statInternal.diagnostics.status := #ERR_UNDEFINED_STATE;
+	        #statInternal.diagnostics.subfunctionStatus := #SUB_STATUS_NO_ERROR;
+	        #statInternal.diagnostics.stateNumber := #statMainState;
+	        #statInternal.errorUserCleared := TRUE;
+	      END_REGION Undefined state
+	  END_CASE;
+	  
+	  REGION Timer handling
+	    CASE #statMainState OF
+	      #FB_STATE_DEACTIVATE_INIT..
+	      #FB_STATE_DEACTIVATE_WAIT,
+	      #FB_STATE_ACTIVATE_INIT..
+	      #FB_STATE_ACTIVATE_WAIT,
+	      #FB_STATE_DISABLING_WAIT:
+	        #instWatchdog.TON(IN := TRUE,
+	                          PT := #parameter.timeOutActDeact);
+	        #instWatchdogReintegration.TOF(IN := FALSE,
+	                                       PT := #parameter.timeOutStateMonitoring);
+	        
+	      #FB_STATE_ACTIVATED:
+	        #instWatchdog.TON(IN := NOT #statDeviceState.deviceStateOK,
+	                          PT := #parameter.timeOutStateMonitoring);
+	        #instWatchdogReintegration.TOF(IN := #instWatchdog.Q,
+	                                       PT := #parameter.timeOutStateMonitoring);
+	        
+	      ELSE
+	        #instWatchdog.TON(IN := FALSE,
+	                          PT := #parameter.timeOutStateMonitoring);
+	        #instWatchdogReintegration.TOF(IN := FALSE,
+	                                       PT := #parameter.timeOutStateMonitoring);
+	    END_CASE;
+	  END_REGION Timer handling
+	  
+	  // Call activate / Deactivate system function
+	  #statActDeact.result := INT_TO_WORD(D_ACT_DP(REQ := #statActDeact.request, MODE := #statActDeact.mode, LADDR := #statActDeact.hwIdDevice, BUSY => #statActDeact.busy));
+	  
+	  // Gets the device stations states
+	  #statDeviceState.resultDeviceStates := INT_TO_WORD(DeviceStates(LADDR := #statDeviceState.hwIdIoSystem, MODE := #SLAVE_EXISTS, STATE := #statDeviceState.devicesState));
+	  // Read the returned status bit of this device
+	  // In case the LOG2GEO block is working without errors --> fetch the value of the array on the postion Device.StationNumber
+	  #statDeviceState.deviceStateOK := #statDeviceState.devicesState[#statDeviceState.geoAddr.STATION] AND NOT #statDeviceState.resultDeviceStates.%X15;
+	END_REGION STATE MACHINE
+	
+	REGION OUTPUTS
+	  // Write outputs
+	  IF (#statInternal.disablingCompleted = TRUE) THEN
+	    REGION Disabling
+	      // Reset outputs if disabling completed
+	      #statInternal.valid := FALSE;
+	      #statInternal.busy := FALSE;
+	      #statInternal.error := FALSE;
+	      #statInternal.errorUserCleared := FALSE;
+	      #statInternal.errorAutoCleared := FALSE;
+	      #statInternal.status := #STATUS_NO_CALL;
+	      #statMainState := #FB_STATE_NO_PROCESSING;
+	    END_REGION Disabling
+	    
+	  ELSIF (#statInternal.errorUserCleared = TRUE) AND (#statInternal.error = FALSE) THEN
+	    REGION Error user cleared
+	      // Error can only be cleared by user; rising edge at enable input is needed to continue 
+	      #statInternal.valid := FALSE;
+	      #statInternal.busy := FALSE;
+	      #statInternal.error := TRUE;
+	      // Write diagnostics
+	      //#diagnostics := #statDiagnostic;
+	      #diagnostics := #statInternal.diagnostics;
+	      // execution aborted --> set state no processing
+	      #statMainState := #FB_STATE_NO_PROCESSING;
+	    END_REGION Error user cleared
+	    
+	  ELSIF (#statInternal.errorAutoCleared = TRUE) AND (#statInternal.error = FALSE) THEN
+	    REGION Error auto cleared
+	      // Error can be reset by FB automatically
+	      #statInternal.valid := FALSE;
+	      #statInternal.busy := TRUE;
+	      #statInternal.error := TRUE;
+	      // Write diagnostics
+	      #diagnostics := #statInternal.diagnostics;
+	    END_REGION Error auto cleared
+	    
+	  ELSIF (#statInternal.errorAutoCleared = FALSE) AND (#statInternal.errorUserCleared = FALSE) AND (#statInternal.error = TRUE) THEN
+	    REGION After user/auto cleared or command aborted
+	      // If autocleared error is acknowledged
+	      #statInternal.valid := TRUE;
+	      #statInternal.busy := TRUE;
+	      #statInternal.error := FALSE;
+	      #statInternal.status := #STATUS_SUBSEQUENT_CALL;
+	    END_REGION After user/auto cleared or command aborted
+	  END_IF;
+	  
+	  REGION Write static values to outputs
+	    #valid := #statInternal.valid;
+	    #busy := #statInternal.busy;
+	    #error := #statInternal.error;
+	    IF #statInternal.error THEN
+	      #status := #statInternal.diagnostics.status;
+	    ELSE
+	      #status := #statInternal.#status;
+	    END_IF;
+	    
+	    // if ENO mechanism is not used / not wanted replace the following line by --> ENO := TRUE;
+	    ENO := NOT #statInternal.error;
+	    
+	    #done := FALSE
+	    OR (#statMainState = #FB_STATE_DEACTIVATE_DONE)
+	    OR (#statMainState = #FB_STATE_ACTIVATE_DONE)
+	    ;
+	    
+	    // Write application specific static values to outputs
+	    #deactivatingActive := (#statMainState >= #FB_STATE_DEACTIVATE_INIT) AND (#statMainState <= #FB_STATE_DEACTIVATE_DONE);
+	    #isDeactivated := (#statMainState = #FB_STATE_DEACTIVATED) OR (#statMainState = #FB_STATE_DEACTIVATE_DONE);
+	    #activatingActive := (#statMainState >= #FB_STATE_ACTIVATE_INIT) AND (#statMainState <= #FB_STATE_ACTIVATE_DONE);
+	    #isActivated := (#statMainState = #FB_STATE_ACTIVATED) OR (#statMainState = #FB_STATE_ACTIVATE_DONE);
+	    #deviceStateOK := #statDeviceState.deviceStateOK AND #isActivated AND NOT #statInternal.error;
+	  END_REGION Write static values to outputs
+	END_REGION OUTPUTS
+	
+END_FUNCTION_BLOCK
+

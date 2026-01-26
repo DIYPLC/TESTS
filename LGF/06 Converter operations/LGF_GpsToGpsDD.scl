@@ -1,0 +1,217 @@
+﻿TYPE "LGF_typeGPS_DMS"
+TITLE = LGF_typeGPS_DMS
+VERSION : 0.1
+//Datatype for GPS Coordinates in Degree, Minutes, Seconds and the Direction.   
+//Can be used for latitude and as well for longitude.  
+//The Datatype is allread used e.g. in `LGF_typeGPS`.
+   STRUCT
+      dir : Char;   // Direction [N, S, E, W, n, s, e, w]
+      deg : UInt;   // Degrees, Latitute [-89..+ 89]; Longitude [-179..+179]
+      min : UInt;   // Minutes [0..+59]
+      sec : UInt;   // Seconds [0..+59]
+   END_STRUCT;
+
+END_TYPE
+
+TYPE "LGF_typeGPS_DD"
+TITLE = LGF_typeGPS_DD
+VERSION : 0.1
+//Datatype for GPS Coordinates in decimal degrees.  
+//For latitude and longitude.  
+//Datatype for a whole GPS Data set.
+   STRUCT
+      latitude { S7_SetPoint := 'True'} : Real;   // Degrees latitude with decimal places  (Unit: degree decimal), North = positive; South = negative)  valid value range [-90.00000..90.00000]
+      longitude { S7_SetPoint := 'True'} : Real;   // Dregrees longitude in degrees with decimal places  (Unit: degree decimal), East = positive; West = negative)  valid range [-180.0000..180.0000]
+   END_STRUCT;
+
+END_TYPE
+
+TYPE "LGF_typeGPS"
+TITLE = LGF_typeGPS
+VERSION : 0.1
+//Datatype for GPS Coordinates Latitude and Longitude.  
+//Child Datatypes in Degree, Minutes, Seconds and the Direction.  
+//Datatype for a whole GPS Data set.
+   STRUCT
+      latitude : "LGF_typeGPS_DMS";   // Latitude child element
+      longitude : "LGF_typeGPS_DMS";   // Longitude child element
+   END_STRUCT;
+
+END_TYPE
+
+FUNCTION "LGF_GpsToGpsDD" : "LGF_typeGPS_DD"
+TITLE = LGF_GpsToGpsDD
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_Digital_Industry
+FAMILY : LGF
+NAME : LGF_GpsToDD
+//This function converts a given GPS data type (format direction, degrees, minutes, and seconds) into a GPS-DD data type (decimal degrees).
+//
+//GPS "native" to GPS decimal Degree.
+   VAR_INPUT 
+      gps : "LGF_typeGPS";   // GPS-Data to be converted (direction, degrees, minutes, and seconds),  e.g. N52° 31′ 14.941″ E13° 24′ 34.020″
+   END_VAR
+
+   VAR_OUTPUT 
+      error : Bool;   // FALSE: No error  TRUE: An error occurred during the execution of the FB
+      status : Word;   // 16#0000-16#7FFF: Status of the FB  16#8000-16#FFFF: Error identification (see following Table)
+   END_VAR
+
+   VAR_TEMP 
+      tempGPS : "LGF_typeGPS_DD";   // Temp type for GPS Coordinates
+      tempStatus : Word;   // Temp value for output 'status'
+   END_VAR
+
+   VAR CONSTANT 
+      NORTH1 : Char := 'n';   // North
+      NORTH2 : Char := 'N';   // North
+      SOUTH1 : Char := 's';   // South
+      SOUTH2 : Char := 'S';   // South
+      EAST1 : Char := 'e';   // East
+      EAST2 : Char := 'E';   // East
+      WEST1 : Char := 'w';   // West
+      WEST2 : Char := 'W';   // West
+      MINUTES_PER_HOUR : Real := 60.0;   // conversion factor minutes to hour
+      SECONDS_PER_HOUR : Real := 3600.0;   // conversion factor seconds to hour
+      MAX_MIN_OR_SEC_59 : UInt := 59;   // 59 minutes/ seconds
+      DEGREE_0 : Real := 0.0;   // 0.0 degrees
+      DEGREE_15 : Real := 15.0;   // 15.0 degrees
+      DEGREE_90 : Real := 90.0;   // 90.0 degrees
+      DEGREE_180 : Real := 180.0;   // 180.0 degrees
+      DEGREE_360 : Real := 360.0;   // 360.0 degrees
+      STATUS_EXECUTION_FINISHED_NO_ERROR : Word := 16#0000;   // Execution finished without errors
+      ERR_LATITUDE_DIRECTION : Word := 16#8200;   // Error: Latitude Direction
+      ERR_LATITUDE_VALUE : Word := 16#8201;   // Error: Latitude Value
+      ERR_LONGITUDE_DIRECTION : Word := 16#8202;   // Error: Longitude Direction
+      ERR_LONGITUDE_VALUE : Word := 16#8203;   // Error: Longitude Value
+   END_VAR
+
+
+BEGIN
+	REGION BLOCK INFO HEADER
+	  //===============================================================================
+	  // SIEMENS AG / (c)Copyright 2017
+	  //-------------------------------------------------------------------------------
+	  // Title:            LGF_GpsToGpsDD
+	  // Comment/Function: This function converts a give GPS type to GPS Type DD
+	  //                   GPS native to GPS decimal Degree
+	  // Library/Family:   LGF(Library General Functions)
+	  // Author:           Siemens Digital Industry Support
+	  // Tested with:      CPU1212C DC/DC/DC FW:V4.2
+	  // Engineering:      TIA Portal V14 Update 1
+	  // Restrictions:     ENO mechanism is not used, Error handling done by error and status
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge        | Changes applied
+	  //----------|------------|-------------------------|------------------------------
+	  // 01.00.00 | 2019.09.11 | SIMATIC Systems Support | First released version
+	  // 03.00.00 | 2019.04.23 | Siemens Industry Support | Set version to V3.0.0
+	  //                         harmonize the version of the whole library
+	  // 03.00.02 | 20.01.2021 | Simatic Systems Support
+	  //                         Fix `tempStatus` initialization
+	  //                         Insert documentation
+	  //===============================================================================
+	END_REGION
+	
+	REGION Converion
+	  // init status
+	  #tempStatus := #STATUS_EXECUTION_FINISHED_NO_ERROR;
+	  
+	  REGION Latitude
+	    // Convert seconds to decimal degrees
+	    #tempGPS.latitude := UINT_TO_REAL(#gps.latitude.sec) / #SECONDS_PER_HOUR;
+	    
+	    // Convert minutes to decimal degrees
+	    #tempGPS.latitude += UINT_TO_REAL(#gps.latitude.min) / #MINUTES_PER_HOUR;
+	    
+	    // Convert degreesto decimal degrees
+	    #tempGPS.latitude += #gps.latitude.deg;
+	    
+	    // Negate value if south 's' OR 'S'
+	    IF (#gps.latitude.dir = #SOUTH1) OR (#gps.latitude.dir = #SOUTH2) THEN
+	      #tempGPS.latitude := - (#tempGPS.latitude);
+	      
+	      // Positive value if north 'n' OR 'N'
+	    ELSIF (#gps.latitude.dir = #NORTH1) OR (#gps.latitude.dir = #NORTH2) THEN
+	      ;
+	      
+	      // Error direction
+	    ELSE
+	      #tempStatus := #ERR_LATITUDE_DIRECTION;
+	    END_IF;
+	    
+	    // Check value input limits,  degrees > 90°, set fault
+	    IF (ABS(#tempGPS.latitude) > #DEGREE_90) THEN
+	      #tempStatus := #ERR_LATITUDE_VALUE;
+	      
+	      // Check value input limits, latitude minutes > 59, set fault
+	    ELSIF (#gps.latitude.min > #MAX_MIN_OR_SEC_59) THEN
+	      #tempStatus := #ERR_LATITUDE_VALUE;
+	      
+	      // Check value limits input, latitude seconds > 59, set fault
+	    ELSIF (#gps.latitude.sec > #MAX_MIN_OR_SEC_59) THEN
+	      #tempStatus := #ERR_LATITUDE_VALUE;
+	    END_IF;
+	    
+	  END_REGION Latitude
+	  
+	  REGION Longitude
+	    // Convert seconds to decimal degrees
+	    #tempGPS.longitude := UINT_TO_REAL(#gps.longitude.sec) / #SECONDS_PER_HOUR;
+	    
+	    // Convert minutes to decimal degrees
+	    #tempGPS.longitude += UINT_TO_REAL(#gps.longitude.min) / #MINUTES_PER_HOUR;
+	    
+	    // Convert degress to decimal degrees 
+	    #tempGPS.longitude += #gps.longitude.deg;
+	    
+	    // Negate value if west 'w' OR 'W'
+	    IF (#gps.longitude.dir = #WEST1) OR (#gps.longitude.dir = #WEST2) THEN
+	      #tempGPS.longitude := - (#tempGPS.longitude);
+	      
+	      // Positive value if east 'e' OR 'E'
+	    ELSIF (#gps.longitude.dir = #EAST1) OR (#gps.longitude.dir = #EAST2) THEN
+	      ;
+	      
+	      // Error direction
+	    ELSE
+	      #tempStatus := #ERR_LONGITUDE_DIRECTION;
+	    END_IF;
+	    
+	    // Sum of longitude decimal degrees, minutes and seconds > 180°
+	    IF (ABS(#tempGPS.longitude) > #DEGREE_180) THEN
+	      #tempStatus := #ERR_LONGITUDE_VALUE;
+	      
+	      // Check value limits input, longitude minutes > 59, set fault
+	    ELSIF (#gps.longitude.min > #MAX_MIN_OR_SEC_59) THEN
+	      #tempStatus := #ERR_LONGITUDE_VALUE;
+	      
+	      // Check value limits input,  longitude seconds > 59, set fault
+	    ELSIF (#gps.longitude.sec > #MAX_MIN_OR_SEC_59) THEN
+	      #tempStatus := #ERR_LONGITUDE_VALUE;
+	    END_IF;
+	    
+	  END_REGION Longitude
+	  
+	  // Case of wrong DMS input 
+	  IF (#tempStatus.%X15 = true) THEN
+	    #tempGPS.latitude := #DEGREE_0; // Set value latitude to zero
+	    #tempGPS.longitude := #DEGREE_0; // Set value longitude to zero
+	  ELSE
+	    #tempStatus := #STATUS_EXECUTION_FINISHED_NO_ERROR;
+	  END_IF;
+	END_REGION Conversion
+	
+	REGION OUTPUTS
+	  // Copy DMS values to work variables
+	  #LGF_GpsToGpsDD := #tempGPS;
+	  // Error outputs
+	  #error := #tempStatus.%X15;
+	  #status := #tempStatus;
+	  //ENO mechanism is not used - forced to true.
+	  ENO := TRUE;
+	  RETURN;
+	END_REGION
+END_FUNCTION
+

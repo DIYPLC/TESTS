@@ -1,0 +1,182 @@
+﻿FUNCTION_BLOCK "LGF_LimRateOfChangeCI"
+TITLE = LGF_LimRateOfChangeCI
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_Digital_Industries
+FAMILY : LGF
+NAME : LGF_LimRateOfChangeCI
+//This function limits the rate of change of an input variable. A jump function becomes a ramp function.
+   VAR_INPUT 
+      value : LReal;   // Signal to be processed and limited in its rate of change
+      setChangeRate : LReal;   // Rate of change of ramp function (1/second)
+      defaultOutValue : LReal;   // Value for pre-assignment of the output variable  (`outputValue` = `defaultOutValue`)
+      enDefaultOutValue : Bool;   // Assign default output value  (`outputValue` = `defaultOutValue`)
+      callOB : OB_CYCLIC;   // Calling wake-alarm interrupt OB (cyclic interrupt OB)
+   END_VAR
+
+   VAR_OUTPUT 
+      delayedValue { ExternalWritable := 'False'} : LReal;   // Output variable
+      error { ExternalWritable := 'False'} : Bool;   // FALSE: No error  TRUE: An error occurred during the execution of the FB
+      status { ExternalWritable := 'False'} : Word;   // 16#0000-16#7FFF: Status of the FB  16#8000-16#FFFF: Error identification (see following Table)
+      subfunctionStatus { ExternalWritable := 'False'} : Word;   // Status or return value of called FB's, FC's and system blocks
+   END_VAR
+
+   VAR 
+      statPrevOut { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : LReal;   // Previous cycle output value
+   END_VAR
+
+   VAR_TEMP 
+      tempCycleTime : UDInt;   // Temp cycle time from CallOB
+      tempCyclePhase : UDInt;   // Temp cycle phase from CallOB
+      tempCycleStatus : Word;   // Temp cycle status from CallOB
+      tempCycleTimeReal : LReal;   // Temp cycle time converted from miliseconds to seconds
+      tempReadTimeStatus : Int;   // Temp return value of QRY_CINT
+      tempOut : LReal;   // Temp used for swaping data between variables
+   END_VAR
+
+   VAR CONSTANT 
+      ZERO_INT : Int := 0;   // Numeric zero value - integer format
+      ZERO_REAL : LReal := 0.0;   // Numeric zero value - real format
+      SECOND_IN_MICROSECONDS : LReal := 1000000.0;   // One second written in miliseconds. Needed in calculation in formulas
+      SUB_STATUS_NO_ERROR : Word := 16#0000;   // Subfunction status: No error
+      STATUS_FINISHED_NO_ERROR : Word := 16#0000;   // Status: Execution finished without errors
+      ERR_NEG_RATE_LIM : Word := 16#8200;   // Error: Negative rate of change.  The parameter for the change rate must not be negative.
+      ERR_QRY_CINT : Word := 16#8600;   // Error in `QRY_CINT` command - check `subFunctionStatus` code
+      ERR_OB_UNAVAILABLE : Word := 16#8601;   // Error: OB on input `callOB` is not configured / present.  Interconnect the constant name of a configured cyclic interrupt OB at the input `callOB`.
+   END_VAR
+
+
+BEGIN
+	REGION Block info header
+	  //=============================================================================
+	  // SIEMENS AG / (c)Copyright 2017
+	  //-------------------------------------------------------------------------------
+	  // Title:            LGF_LimRateOfChangeCI
+	  // Comment/Function: Generates a ramp function from a step function.
+	  // Library/Family:   LGF(Library General Functions)
+	  // Author:           Siemens Digital Industry Support
+	  // Tested with:      S7-PLCSIM Advanced V2.0 SP1
+	  // Engineering:      TIA Portal V15 Update 2
+	  // Restrictions:     ENO disabled - error handling done by error and status
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge       | Changes applied
+	  //----------|------------|------------------------|------------------------------
+	  // 01.00.00 21.06.2016  Siemens Industry Online Support
+	  //                      First released version
+	  // 01.00.01 02.01.2017  Siemens Industry Online Support
+	  //                      Upgrade: TIA Portal V14 Update 1
+	  // 01.00.02 17.08.2018  Siemens Industry Online Support
+	  //                      Upgrade: TIA V15 Update 2
+	  // 01.00.03 23.11.2018  Siemens Industry Online Support
+	  //                      Upgrade: TIA V15.1
+	  // 01.00.06 15.11.2019  Simatic Systems Support
+	  //                      Regions, comments and constants are added
+	  // 03.00.00 23.04.2020  Simatic Systems Support
+	  //                      Set version to V3.0.0, harmonize the version of the whole library
+	  // 03.00.01 22.03.2021  Simatic Systems Support
+	  //                      Insert documentation
+	  //=============================================================================
+	END_REGION Block info header
+	
+	REGION DESCRIPTION
+	  (/*
+	NOTE
+	:    The status of called commands is output in `subFunctionStatus`. In this case, the output value in `status` indicates which command caused the error. In this case, refer to the TIA Portal Online Help section for information on the respective commands.
+	
+	---
+	
+	The ramp is a limit line and refers to a rate of change per second; if, for example, `setChangeRate = 10.0` is parameterized at a sampling time of 1s/100ms/10ms for every block call, then if `value > delayedValue`, 10.0/1.0/0.1 is added to `delayedValue` until `value` is reached.
+	
+	The limitation of the rate of change applies to both positive and negative values for the rise and fall.
+	
+	The output `delayedValue` can be preset or initialized.
+	
+	The time interval of the calling cyclic interrupt OB is determined by interconnecting the calling cyclic interrupt OB at the input parameter `callOB`.
+	
+	![Interconnecting the cyclic interrupt OB](LGF_InterruptObAsParameter.png "Interconnecting the cyclic interrupt OB")
+	
+	# Pre-assigning an output
+	
+	If `enDefaultOutValue = TRUE` is set, the value at `defaultOutValue` is output. When changing from `TRUE` to `FALSE`, the output `delayedValue` is ramped from `defaultOutValue` to `value`. When changing from `FALSE` to `TRUE`, the output `delayedValue` immediately jumps to `defaultOutValue`.
+	
+	------
+	
+	# Functional processes
+	
+	The Figure below shows the ramp function sequence:
+	
+	![LGF_LimRateOfChangeCI](LGF_LimRateOfChangeCI.png "LGF_LimRateOfChangeCI")
+	*/)
+	END_REGION DESCRIPTION
+	
+	REGION Read cycle time of the call OB
+	  #tempReadTimeStatus := QRY_CINT(OB_NR := #callOB, CYCLE => #tempCycleTime, PHASE => #tempCyclePhase, STATUS => #tempCycleStatus);
+	  #tempCycleTimeReal := UDINT_TO_REAL(#tempCycleTime) / #SECOND_IN_MICROSECONDS;
+	END_REGION
+	
+	REGION Validation
+	  // Generate error message of the QRY_CINT function
+	  IF (#tempReadTimeStatus <> #ZERO_INT) THEN
+	    #error := TRUE;
+	    #subfunctionStatus := INT_TO_WORD(#tempReadTimeStatus);
+	    #status := #ERR_QRY_CINT;
+	    RETURN;
+	  END_IF;
+	  
+	  // Generate error message when OB unavailable
+	  IF #tempCycleStatus = 0 THEN
+	    #error := TRUE;
+	    #status := #ERR_OB_UNAVAILABLE;
+	    #subfunctionStatus := #SUB_STATUS_NO_ERROR;
+	    RETURN;
+	  END_IF;
+	  
+	  //Check ChangeRate for negative value
+	  IF #setChangeRate < #ZERO_REAL THEN
+	    #error := TRUE;
+	    #status := #ERR_NEG_RATE_LIM;
+	    #subfunctionStatus := #SUB_STATUS_NO_ERROR;
+	    RETURN;
+	  END_IF;
+	END_REGION
+	
+	REGION Calculation of rate of change
+	  //Default value output option
+	  IF #enDefaultOutValue THEN
+	    #statPrevOut := #defaultOutValue;
+	    #delayedValue := #defaultOutValue;
+	    
+	    #error := false;
+	    #status := #STATUS_FINISHED_NO_ERROR;
+	    #subfunctionStatus := #STATUS_FINISHED_NO_ERROR;
+	    RETURN;
+	  END_IF;
+	  
+	  #tempOut := #statPrevOut;
+	  
+	  // Ramp function
+	  IF #value < #tempOut THEN
+	    #tempOut := #tempOut - (#setChangeRate * #tempCycleTimeReal);
+	    #tempOut := MAX(IN1 := #tempOut, IN2 := #value);
+	    #statPrevOut := #tempOut;
+	  ELSIF #value > #tempOut THEN
+	    #tempOut := (#setChangeRate * #tempCycleTimeReal) + #tempOut;
+	    #tempOut := MIN(IN1 := #tempOut, IN2 := #value);
+	    #statPrevOut := #tempOut;
+	  END_IF;
+	END_REGION
+	
+	REGION Writting to outputs
+	  #delayedValue := #tempOut;
+	  
+	  #error := false;
+	  #status := #STATUS_FINISHED_NO_ERROR;
+	  #subfunctionStatus := #SUB_STATUS_NO_ERROR;
+	  
+	  // ENO mechanism is not used
+	  ENO := TRUE;
+	END_REGION
+	
+END_FUNCTION_BLOCK
+

@@ -1,0 +1,709 @@
+﻿TYPE "LGF_typeMeasureCpuLoad_ConfigurationBlock"
+TITLE = LGF_typeMeasureCpuLoad_ConfigurationBlock
+VERSION : 0.1
+//Configuration for the block to be measured
+   STRUCT
+      enableMeasurement { S7_SetPoint := 'True'} : Bool;   // Enable measurement
+      obNumber { S7_SetPoint := 'True'} : Int;   // Organization's Block Number of the module to be measured
+      initialLoad { S7_SetPoint := 'True'} : Real;   // Initial load [%], only used if averaging is turned on
+   END_STRUCT;
+
+END_TYPE
+
+TYPE "LGF_typeMeasureCpuLoad_Configuration"
+TITLE = LGF_typeMeasureCpuLoad_Configuration
+VERSION : 0.1
+//This UDT belongs to the Module `LGF_MeasureCpuLoad` and lists all possible parameter to configure its behavior.
+   STRUCT
+      cfcRun { S7_SetPoint := 'True'} : Bool := FALSE;   // CFC Run (OB No is shifted to 10xx)
+      averagingValues { S7_SetPoint := 'True'} : USInt := 0;   // Averaging the measured values by building the arithmetic average value
+      comLoadSim { S7_SetPoint := 'True'} : UInt := 0;   // Com Load Simulation [%]  IF > 0.0 used as value for calculation  IF <= 0.0 take real com load value read from PLC
+      limitWarning { S7_SetPoint := 'True'} : Real := 70.0;   // Warning threshold value [%]
+      limitAlarm { S7_SetPoint := 'True'} : Real := 100.0;   // Alarming threshold value [%]
+      organizationBlocksCyclic : Array[0..10] of "LGF_typeMeasureCpuLoad_ConfigurationBlock" := [(TRUE, 1, ()), ((), (), ()), ((), (), ()), ((), (), ()), ((), (), ()), ((), (), ()), ((), (), ()), ((), (), ()), ((), (), ()), ((), (), ()), ((), (), ())];   // Cyclic Blocks to measure
+      organizationBlocks : Array[0..30] of "LGF_typeMeasureCpuLoad_ConfigurationBlock" := [((), 30, ()), ((), 31, ()), ((), 32, ()), ((), 33, ()), ((), 34, ()), ((), 35, ()), ((), 36, ()), ((), 37, 0.0), ((), 38, ()), ((), 80, ()), ((), 82, ()), ((), 83, ()), ((), 86, ()), ((), 121, ()), ((), 122, ()), ((), 124, ()), ((), 250, ()), ((), 67, ()), ((), 68, ()), ((), 91, ()), ((), 92, ()), ((), 95, ()), ((), (), ()), ((), (), ()), ((), (), ()), ((), (), ()), ((), (), ()), ((), (), ()), ((), (), ()), ((), (), ()), ((), (), ())];   // NON-Cyclic Blocks to measure
+   END_STRUCT;
+
+END_TYPE
+
+TYPE "LGF_typeMeasureCpuLoad_ResultBlock"
+TITLE = LGF_typeMeasureCpuLoad_ResultBlock
+VERSION : 0.1
+//Results for Block measured
+   STRUCT
+      obNumber { ExternalWritable := 'False'} : Int;   // Organisation Block Number
+      runtime { ExternalWritable := 'False'} : LTime;   // Runtime of Organization block [ms]
+      cycleLoad { ExternalWritable := 'False'} : Real;   // Load of block calculated using the cycle time [%]
+      maxCycleLoad { ExternalWritable := 'False'} : Real;   // Load of block calculated using the MAX cycle time [%]
+      error { ExternalWritable := 'False'} : Bool;   // TRUE: An error occurred during reading block statistic
+      status { ExternalWritable := 'False'} : Word;   // 16#0000 - 16#7FFF: Status of the `RT_INFO`, 16#8000 - 16#FFFF: Error identification
+   END_STRUCT;
+
+END_TYPE
+
+TYPE "LGF_typeDiagnostics"
+TITLE = LGF_typeDiagnostics
+VERSION : 0.1
+//Diagnostic structure to store and transfer diagnostic information from blocks through the interface.
+   STRUCT
+      status { ExternalVisible := 'False'; ExternalWritable := 'False'} : Word;   // Status of the Block or error identification when error occurred
+      subfunctionStatus { ExternalVisible := 'False'; ExternalWritable := 'False'} : Word;   // Status or return value of called FB's, FC's and system blocks
+      stateNumber { ExternalVisible := 'False'; ExternalWritable := 'False'} : DInt;   // State in the state machine of the block where the error occurred
+   END_STRUCT;
+
+END_TYPE
+
+FUNCTION_BLOCK "LGF_MeasureCpuLoad"
+TITLE = LGF_MeasureCpuLoad
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : 'Simatic Systems Support'
+FAMILY : LGF
+NAME : LGF_MeasureCpuLoad
+//Measurement and calculation of PLC CPU load for different OB types
+   VAR_INPUT 
+      enable : Bool;   // TRUE: Enable functionality of FB
+      reset : Bool;   // Rising edge: Reset all internal values and as well PLC CPU timing statistic
+      loadCascade { S7_HiddenAssignment := 'HideIfNoParamAssigned'} : Real;   // Percentage Load Value from another `LGF_MeasureCpuLoad` [%] (Connect `cpuLoad` from predecessor instance call)
+      configuration : "LGF_typeMeasureCpuLoad_Configuration";
+   END_VAR
+
+   VAR_OUTPUT 
+      valid { ExternalWritable := 'False'} : Bool;   // TRUE: Valid set of output values available at the FB
+      busy { ExternalWritable := 'False'} : Bool;   // TRUE: FB is not finished, and new output values can be expected
+      error { ExternalWritable := 'False'} : Bool;   // TRUE: An error occurred during the execution of the FB
+      status { ExternalWritable := 'False'} : Word := #STATUS_NO_CALL;   // 16#0000 - 16#7FFF: Status of the FB, 16#8000 - 16#FFFF: Error identification
+      averagingActive { ExternalWritable := 'False'} : Bool;   // TRUE: Averaging of actual values active
+      loadCascadeActive { ExternalWritable := 'False'} : Bool;   // TRUE: Load calculation cascade active
+      cycleTimeMin { ExternalWritable := 'False'} : LTime;   // Minimum cycle time [ms]
+      cycleTimeActual { ExternalWritable := 'False'} : LTime;   // Actual cycle time [ms]
+      cycleTimeMax { ExternalWritable := 'False'} : LTime;   // Maximum cycle time [ms]
+      cycleTimeMaxConfigured { ExternalWritable := 'False'} : LTime;   // Configured maximum cycle time [ms] (in plc hardware configuration)
+      runtime { ExternalWritable := 'False'} : LReal;   // Actual cycle time incl. interrupts [ms]
+      cpuLoad { ExternalWritable := 'False'} : Real;   // Actual PLC CPU load [%]
+      comLoad { ExternalWritable := 'False'} : Real;   // Actual communication load [%]
+      comLoadConfigured { ExternalWritable := 'False'} : Real;   // Configured communication load [%]
+      limitWarning { ExternalWritable := 'False'} : Bool;   // Load more than configured threshold value 'configuration.limitWarning'
+      limitAlarm { ExternalWritable := 'False'} : Bool;   // Load more than configured threshold value 'configuration.limitAlarm'
+      resultsCyclic { ExternalWritable := 'False'} : Array[0..#LAST_CYCLIC_BLOCK_INDEX] of "LGF_typeMeasureCpuLoad_ResultBlock";   // Results of Cyclic OB read outs
+      results { ExternalWritable := 'False'} : Array[0..#LAST_BLOCK_INDEX] of "LGF_typeMeasureCpuLoad_ResultBlock";   // Results of NON-Cyclic OB read outs
+      diagnostics { ExternalWritable := 'False'} : "LGF_typeDiagnostics";
+   END_VAR
+
+   VAR 
+      statInternal { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Struct   // Static structure for internal tags
+         enablePrevious { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Previous value of 'enable' input for edge detection
+         resetPrevious { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Previous value of 'reset' input for edge detection
+         valid { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Value for output 'valid'
+         busy { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Value for output 'busy'
+         error { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Value for output 'error'
+         errorUserCleared { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Error occurred that can only be solved by user; rising edge at enable input necessary
+         errorAutoCleared { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Error occurred that can be acknowledged by FB
+         disablingCompleted { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // TRUE: Disabling has been completed
+         runTimeInternalMem { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : LReal;   // Module Runtime memory
+         runTimeMem { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : LReal := 0.0;   // Module Runtime memory
+         diagnostics { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'; S7_SetPoint := 'False'} : "LGF_typeDiagnostics" := (#STATUS_NO_CALL, (), ());
+         emptyDiagnostics { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'; S7_SetPoint := 'False'} : "LGF_typeDiagnostics";   // Empty diagnostics information (for initialization purposes only)
+      END_STRUCT;
+      statResultsCyclic { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'; S7_SetPoint := 'False'} : Array[0..#LAST_CYCLIC_BLOCK_INDEX] of "LGF_typeMeasureCpuLoad_ResultBlock";   // Memory for internal results from Cyclic OBs
+      statResults { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'; S7_SetPoint := 'False'} : Array[0..#LAST_BLOCK_INDEX] of "LGF_typeMeasureCpuLoad_ResultBlock";   // Memory for internal results from NON Cyclic OBs
+      statPrevious { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Struct   // Memory to store previous values for averaging
+         cycleTimeActual { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : LTime;   // Previous cycle time of PLC scan cycle [ms]
+         comLoadActual { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Real;   // Previous Communication load [%]
+         runtimesCyclic { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Array[0..#LAST_CYCLIC_BLOCK_INDEX] of LTime;   // Previous measured runtimes for Cyclic OBs
+         runtimes { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Array[0..#LAST_BLOCK_INDEX] of LTime;   // Previous measured runtimes for NON-Cyclic OBs
+      END_STRUCT;
+      statMainState { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : DInt := #FB_STATE_NO_PROCESSING;   // State in the state machine of the FB
+      statModuleRunTime { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : LReal;   // Module Runtime [ms]
+      statCycleTimeMin { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : LTime;   // Minimum cycle time of PLC scan cycle [ms]
+      statCycleTimeActual { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : LTime;   // Actual cycle time of PLC scan cycle [ms]
+      statCycleTimeMax { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : LTime;   // Maximum cycle time of PLC scan cycle [ms]
+      statCycleTimeMaxConfigured { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : LTime;   // Maximum configured cycle time for PLC scan cycle [ms]
+      statCpuLoadPerc { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Real;   // Percentage Value of corrected PLC CPU load [%]
+      statComLoadActual { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Real;   // Actual Communication load [%]
+      statComLoadConfigured { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : UInt;   // Configured Communication load [%]
+   END_VAR
+
+   VAR_TEMP 
+      tempEnable : Bool;   // Temporary value for input 'enable'
+      tempRuntimeModul : LReal;   // Temp Module runtime
+      tempRuntime : LReal;   // Temp Cycle runtime inkl. interrupts
+      tempIndex : DInt;   // Loop Index
+      tempResultValue : Word;   // Return Value
+      tempComLoadPercent : Real;   // Actual Communication Load
+      tempResult : "LGF_typeMeasureCpuLoad_ResultBlock";   // Temp result memory to increase performance by avoiding multiple indexed access to arrays
+      tempRuntimePercentage : Real;   // Runtime percentage calculation
+      tempComLoadActual : UInt;   // Actual Communication Load
+   END_VAR
+
+   VAR CONSTANT 
+      LAST_CYCLIC_BLOCK_INDEX : DInt := 10;   // UpperBound for cyclic organization blocks array
+      LAST_BLOCK_INDEX : DInt := 30;   // UpperBound for organization blocks array
+      CFC_ENV_OB_NUMBER_OFFSET : Int := 1000;   // Offset for OB numbers if used in CFC programming language
+      OB_MEASURMENT_DISABLED : Int := -1;   // OB Measurement disabled - used for results in case there is no OB Number present or not enabled
+      OB_MEASURMENT_DISABLED_LOAD : Real := -1.0;   // OB Measurement disabled - used for results in case there is no OB Number present or not enabled
+      RT_INFO_RUNTIME : UInt := 1;   // System function 'RT_INFO' mode RUNTIME
+      RT_INFO_COM_LOAD : UInt := 21;   // System function 'RT_INFO' mode COMMUNICATION LOAD
+      RT_INFO_CYCLETIME : UInt := 25;   // System function 'RT_INFO' mode CYCLE TIME
+      RT_INFO_CONFIGURED_CYCLETIME_MAX : UInt := 30;   // System function 'RT_INFO' mode CONFIGURED MAXIMUM CYCLE TIME
+      RT_INFO_CONFIGURED_COM_LOAD : UInt := 32;   // System function 'RT_INFO' mode CONFIGURED COMMUNICATION LOAD
+      RT_INFO_RESET_CYCLE_STATISTIC : UInt := 44;   // System function 'RT_INFO' mode RESET CYCLE TIME STATISTIC
+      RT_INFO_READ_LONGEST_CYCLE_TIME : UInt := 23;   // System function 'RT_INFO' mode READ LONGEST CYCLE TIME
+      RT_INFO_READ_SHORTEST_CYCLE_TIME : UInt := 24;   // System function 'RT_INFO' mode READ SHORTREST CYCLE TIME
+      FB_STATE_NO_PROCESSING : DInt := 0;   // FB state: No processing
+      FB_STATE_ENABLING : DInt := 10;   // FB state: Enabling
+      FB_STATE_PROCESSING : DInt := 50;   // FB state: Processing
+      FB_STATE_DISABLING : DInt := 90;   // FB state: Disabling
+      NO_ERROR : Word := 16#0000;   // Status: NO Error occurred
+      STATUS_NO_CALL : Word := 16#7000;   // No job being currently processed
+      STATUS_FIRST_CALL : Word := 16#7001;   // First call after incoming new job (rising edge 'enable')
+      STATUS_SUBSEQUENT_CALL : Word := 16#7002;   // Subsequent call during active processing without further details
+      SUB_STATUS_NO_ERROR : Word := 16#0000;   // NO error occurred in sub function call
+      ERROR_RTINFO_CONFIGURED_MAX_CYCLETIME : Word := 16#8601;   // Error: RT INFO read configured MAX cycle time Information
+      ERROR_RTINFO_CONFIGURED_COM_LOAD : Word := 16#8602;   // Error: RT INFO read configured COM Load Information
+      ERROR_RTINFO_ACTUAL_CYCLETIME : Word := 16#8610;   // Error: RT INFO read actual cycle time Information
+      ERROR_RTINFO_ACTUAL_MIN_CYCLETIME : Word := 16#8611;   // Error: RT INFO read MIN cycle time Information
+      ERROR_RTINFO_ACTUAL_MAX_CYCLETIME : Word := 16#8612;   // Error: RT INFO read MAX cycle time Information
+      ERROR_RTINFO_ACTUAL_COM_LOAD : Word := 16#8620;   // Error: RT INFO read actual COM Load Information
+      ERROR_RTINFO_RESET_STATISTICS : Word := 16#8630;   // Error: RT INFO reset statistic information
+      ERR_UNDEFINED_STATE : Word := 16#8600;   // Error: Due to an undefined state in state machine
+      ERROR_RTINFO_RUNTIME_OB_CYCLIC : Word := 16#9000;   // Error: Read RT INFO cycle time Information OB + index of OB in array
+      ERROR_RTINFO_RUNTIME_OB : Word := 16#9100;   // Error: Read RT INFO cycle time Information OB + index of OB in array
+      STATUSRANGE_DEFINITIONS_ERR_IN_BLOCK_OPERATION : Word := 16#8001;   // Status range definitions along to SIMATIC StyleGuide --> Error: Wrong operation of the function block
+      STATUSRANGE_DEFINITIONS_ERR_PARAMETRIZATION : Word := 16#8200;   // Status range definitions along to SIMATIC StyleGuide --> Error: during parameterization
+      STATUSRANGE_DEFINITIONS_ERR_PROCESSING_EXTERN : Word := 16#8400;   // Status range definitions along to SIMATIC StyleGuide --> Error: when processing from outside (e. g. wrong I/O signals, axis not referenced)
+      STATUSRANGE_DEFINITIONS_ERR_PROCESSING_INTERN : Word := 16#8600;   // Status range definitions along to SIMATIC StyleGuide --> Error: when processing internally (e. g. when calling a system function)
+      STATUSRANGE_DEFINITIONS_ERR_AREA_RESERVED : Word := 16#8800;   // Status range definitions along to SIMATIC StyleGuide --> Error: Reserved area
+      STATUSRANGE_DEFINITIONS_ERR_USER_DEFINED_CLASSES : Word := 16#9000;   // Status range definitions along to SIMATIC StyleGuide --> Error: User-defined error classes
+   END_VAR
+
+
+BEGIN
+	REGION BLOCK INFO HEADER
+	  //===============================================================================
+	  //Siemens AG / (c)Copyright 2025
+	  //-------------------------------------------------------------------------------
+	  //Title:            LGF_MeasureCpuLoad
+	  //Comment/Function: Measurement and calculation of PLC CPU load for different OB types
+	  //Messung und Berechnung der SPS-CPU-Last für verschiedene OB-Typen
+	  //Library/Family:   LGF - Library of general functions
+	  //Author:           Simatic Systems Support
+	  //Tested with:      S7-1500
+	  //Engineering:      TIA Portal V17
+	  //Restrictions:     S7-1500 only
+	  //ENO mechanism is NOT used - forced TO true.
+	  //Requirements:     PLC S7-1500
+	  //-------------------------------------------------------------------------------
+	  //Change log table:
+	  //Version   | Date       | Expert in charge       | Changes applied
+	  //----------|------------|------------------------|------------------------------------
+	  //01.00.00  | 19.05.2024 | SAG BG                 | First Release
+	  //01.01.00  | 06.05.2024 | SAG BG                 | Add Output with overall runtime incl. interrupts
+	  //01.01.01  | 03.09.2025 | Siemens System Support | Bugfixed error in loop
+	  //===============================================================================
+	END_REGION
+	
+	REGION DESCRIPTION
+	  (/*
+	This function can be used to read out the various runtimes of organizational blocks (OB) and calculate the PLC CPU load based on the results.
+	
+	The OBs to be considered are specified and activated in the configuration; please note that cyclical and acyclically OBs must be configured in separate structures.
+	
+	It is also possible to
+	- Average/smooth the measured values
+	- Specify limit values for a warning and an alarm
+	- Specify the communication load as a simulated value
+	- Automatically increment the OB numbers for CFC
+	*/)
+	END_REGION DESCRIPTION
+	
+	REGION ENABLING/DISABLING
+	  #tempEnable := #enable; // Work with temporary value / create process image
+	  IF (#tempEnable = TRUE) AND (#statInternal.diagnostics.status = #STATUS_NO_CALL) THEN // Enable FB
+	    // First call; initialize FB
+	    #statInternal.valid := TRUE;
+	    #statInternal.busy := TRUE;
+	    #statInternal.error := FALSE;
+	    #statInternal.errorUserCleared := FALSE;
+	    #statInternal.errorAutoCleared := FALSE;
+	    #statInternal.disablingCompleted := FALSE;
+	    #statInternal.diagnostics := #statInternal.emptyDiagnostics;
+	    #diagnostics := #statInternal.emptyDiagnostics;
+	    #statInternal.diagnostics.status := #STATUS_FIRST_CALL;
+	    // State machine - start processing
+	    #statMainState := #FB_STATE_ENABLING;
+	    
+	  ELSIF (#tempEnable = FALSE) AND (#statInternal.enablePrevious = TRUE) THEN // Disable FB 
+	    #statMainState := #FB_STATE_DISABLING;
+	    
+	  ELSIF (#statInternal.diagnostics.status = #STATUS_FIRST_CALL) THEN // Set status identifier of subsequent call
+	    #statInternal.diagnostics.status := #STATUS_SUBSEQUENT_CALL;
+	  END_IF;
+	  
+	  // Edge detection 'enable' input
+	  #statInternal.enablePrevious := #tempEnable;
+	END_REGION ENABLING/DISABLING
+	
+	IF (#statInternal.diagnostics.status = #STATUS_NO_CALL) THEN // Nothing to do -> End here to reduce "system load"
+	  RETURN;
+	END_IF;
+	
+	#tempRuntimeModul := RUNTIME(#statInternal.runTimeInternalMem);
+	#tempRuntime := RUNTIME(#statInternal.runTimeMem);
+	REGION STATE MACHINE
+	  CASE #statMainState OF // State machine of FB
+	    #FB_STATE_NO_PROCESSING:
+	      REGION No Processing
+	        ; // No processing active (Note: this state must always be present and left empty)
+	      END_REGION No Processing
+	      
+	    #FB_STATE_ENABLING: // Enabling active
+	      REGION Enabling
+	        // Reset auto cleard flag in case we comming from reset command
+	        #statInternal.errorAutoCleared := FALSE;
+	        
+	        // Preset values
+	        #tempResult.obNumber := #OB_MEASURMENT_DISABLED;
+	        #tempResult.cycleLoad :=
+	        #tempResult.cycleLoad := #OB_MEASURMENT_DISABLED_LOAD;
+	        #tempResult.runtime := t#0ms;
+	        #statResultsCyclic[#tempIndex].error := FALSE;
+	        #statResultsCyclic[#tempIndex].status := #NO_ERROR;
+	        
+	        // Reset internal memory
+	        FOR #tempIndex := 0 TO #LAST_CYCLIC_BLOCK_INDEX DO
+	          #statResultsCyclic[#tempIndex] := #tempResult;
+	          IF #configuration.organizationBlocksCyclic[#tempIndex].enableMeasurement THEN
+	            #statResultsCyclic[#tempIndex].obNumber := #configuration.organizationBlocksCyclic[#tempIndex].obNumber;
+	            #statResultsCyclic[#tempIndex].cycleLoad := #configuration.organizationBlocksCyclic[#tempIndex].initialLoad;
+	            #statResultsCyclic[#tempIndex].maxCycleLoad := #configuration.organizationBlocksCyclic[#tempIndex].initialLoad;
+	            #statResultsCyclic[#tempIndex].runtime := t#0ms;
+	          ELSE
+	            ; // ELSE not used
+	          END_IF;
+	        END_FOR;
+	        
+	        FOR #tempIndex := 0 TO #LAST_BLOCK_INDEX DO
+	          #statResults[#tempIndex] := #tempResult;
+	          IF #configuration.organizationBlocks[#tempIndex].enableMeasurement THEN
+	            #statResults[#tempIndex].obNumber := #configuration.organizationBlocks[#tempIndex].obNumber;
+	            #statResults[#tempIndex].cycleLoad := #configuration.organizationBlocks[#tempIndex].initialLoad;
+	            #statResults[#tempIndex].maxCycleLoad := #configuration.organizationBlocks[#tempIndex].initialLoad;
+	            #statResults[#tempIndex].runtime := t#0ms;
+	          ELSE
+	            ; // ELSE not used
+	          END_IF;
+	        END_FOR;
+	        
+	        IF #configuration.cfcRun THEN
+	          // The module is used in CFC enviroment
+	          // We need to ad the Offset to OB numbers
+	          FOR #tempIndex := 0 TO #LAST_BLOCK_INDEX DO
+	            #statResults[#tempIndex].obNumber += #CFC_ENV_OB_NUMBER_OFFSET;
+	          END_FOR;
+	        ELSE
+	          ; // ELSE not used
+	        END_IF;
+	        
+	        #statCycleTimeActual := t#0ms;
+	        #statCycleTimeMaxConfigured := t#0ms;
+	        #statComLoadActual := 0;
+	        #statCpuLoadPerc := 0.0;
+	        #statComLoadActual := 0;
+	        #statComLoadConfigured := 0;
+	        
+	        #statPrevious.cycleTimeActual := t#0ms;
+	        #statPrevious.comLoadActual := 0;
+	        
+	        FOR #tempIndex := 0 TO #LAST_CYCLIC_BLOCK_INDEX DO
+	          #statPrevious.runtimesCyclic[#tempIndex] := t#0ms;
+	        END_FOR;
+	        
+	        FOR #tempIndex := 0 TO #LAST_BLOCK_INDEX DO
+	          #statPrevious.runtimes[#tempIndex] := t#0ms;
+	        END_FOR;
+	        
+	        REGION Read max Cycle time setting
+	          #tempResultValue := INT_TO_WORD(RT_INFO(MODE := #RT_INFO_CONFIGURED_CYCLETIME_MAX, OB := 1, INFO := #statCycleTimeMaxConfigured));
+	          IF #tempResultValue.%X15 THEN
+	            #statCycleTimeMaxConfigured := t#0ms;
+	            #statInternal.diagnostics.status := #ERROR_RTINFO_CONFIGURED_MAX_CYCLETIME;
+	            #statInternal.diagnostics.subfunctionStatus := #tempResultValue;
+	          ELSE
+	            ; // ELSE not used
+	          END_IF;
+	        END_REGION
+	        
+	        REGION Read configured com load
+	          #tempResultValue := INT_TO_WORD(RT_INFO(MODE := #RT_INFO_CONFIGURED_COM_LOAD, OB := 1, INFO := #statComLoadConfigured));
+	          IF #tempResultValue.%X15 THEN
+	            #statComLoadConfigured := 0;
+	            #statInternal.diagnostics.status := #ERROR_RTINFO_CONFIGURED_COM_LOAD;
+	            #statInternal.diagnostics.subfunctionStatus := #tempResultValue;
+	          ELSE
+	            ; // ELSE not used
+	          END_IF;
+	        END_REGION
+	        
+	        REGION Reset RT_INFO statistics
+	          #tempResultValue := INT_TO_WORD(RT_INFO(MODE := #RT_INFO_RESET_CYCLE_STATISTIC, OB := 1, INFO := #tempIndex));
+	          IF #tempResultValue.%X15 THEN
+	            #statComLoadConfigured := 0;
+	            #statInternal.diagnostics.status := #ERROR_RTINFO_RESET_STATISTICS;
+	            #statInternal.diagnostics.subfunctionStatus := #tempResultValue;
+	          ELSE
+	            ; // ELSE not used
+	          END_IF;
+	        END_REGION
+	        
+	        #statMainState := #FB_STATE_PROCESSING;
+	      END_REGION Enabling
+	      
+	    #FB_STATE_PROCESSING: // Processing active
+	      REGION Processing
+	        REGION Runtime measuring
+	        END_REGION Runtime measuring
+	        
+	        REGION Reset edge
+	          // in case of reset the block we just jump back to enabling to init the tags
+	          IF #reset AND NOT #statInternal.resetPrevious THEN
+	            #statMainState := #FB_STATE_ENABLING;
+	          END_IF;
+	          #statInternal.resetPrevious := #reset;
+	        END_REGION
+	        
+	        REGION Read actual cycle time
+	          #tempResultValue := INT_TO_WORD(RT_INFO(MODE := #RT_INFO_CYCLETIME, OB := 1, INFO := #statCycleTimeActual));
+	          IF TRUE // Only if no error is present
+	            AND #tempResultValue.%X15
+	            AND NOT #statInternal.errorAutoCleared
+	          THEN
+	            #statInternal.errorAutoCleared := TRUE;
+	            #statInternal.diagnostics.status := #ERROR_RTINFO_ACTUAL_CYCLETIME;
+	            #statInternal.diagnostics.subfunctionStatus := #tempResultValue;
+	          END_IF;
+	          
+	          REGION Averaging if configured
+	            IF #configuration.averagingValues > 1 THEN
+	              // Actual NEW = (previous * (averageNumber - 1) + actual) / averageNumber;
+	              #statCycleTimeActual := 1000 * ULINT_TO_LTIME((LTIME_TO_ULINT(#statPrevious.cycleTimeActual) / 1000 * (#configuration.averagingValues - 1) + LTIME_TO_ULINT(#statCycleTimeActual) / 1000) / #configuration.averagingValues);
+	            END_IF;
+	          END_REGION
+	        END_REGION
+	        
+	        REGION Read min cycle time
+	          #tempResultValue := INT_TO_WORD(RT_INFO(MODE := #RT_INFO_READ_SHORTEST_CYCLE_TIME, OB := 1, INFO := #statCycleTimeMin));
+	          IF TRUE // Only if no error is present
+	            AND #tempResultValue.%X15
+	            AND NOT #statInternal.errorAutoCleared
+	          THEN
+	            #statInternal.errorAutoCleared := TRUE;
+	            #statInternal.diagnostics.status := #ERROR_RTINFO_ACTUAL_MIN_CYCLETIME;
+	            #statInternal.diagnostics.subfunctionStatus := #tempResultValue;
+	          END_IF;
+	        END_REGION
+	        
+	        REGION Read max cycle time
+	          #tempResultValue := INT_TO_WORD(RT_INFO(MODE := #RT_INFO_READ_LONGEST_CYCLE_TIME, OB := 1, INFO := #statCycleTimeMax));
+	          IF TRUE // Only if no error is present
+	            AND #tempResultValue.%X15
+	            AND NOT #statInternal.errorAutoCleared
+	          THEN
+	            #statInternal.errorAutoCleared := TRUE;
+	            #statInternal.diagnostics.status := #ERROR_RTINFO_ACTUAL_MAX_CYCLETIME;
+	            #statInternal.diagnostics.subfunctionStatus := #tempResultValue;
+	          END_IF;
+	        END_REGION
+	        
+	        REGION Read actual communication load
+	          #tempResultValue := INT_TO_WORD(RT_INFO(MODE := #RT_INFO_COM_LOAD, OB := 1, INFO := #tempComLoadActual));
+	          #statComLoadActual := UINT_TO_REAL(#tempComLoadActual);
+	          IF TRUE // Only if no error is present
+	            AND #tempResultValue.%X15
+	            AND NOT #statInternal.errorAutoCleared
+	          THEN
+	            #statInternal.errorAutoCleared := TRUE;
+	            #statInternal.diagnostics.status := #ERROR_RTINFO_ACTUAL_COM_LOAD;
+	            #statInternal.diagnostics.subfunctionStatus := #tempResultValue;
+	          END_IF;
+	          
+	          REGION Averaging if configured
+	            IF #configuration.averagingValues > 1 THEN
+	              // Actual NEW = (previous * (averageNumber - 1) + actual) / averageNumber;
+	              #statComLoadActual := 1000.0 * (#statPrevious.comLoadActual / 1000.0 * (#configuration.averagingValues - 1) + #statComLoadActual / 1000.0) / #configuration.averagingValues;
+	            END_IF;
+	          END_REGION
+	        END_REGION
+	        
+	        REGION Read actual runtimes of Cyclic Organisation Block
+	          FOR #tempIndex := 0 TO #LAST_CYCLIC_BLOCK_INDEX DO
+	            // If measurment is disabled, jump to next iteration
+	            IF FALSE
+	              OR #configuration.organizationBlocksCyclic[#tempIndex].enableMeasurement = FALSE
+	              OR #configuration.organizationBlocksCyclic[#tempIndex].obNumber = 0
+	            THEN
+	              CONTINUE;
+	            END_IF;
+	            
+	            // Read array index into temp
+	            #tempResult := #statResultsCyclic[#tempIndex];
+	            
+	            // Read actual OB Runtime
+	            #tempResultValue := INT_TO_WORD(RT_INFO(MODE := #RT_INFO_RUNTIME, OB := #tempResult.obNumber, INFO := #tempResult.runtime));
+	            IF TRUE
+	              AND #tempResultValue.%X15
+	            THEN
+	              #tempResult.runtime := t#0ms;
+	              #tempResult.cycleLoad := 0.0;
+	              #tempResult.error := TRUE;
+	              #tempResult.status := #tempResultValue;
+	              CONTINUE;
+	            ELSE
+	              #tempResult.error := FALSE;
+	              #tempResult.status := #NO_ERROR;
+	            END_IF;
+	            
+	            IF TRUE // Only if no error is present we write the main diag state
+	              AND #tempResultValue.%X15
+	              AND NOT #statInternal.errorAutoCleared
+	            THEN
+	              #statInternal.errorAutoCleared := TRUE;
+	              #statInternal.diagnostics.status := #ERROR_RTINFO_RUNTIME_OB OR DINT_TO_WORD(#tempIndex);
+	              #statInternal.diagnostics.subfunctionStatus := #tempResultValue;
+	            END_IF;
+	            
+	            REGION Averaging if configured
+	              IF #configuration.averagingValues > 1 THEN
+	                // Actual NEW = (previous * (averageNumber - 1) + actual) / averageNumber;
+	                #tempResult.runtime := 1000 * ULINT_TO_LTIME((LTIME_TO_ULINT(#statPrevious.runtimesCyclic[#tempIndex]) / 1000 * (#configuration.averagingValues - 1) + LTIME_TO_ULINT(#tempResult.runtime) / 1000) / #configuration.averagingValues);
+	              END_IF;
+	            END_REGION
+	            
+	            REGION OB Load calculation
+	              #tempResult.cycleLoad := UDINT_TO_REAL(LTIME_TO_UDINT(#tempResult.runtime)) / UDINT_TO_REAL(LTIME_TO_UDINT(#statCycleTimeActual)) * 100.0;
+	              #tempResult.maxCycleLoad := UDINT_TO_REAL(LTIME_TO_UDINT(#tempResult.runtime)) / UDINT_TO_REAL(LTIME_TO_UDINT(#statCycleTimeMaxConfigured)) * 100.0;
+	            END_REGION
+	            
+	            // Write result back to array index
+	            #statResultsCyclic[#tempIndex] := #tempResult;
+	          END_FOR;
+	        END_REGION
+	        
+	        REGION Read actual runtimes of Organisation Block
+	          FOR #tempIndex := 0 TO #LAST_BLOCK_INDEX DO
+	            // If measurment is disabled, jump to next iteration
+	            IF FALSE
+	              OR #configuration.organizationBlocks[#tempIndex].enableMeasurement = FALSE
+	              OR #configuration.organizationBlocks[#tempIndex].obNumber = 0
+	            THEN
+	              CONTINUE;
+	            END_IF;
+	            
+	            // Read array index into temp
+	            #tempResult := #statResults[#tempIndex];
+	            
+	            // Read actual OB Runtime
+	            #tempResultValue := INT_TO_WORD(RT_INFO(MODE := #RT_INFO_RUNTIME, OB := #tempResult.obNumber, INFO := #tempResult.runtime));
+	            IF TRUE
+	              AND #tempResultValue.%X15
+	            THEN
+	              #tempResult.runtime := t#0ms;
+	              #tempResult.cycleLoad := 0.0;
+	              #tempResult.error := TRUE;
+	              #tempResult.status := #tempResultValue;
+	              CONTINUE;
+	            ELSE
+	              #tempResult.error := FALSE;
+	              #tempResult.status := #NO_ERROR;
+	            END_IF;
+	            
+	            IF TRUE // Only if no error is present we write the main diag state
+	              AND #tempResultValue.%X15
+	              AND NOT #statInternal.errorAutoCleared
+	            THEN
+	              #statInternal.errorAutoCleared := TRUE;
+	              #statInternal.diagnostics.status := #ERROR_RTINFO_RUNTIME_OB OR DINT_TO_WORD(#tempIndex);
+	              #statInternal.diagnostics.subfunctionStatus := #tempResultValue;
+	            END_IF;
+	            
+	            REGION Averaging if configured
+	              IF #configuration.averagingValues > 1 THEN
+	                // Actual NEW = (previous * (averageNumber - 1) + actual) / averageNumber;
+	                #tempResult.runtime := 1000 * ULINT_TO_LTIME((LTIME_TO_ULINT(#statPrevious.runtimes[#tempIndex]) / 1000 * (#configuration.averagingValues - 1) + LTIME_TO_ULINT(#tempResult.runtime) / 1000) / #configuration.averagingValues);
+	              END_IF;
+	            END_REGION
+	            
+	            REGION OB Load calculation
+	              #tempResult.cycleLoad := UDINT_TO_REAL(LTIME_TO_UDINT(#tempResult.runtime)) / UDINT_TO_REAL(LTIME_TO_UDINT(#statCycleTimeActual)) * 100.0;
+	              #tempResult.maxCycleLoad := UDINT_TO_REAL(LTIME_TO_UDINT(#tempResult.runtime)) / UDINT_TO_REAL(LTIME_TO_UDINT(#statCycleTimeMaxConfigured)) * 100.0;
+	            END_REGION
+	            
+	            // Write result back to array index
+	            #statResults[#tempIndex] := #tempResult;
+	          END_FOR;
+	        END_REGION
+	        
+	        REGION Communication load calculation
+	          IF NOT #statInternal.diagnostics.status.%X15 THEN
+	            // Total Load calculation of cyclic OBs
+	            #statCpuLoadPerc := #loadCascade;
+	            FOR #tempIndex := 0 TO #LAST_CYCLIC_BLOCK_INDEX DO
+	              // If measurment is disabled, jump to next iteration
+	              IF FALSE
+	                OR #configuration.organizationBlocksCyclic[#tempIndex].enableMeasurement = FALSE
+	                OR #configuration.organizationBlocksCyclic[#tempIndex].obNumber = 0
+	              THEN
+	                CONTINUE;
+	              ELSE
+	                #statCpuLoadPerc += #statResultsCyclic[#tempIndex].maxCycleLoad;
+	              END_IF;
+	            END_FOR;
+	            
+	            // Load Calculation
+	            // If load sim is disabled, take the actual value read from PLC
+	            IF #configuration.comLoadSim <= 0 THEN
+	              #tempComLoadPercent := #statComLoadActual;
+	            ELSE
+	              #tempComLoadPercent := UINT_TO_REAL(#configuration.comLoadSim);
+	            END_IF;
+	            
+	            #tempRuntimePercentage := 100.0 * (ULINT_TO_REAL(LTIME_TO_ULINT(#statCycleTimeActual)) / ULINT_TO_REAL(LTIME_TO_ULINT(#statCycleTimeMaxConfigured)));
+	            #statComLoadActual := #tempRuntimePercentage * ((100.0 - #tempComLoadPercent) / 100.0) * ((100.0 - #statCpuLoadPerc) / 100.0);
+	            #statCpuLoadPerc += #statComLoadActual;
+	          ELSE
+	            ;
+	          END_IF;
+	        END_REGION
+	        
+	        REGION Store previous values if averaging is configured
+	          IF #configuration.averagingValues > 1 THEN
+	            #statPrevious.cycleTimeActual := #statCycleTimeActual;
+	            #statPrevious.comLoadActual := #statComLoadActual;
+	            
+	            FOR #tempIndex := 0 TO #LAST_CYCLIC_BLOCK_INDEX DO
+	              #statPrevious.runtimesCyclic[#tempIndex] := #statResultsCyclic[#tempIndex].runtime;
+	            END_FOR;
+	            
+	            FOR #tempIndex := 0 TO #LAST_BLOCK_INDEX DO
+	              #statPrevious.runtimes[#tempIndex] := #statResults[#tempIndex].runtime;
+	            END_FOR;
+	          END_IF;
+	        END_REGION
+	      END_REGION Processing
+	      
+	    #FB_STATE_DISABLING: // Disabling active
+	      REGION Disabling
+	        // Disabling
+	        FOR #tempIndex := 0 TO #LAST_CYCLIC_BLOCK_INDEX DO
+	          #statResultsCyclic[#tempIndex] := #tempResult;
+	        END_FOR;
+	        FOR #tempIndex := 0 TO #LAST_BLOCK_INDEX DO
+	          #statResults[#tempIndex] := #tempResult;
+	        END_FOR;
+	        
+	        #statCycleTimeMin :=
+	        #statCycleTimeActual :=
+	        #statCycleTimeMax := t#0ms;
+	        #statCycleTimeMaxConfigured := t#0ms;
+	        #statComLoadActual := 0;
+	        #statCpuLoadPerc := 0.0;
+	        #statComLoadActual := 0;
+	        #statComLoadConfigured := 0;
+	        #tempRuntime := 0.0;
+	        // When disabling is complete the bit #statDisablingCompleted must be set
+	        #statInternal.disablingCompleted := TRUE;
+	      END_REGION Disabling
+	      
+	    ELSE // Undefined state in state machine reached
+	      REGION Undefined state
+	        #statInternal.diagnostics.status := #ERR_UNDEFINED_STATE;
+	        #statInternal.diagnostics.subfunctionStatus := 16#00;
+	        #statInternal.diagnostics.stateNumber := #statMainState;
+	        #statInternal.errorUserCleared := TRUE;
+	      END_REGION Undefined state
+	  END_CASE;
+	END_REGION STATE MACHINE
+	
+	REGION OUTPUTS
+	  // Write outputs
+	  IF (#statInternal.disablingCompleted = TRUE) THEN
+	    REGION Disabling
+	      // Reset outputs if disabling completed
+	      #statInternal.valid := FALSE;
+	      #statInternal.busy := FALSE;
+	      #statInternal.error := FALSE;
+	      #statInternal.errorUserCleared := FALSE;
+	      #statInternal.errorAutoCleared := FALSE;
+	      #statInternal.diagnostics.status := #STATUS_NO_CALL;
+	      #statMainState := #FB_STATE_NO_PROCESSING;
+	    END_REGION Disabling
+	    
+	  ELSIF (#statInternal.errorUserCleared = TRUE) AND (#statInternal.error = FALSE) THEN
+	    REGION Error user cleared
+	      // Error can only be cleared by user; rising edge at enable input is needed to continue 
+	      #statInternal.valid := FALSE;
+	      #statInternal.busy := FALSE;
+	      #statInternal.error := TRUE;
+	      // Write diagnostics
+	      // #diagnostics := #statDiagnostic;
+	      #diagnostics := #statInternal.diagnostics;
+	      // execution aborted --> set state no processing
+	      #statMainState := #FB_STATE_NO_PROCESSING;
+	    END_REGION Error user cleared
+	    
+	  ELSIF (#statInternal.errorAutoCleared = TRUE) AND (#statInternal.error = FALSE) THEN
+	    REGION Error auto cleared
+	      // Error can be reset by FB automatically
+	      #statInternal.valid := FALSE;
+	      #statInternal.busy := TRUE;
+	      #statInternal.error := TRUE;
+	      // Write diagnostics
+	      #diagnostics := #statInternal.diagnostics;
+	    END_REGION Error auto cleared
+	    
+	  ELSIF (#statInternal.errorAutoCleared = FALSE) AND (#statInternal.errorUserCleared = FALSE) AND (#statInternal.error = TRUE) THEN
+	    REGION After user/auto cleared or command aborted
+	      // If autocleared error is acknowledged
+	      #statInternal.valid := TRUE;
+	      #statInternal.busy := TRUE;
+	      #statInternal.error := FALSE;
+	      // TODO: remove this line if more detailed status information is used instead of "#STATUS_SUBSEQUENT_CALL"
+	      #statInternal.diagnostics.status := #STATUS_SUBSEQUENT_CALL;
+	    END_REGION After user/auto cleared or command aborted
+	  END_IF;
+	  
+	  REGION Write static values to outputs
+	    #valid := #statInternal.valid;
+	    #busy := #statInternal.busy;
+	    #error := #statInternal.error;
+	    #status := #statInternal.diagnostics.status;
+	    // ENO mechanism is not used / not wanted replace the following line by --> ENO := TRUE;
+	    ENO := NOT #statInternal.error;
+	    
+	    // Write application specific static values to outputs
+	    #averagingActive := (#configuration.averagingValues > 1) AND (#statMainState <> #FB_STATE_NO_PROCESSING);
+	    #loadCascadeActive := (#loadCascade > 0.0) AND (#statMainState <> #FB_STATE_NO_PROCESSING);
+	    
+	    #cycleTimeMin := #statCycleTimeMin;
+	    #cycleTimeActual := #statCycleTimeActual;
+	    #cycleTimeMax := #statCycleTimeMax;
+	    #cycleTimeMaxConfigured := #statCycleTimeMaxConfigured;
+	    #runtime := #tempRuntime;
+	    #cpuLoad := #statCpuLoadPerc;
+	    #comLoad := #statComLoadActual;
+	    #comLoadConfigured := #statComLoadConfigured;
+	    #limitWarning := #statCpuLoadPerc > #configuration.limitWarning;
+	    #limitAlarm := #statCpuLoadPerc > #configuration.limitAlarm;
+	    
+	    FOR #tempIndex := 0 TO #LAST_CYCLIC_BLOCK_INDEX DO
+	      #resultsCyclic[#tempIndex] := #statResultsCyclic[#tempIndex];
+	    END_FOR;
+	    FOR #tempIndex := 0 TO #LAST_BLOCK_INDEX DO
+	      #results[#tempIndex] := #statResults[#tempIndex];
+	    END_FOR;
+	  END_REGION Write static values to outputs
+	END_REGION OUTPUTS
+	
+	#statModuleRunTime := RUNTIME(#statInternal.runTimeInternalMem) * 1000;
+	
+END_FUNCTION_BLOCK
+

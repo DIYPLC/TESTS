@@ -1,0 +1,111 @@
+﻿FUNCTION "LGF_FindStringInCharArray" : DInt
+TITLE = LGF_FindStringInCharArray
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : 'Siemens Online Support'
+FAMILY : LGF
+NAME : LGF_FindStringInCharArray
+//The function searches for a specified String within an array of  characters.  
+//Returning the position of the String in the Array, if the string is not found the return value is `-1`.
+   VAR_INPUT 
+      searchFor : String;   // Text that is searched for
+      startPos { S7_PredefinedAssignment := '0'} : DInt;   // Position within the array to start search from (index zero based)
+   END_VAR
+
+   VAR_OUTPUT 
+      status : Word;   // 16#0000-16#7FFF: Status of the FB  16#8000-16#FFFF: Error identification (see following Table)
+   END_VAR
+
+   VAR_IN_OUT 
+      searchIn : Variant;   // Array of Character or Byte to search in
+   END_VAR
+
+   VAR_TEMP 
+      tempNumElements : UDInt;   // Number of elements in given array
+      tempLenSearchFor : Int;   // Length of text that is searched for
+      tempPosInArray : DInt;   // Position in array during search (0-based)
+      tempPosInString : Int;   // Position in working string during search
+      tempString : String;   // Temporary string to work with
+   END_VAR
+
+   VAR CONSTANT 
+      LEN_STRING : UInt := 254;   // Max. length of String
+      STATUS_NO_ERROR : Word := 16#0000;   // Status: Execution finished without errors
+      ERR_NO_ARRAY : Word := 16#8200;   // Error: No array of Char or Byte is present at the input `searchIn`
+   END_VAR
+
+
+BEGIN
+	REGION BLOCK INFO HEADER
+	  //===============================================================================
+	  // SIEMENS / (c)Copyright 2021
+	  //-------------------------------------------------------------------------------
+	  // Title:            LGF_FindStringInCharArray
+	  // Function:         The function searches for a specified String within an array of characters.
+	  //                   Returning the position of the String in the Array,
+	  //                   if the string is not found the return value is `-1`.
+	  // Library:          LGF
+	  // Author:           Siemens Industry Online Support
+	  // Tested with:      CPU 1516-3 PN/DP
+	  // Engineering:      TIA Portal V17
+	  // Restrictions:     --
+	  // Requirements:     S7-1200/1500
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge       | Changes applied
+	  //----------|------------|------------------------|------------------------------
+	  // 01.00.00 | 01.04.2019 | Siemens Online Support | First released version (LHttp)
+	  // 01.01.00 | 10.06.2022 | Siemens Online Support | Adaption and integration into LGF
+	  //===============================================================================
+	END_REGION
+	
+	REGION Initialization
+	  #tempPosInString := 0;
+	  #tempPosInArray := #startPos;
+	  #tempLenSearchFor := LEN(#searchFor);
+	  #status := #STATUS_NO_ERROR;
+	  #LGF_FindStringInCharArray := -1;
+	  
+	  REGION Validation of inputs
+	    // check whether the input is an ARRAY and TYPE of elements is CHAR or BYTE
+	    // IF so, the number OF the ARRAY elements is read out.
+	    // IF it is NOT an ARRAY, the program execution is terminated at this point
+	    IF TRUE
+	      AND IS_ARRAY(#searchIn)
+	      AND ((TypeOfElements(#searchIn) = Char) OR (TypeOfElements(#searchIn) = Byte) )
+	    THEN
+	      // Get number of elements
+	      #tempNumElements := CountOfElements(#searchIn);
+	    ELSE
+	      #status := #ERR_NO_ARRAY;
+	      RETURN;
+	    END_IF;
+	  END_REGION Validation of inputs
+	END_REGION Initialization
+	
+	REGION Process
+	  REPEAT // Search for beginning of text until something was found
+	    // Convert Chars to String
+	    Chars_TO_Strg(Chars  := #searchIn,
+	                  pChars := #tempPosInArray,
+	                  Cnt    := UDINT_TO_UINT(MIN(IN1 := #LEN_STRING, IN2 := #tempNumElements)),
+	                  Strg   => #tempString);
+	    
+	    // Search for text at beginning
+	    #tempPosInString := FIND(IN1 := #tempString, IN2 := #searchFor);
+	    
+	    // Keyword was found
+	    IF #tempPosInString > 0 THEN
+	      // Output position of string
+	      #LGF_FindStringInCharArray :=  #tempPosInArray + #tempPosInString - 1;
+	      EXIT;
+	    ELSE
+	      // Otherwise continue search in next string minus length of text at beginning to ensure
+	      // keywords are not broken up at the end of a string and thus missed
+	      #tempPosInArray += UINT_TO_INT(#LEN_STRING) - #tempLenSearchFor;
+	    END_IF;
+	    
+	  UNTIL (#tempPosInString > 0) OR (#tempPosInArray > #tempNumElements) END_REPEAT;
+	END_REGION Process
+	
+END_FUNCTION
+

@@ -1,0 +1,59 @@
+﻿FUNCTION "LGF_CelsiusToFahrenheit" : Real
+TITLE = LGF_CelsiusToFahrenheit
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_Digital_Industry_Support
+FAMILY : LGF
+NAME : LGF_CelsiusToFahrenheit
+//This function converts a temperature value - from °Celsius to °Fahrenheit.
+   VAR_INPUT 
+      value : Real;   // Temperature to be converted in °Celsius
+   END_VAR
+
+   VAR_TEMP 
+      tempFahrenheitTemperature : Real;   // Temp result of temperatur conversion
+   END_VAR
+
+   VAR CONSTANT 
+      TEMPERATURE_GAIN : Real := 1.8;   // Constant gain of conversion: F = C * 1.8 + 32
+      TEMPERATURE_OFFSET : Real := 32.0;   // Constant offset of conversion: F = C * 1.8 + 32
+   END_VAR
+
+
+BEGIN
+	REGION BLOCK INFO HEADER
+	  //===============================================================================
+	  // SIEMENS AG / (c)Copyright 2019
+	  //-------------------------------------------------------------------------------
+	  // Title:            LGF_CelsiusToFahrenheit
+	  // Comment/Function: This function converts a temperature value - from °Celsius to °Fahrenheit 
+	  // Library/Family:   LGF(Library General Functions)
+	  // Author:           Siemens Digital Industry Support
+	  // Tested with:      S7-PLCSIM Advanced V2.0 SP1
+	  // Engineering:      TIA Portal V15.1
+	  // Restrictions:     ENO disabled - no error handling
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge       | Changes applied
+	  //----------|------------|------------------------|------------------------------
+	  // 01.00.00 | 20.06.2019 | Simatic Systems Support
+	  //                         First release
+	  // 03.00.00 | 23.04.2020 | Simatic Systems Support | Set version to V3.0.0
+	  //                         harmonize the version of the whole library
+	  // 03.00.01 | 22.02.2021 | Simatic Systems Support
+	  //                         Insert documentation
+	  //===============================================================================
+	END_REGION
+	
+	REGION CONVERT
+	  #tempFahrenheitTemperature := #value * #TEMPERATURE_GAIN + #TEMPERATURE_OFFSET;
+	END_REGION
+	
+	REGION OUTPUTS
+	  #LGF_CelsiusToFahrenheit := #tempFahrenheitTemperature;
+	  // no error handling needed
+	  ENO := TRUE;
+	END_REGION
+	
+END_FUNCTION
+

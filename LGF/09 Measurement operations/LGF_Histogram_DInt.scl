@@ -1,0 +1,496 @@
+﻿FUNCTION_BLOCK "LGF_ShellSort_DInt"
+TITLE = LGF_ShellSort_DInt
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_Industry_Support
+FAMILY : LGF
+NAME : LGF_ShellSort_DInt
+//This block sorts an array of type `DInt` with any number of elements (max. 1000) in ascending or descending order and returns the sorted version of the array in the same variable.
+   VAR_INPUT 
+      sortDirection : Bool;   // FALSE: Sort ascending; TRUE: Sort descending
+   END_VAR
+
+   VAR_OUTPUT 
+      error { ExternalWritable := 'False'} : Bool;   // FALSE: No error  TRUE: An error occurred during the execution of the FB
+      status { ExternalWritable := 'False'} : Word;   // 16#0000-16#7FFF: Status of the FB  16#8000-16#FFFF: Error identification (see following Table)
+   END_VAR
+
+   VAR_IN_OUT 
+      "array" : Array[*] of DInt;   // Array to be sorted
+   END_VAR
+
+   VAR 
+      tempArray { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Array[1..#MAX_ARRAY_ELEMENTS] of DInt;   // Temporary array for sorting purposes
+   END_VAR
+
+   VAR_TEMP 
+      tempLowerLimit : DInt;   // Lower limit of input array
+      tempUpperLimit : DInt;   // Upper limit of input array
+      tempNoOfElements : DInt;   // Number of elements in array
+      tempGap : DInt;   // Selected gap size
+      tempLoopIndex : DInt;   // FOR loop index
+      tempExchangeIndex : DInt;   // Index of temporary exchange value
+      tempExchangeVariable : DInt;   // Temporary exchange value
+      tempArrayOffset : DInt;   // Index offset of temporary array (e.g. in case of negative index in array[*])
+   END_VAR
+
+   VAR CONSTANT 
+      ARRAY_FIRST_DIMENSION : UInt := 1;   // Input array first dimension
+      ARRAY_START_INDEX : UInt := 1;   // Temp array start index
+      SINGLE_ARRAY_ELEMENT : DInt := 1;   // Array containing just one element
+      GAP_INIT : Int := 1;   // Gap size initialization
+      GAP_THRESHOLD : Int := 1;   // Gap threshold for cycle termination
+      GAP_RATIO : DInt := 3;   // Maximal gap ratio
+      INCREMENT : Int := 1;   // Increment value ONE
+      ELEMENTS_COUNT_CORRECTION : DInt := 1;   // Array counter size correction (0-based counting)
+      MAX_ARRAY_ELEMENTS : Int := 1000;   // Max array elements allowed
+      STATUS_NO_ERROR : Word := 16#0000;   // Status: Execution finished without errors
+      ERR_NO_ARRAY : Word := 16#8200;   // Error: Actual parameter at the `array` input has only one element.
+      ERR_TOO_MANY_ELEMENTS : Word := 16#8201;   // Error: Actual parameter at the `array` input has too many elements (maximum is 1000).
+   END_VAR
+
+
+BEGIN
+	REGION Block info header
+	  //===============================================================================
+	  // SIEMENS AG / (c)Copyright 2019
+	  //-------------------------------------------------------------------------------
+	  // Title:            LGF_ShellSort_DInt
+	  // Comment/Function: This block sorts an array with any number of elements (max. 1000)
+	  //                   in ascending or descending order and returns the sorted version of the array in the same variable.
+	  // Library/Family:   LGF (Library General Functions)
+	  // Author:           Siemens Digital Industry Support
+	  // Tested with:      CPU 1515F-2 PN FW:V2.6
+	  // Engineering:      TIA Portal V15.1 Update 2
+	  // Restrictions:     ENO disabled - error handling done with error and status
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge       | Changes applied
+	  //----------|------------|------------------------|------------------------------
+	  // 01.00.00 19.08.2015  Siemens Industry Online Support
+	  //                      First released version
+	  // 01.01.00 19.05.2016  Siemens Industry Online Support
+	  //                      New function: reverse sort
+	  // 01.01.01 02.01.2017  Siemens Industry Online Support
+	  //                      Upgrade: TIA Portal V14 Update 1
+	  // 01.01.02 17.08.2018  Siemens Industry Online Support
+	  //                      Upgrade: TIA V15 Update 2
+	  // 01.01.03 23.11.2018  Siemens Industry Online Support
+	  //                      Upgrade: TIA V15.1
+	  // 02.00.00 29.01.2019  Siemens Industry Online Support
+	  //                      Output "done" removed (not necessary, because only one cycle)
+	  // 02.00.01 15.10.2019  Simatic Systems Support
+	  //                      Code refactoring, comments added,
+	  //                      change data type from Int to DInt
+	  // 03.00.00 23.04.2020  Simatic Systems Support
+	  //                      Set version to V3.0.0, harmonize the version of the whole library
+	  // 03.00.01 15.02.2021  Simatic Systems Support
+	  //                      Insert documentation
+	  //=============================================================================
+	END_REGION Block info header
+	
+	REGION DESCRIPTION
+	  (/*
+	The block sorts according to the shell sort procedure. Note that the execution time of the block depends significantly on how many elements the array to be sorted has. The overview below shows several measured values of the block depending on the number of array elements.
+	
+	Average steps needed for execution: $ \mathcal{O}( n \cdot \log (n)^2 ) $
+	
+	Table: Execution times of the block `LGF_ShellSort…`
+	
+	| Number of array elements  | S7-1212C DC/DC/DC | S7-1516-3 PN/DP |
+	|-----|-----|-----|
+	| 100 | approx. 11-16 ms | approx. 1-2 ms |
+	| 1000 | approx. 185-205 ms | approx. 10-12 ms |
+	
+	Note
+	:    The block is executed synchronously and is not split over several PLC cycles. Thus the execution time has a direct effect on the PLC cycle time. Note this behavior for your project of the controller used and adjust the monitoring time of the controller if necessary.
+	*/)
+	END_REGION DESCRIPTION
+	
+	REGION Special description
+	  // Space note: If you wish to reduce the space of this block, you may reduce the
+	  // size OF the tempArray<Type> TO one just big enough FOR your specific purpose
+	  // It is not recommended to increase the size significantly.
+	END_REGION
+	
+	REGION Initialization and input data processing
+	  // Input array size calculation
+	  #tempLowerLimit := LOWER_BOUND(ARR := #array, DIM := #ARRAY_FIRST_DIMENSION);
+	  #tempUpperLimit := UPPER_BOUND(ARR := #array, DIM := #ARRAY_FIRST_DIMENSION);
+	  
+	  // Array elements calculation
+	  // (for example: 6 - 2 = 4; but real number of elements is 5)
+	  #tempNoOfElements := #tempUpperLimit - #tempLowerLimit + #ELEMENTS_COUNT_CORRECTION;
+	  
+	  // Shift array index to range 1..MAX_ARRAY_ELEMENTS
+	  #tempArrayOffset := - #tempLowerLimit + #ARRAY_START_INDEX;
+	  
+	  // Check whether the array contains less than the maximum possible amount of elements
+	  IF #tempNoOfElements > #MAX_ARRAY_ELEMENTS THEN
+	    #error := true;
+	    #status := #ERR_TOO_MANY_ELEMENTS;
+	    RETURN;
+	  ELSIF #tempNoOfElements <= #SINGLE_ARRAY_ELEMENT THEN
+	    // If there are 0 elements in the array, set status to "Error: Parameter is an empty array"
+	    #error := true;
+	    #status := #ERR_NO_ARRAY;
+	    RETURN;
+	  END_IF;
+	END_REGION
+	
+	REGION Sorting
+	  // Read the elements of the incoming array and write into the local array
+	  FOR #tempLoopIndex := #tempLowerLimit TO #tempUpperLimit DO
+	    #tempArray[#tempLoopIndex + #tempArrayOffset] := #array[#tempLoopIndex];
+	  END_FOR;
+	  
+	  REGION Shell sort algorithm
+	    #tempGap := #GAP_INIT;
+	    
+	    // Evaluation of the maximal gap size
+	    REPEAT
+	      #tempGap := (#GAP_RATIO * #tempGap) + #INCREMENT;
+	    UNTIL #tempGap > #tempNoOfElements END_REPEAT;
+	    
+	    REPEAT
+	      #tempGap := #tempGap / #GAP_RATIO;
+	      
+	      FOR #tempLoopIndex := #tempGap + #INCREMENT TO #tempNoOfElements DO
+	        #tempExchangeVariable := #tempArray[#tempLoopIndex];
+	        #tempExchangeIndex := #tempLoopIndex;
+	        
+	        // sort descending 
+	        IF #sortDirection THEN
+	          WHILE ((#tempArray[#tempExchangeIndex - #tempGap] < #tempExchangeVariable)) DO
+	            #tempArray[#tempExchangeIndex] := #tempArray[#tempExchangeIndex - #tempGap];
+	            #tempExchangeIndex := #tempExchangeIndex - #tempGap;
+	            
+	            IF (#tempExchangeIndex <= #tempGap) THEN
+	              EXIT;
+	            END_IF;
+	          END_WHILE;
+	          
+	          // sort ascending
+	        ELSE
+	          WHILE ((#tempArray[#tempExchangeIndex - #tempGap] > #tempExchangeVariable)) DO
+	            #tempArray[#tempExchangeIndex] := #tempArray[#tempExchangeIndex - #tempGap];
+	            #tempExchangeIndex := #tempExchangeIndex - #tempGap;
+	            
+	            IF (#tempExchangeIndex <= #tempGap) THEN
+	              EXIT;
+	            END_IF;
+	          END_WHILE;
+	        END_IF;
+	        
+	        #tempArray[#tempExchangeIndex] := #tempExchangeVariable;
+	      END_FOR;
+	      
+	    UNTIL #tempGap <= #GAP_THRESHOLD END_REPEAT;
+	  END_REGION
+	  
+	  // Write the elements of the local array back to the inOut array
+	  FOR #tempLoopIndex := #tempLowerLimit TO #tempUpperLimit DO
+	    #array[#tempLoopIndex] := #tempArray[#tempLoopIndex + #tempArrayOffset];
+	  END_FOR;
+	  
+	  // Set "No error" status
+	  #error := false;
+	  #status := #STATUS_NO_ERROR;
+	  
+	  // no error handling needed
+	  ENO := TRUE;
+	END_REGION
+	
+END_FUNCTION_BLOCK
+
+FUNCTION_BLOCK "LGF_Histogram_DInt"
+TITLE = LGF_Histogram_DInt
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_Digital_Industry
+FAMILY : LGF
+NAME : LGF_Histogram_DInt
+//The histogram shows the frequency distribution of a sample by class. A class describes a value interval in which the individual frequencies are added together. After specifying the number of classes, the class width and the respective class center are calculated. The number of classes is limited to 15.
+//
+//The distribution is represented as a rectangle around the class mean with the class width and the cumulated frequency as height.
+//
+//Figure: Distribution
+//
+//![LGF_Histogram](LGF_Histogram.png "LGF_Histogram")
+//
+//#### WinCC-Control
+//To visualize the Boxplot, the Siemens Industry Online Support offers you a Net-Control, which you can use in conjunction with WinCC Runtime Professional. You can find the controls in the `UserFiles` folder of this library.
+//
+//Figure: .Net Control "Histogram"
+//
+//![LGF_Histogram - WinCC .NET Control](LGF_Histogram_Control.png "LGF_Histogram - WinCC .NET Control")
+//
+//------
+   VAR_INPUT 
+      execute : Bool;   // Activation of the calculation with each positive edge.
+      numberOfClasses : UInt;   // Number of desired classes.
+   END_VAR
+
+   VAR_OUTPUT 
+      error { ExternalWritable := 'False'} : Bool;   // FALSE: No error  TRUE: An error occurred during the execution of the FB
+      status { ExternalWritable := 'False'} : Word := #STATUS_NO_CALL;   // 16#0000-16#7FFF: Status of the FB  16#8000-16#FFFF: Error identification (see following Table)
+      subFunctionStatus { ExternalWritable := 'False'} : Word := 16#0;   // Status or return value of called FB's, FC's and system blocks
+      histValues { ExternalWritable := 'False'} : Array[0..1, 0..#CLASSES_COUNTER_UP_LIMIT] of LReal;   // Outputs the calculated values in a two-dimensional array.  • `histValues[0,0..14]` displays the relative frequency of the individual classes.  • `histValues[1,0..14]` displays the class centers.  • If fewer than 15 classes are desired, the array elements that are not required are output with 0.
+      axis { ExternalWritable := 'False'} : Array[0..3] of LReal;   // Specifies the axis values:  • Lower X axis value  • Upper X axis value  • Lower Y axis value  • Upper Y axis value
+      classWidth { ExternalWritable := 'False'} : LReal;   // Returns the calculated class width.
+   END_VAR
+
+   VAR_IN_OUT 
+      values : Array[*] of DInt;   // The array containing the data series that is to be used for the calculation
+   END_VAR
+
+   VAR 
+      statArray { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Array[0..#MAX_ARRAY_ELEMENTS] of DInt;   // Static array for temporary calculation (do not occupy stack)
+      statStatus { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Word;   // Static value for output status
+      statSubfuncStatus { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Word;   // Static value for output substatus
+      statExecuteOld { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Static previous value of execute for edge detection
+      instShellSort { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'; S7_SetPoint := 'False'} : "LGF_ShellSort_DInt";   // Instance of LGF_ShellSort_DInt
+      statMin { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : LReal;   // Static value for min
+      statMax { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : LReal;   // Static value for max
+      statCounter { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : DInt;   // Static value for counter
+      statWidth { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : LReal;   // Static value for width
+      statFrequencyValues { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Int;   // Static value for frequency values
+      statIndex { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : DInt;   // Static value for index
+      statIndexOld { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : DInt := 0;   // Static value for index old
+      statBound { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : LReal;   // Static value for bound
+      statMaxFrequency { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Int;   // Static value for max frequency
+      statHistFrequencyAbs { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Array[0..#CLASSES_COUNTER_UP_LIMIT] of Int;   // Static array for history frequency absolute
+      statHistFrequencyRel { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Array[0..#CLASSES_COUNTER_UP_LIMIT] of LReal;   // Static array for history frequency relative
+      statHistMiddleOfClass { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Array[0..#CLASSES_COUNTER_UP_LIMIT] of LReal;   // Static array for history middle of class
+   END_VAR
+
+   VAR_TEMP 
+      tempNumberOfElements : DInt;   // Temp number of elements
+      tempLowerBound : DInt;   // Temp lower bound
+      tempUpperBound : DInt;   // Temp upper bound
+      tempValueDInt : DInt;   // Temp value for calculation
+      tempMinDInt : DInt;   // Temp value for min DINT
+      tempMaxDInt : DInt;   // Temp value for max DINT
+      tempLoopIndex : DInt;   // Temp Loop index
+      tempArrayOffset : DInt;   // Temp Index offset of temporary array (e.g. in case of negative index in array[*])
+   END_VAR
+
+   VAR CONSTANT 
+      ZERO_INT : Int := 0;   // Zero constant in Int format
+      ZERO_LREAL : LReal := 0.0;   // Zero constant in LReal format
+      DIMENSION_ONE : UInt := 1;   // First dimension of one dimensional array
+      ARRAY_START_INDEX : DInt := 0;   // Array start index
+      ELEMENTS_COUNT_CORRECTION : DInt := 1;   // Count also the starting element. e.g. [0.. 9] = 10 elements
+      INCREMENT : DInt := 1;   // Increment value
+      COUNTER_CORRECTION : DInt := 1;   // Count also the starting element. e.g. [0.. 9] = 10 elements
+      MIN_CLASSES_NUMBER : DInt := 1;   // Min classes number
+      MAX_CLASSES_NUMBER : DInt := 15;   // Max classes number
+      CLASSES_COUNTER_LOW_LIMIT : DInt := 0;   // Classes counter lower limit
+      CLASSES_COUNTER_UP_LIMIT : DInt := 14;   // Classes counter upper limit
+      RATIO : Int := 2;   // Ratio during devision
+      PERCENT_CORRECTION : Int := 100;   // Percent correction
+      MAX_ARRAY_ELEMENTS : DInt := 999;   // Max array elements (refers to ShellSort)
+      SUB_STATUS_NO_ERROR : Word := 16#0000;   // SubStatus: No error
+      STATUS_EXECUTION_FINISHED : Word := 16#0000;   // Status: Execution finished without errors
+      STATUS_NO_CALL : Word := 16#7000;   // Status: No call of FB.  The block waits for activation through the parameter `enable`.
+      STATUS_FIRST_CALL : Word := 16#7001;   // Status: First call of FB after enabling
+      ERR_SHELL_SORT : Word := 16#8600;   // Error: Error in command `LGF_ShellSort_DInt`.  Check `subFunctionStatus` code
+      ERR_WRONG_NO_CLASSES : Word := 16#9101;   // Error: Incorrect number of classes.  Give the parameter `numberOfClasses` a valid value (1 to 15).
+   END_VAR
+
+
+BEGIN
+	REGION Block info header
+	  //===============================================================================
+	  // SIEMENS AG / (c)Copyright 2025
+	  //-------------------------------------------------------------------------------
+	  // Title:            LGF_Histogram_DInt
+	  // Comment/Function: This function block calculates from measurement list all DInt
+	  //                   values for creating a histogram with WinCC
+	  // Library/Family:   LGF (Library General Functions)
+	  // Author:           Siemens Digital Industry
+	  // Tested with:      CPU 1515F-2 PN FW:V2.6
+	  // Engineering:      TIA Portal V17
+	  // Restrictions:     ENO disabled, forced to true - error handling done by error and status
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge       | Changes applied
+	  //----------|------------|------------------------|------------------------------
+	  // 01.00.00 | 23.11.2018 | Siemens Industry Online Support
+	  //                       | First released version
+	  // 02.00.00 | 06.11.2019 | Simatic Systems Support
+	  //                       | Code refactoring, comments added
+	  // 03.00.00 | 23.04.2020 | Simatic Systems Support
+	  //                       | Set version to V3.0.0, harmonize the version of the whole library
+	  // 03.00.01 | 06.04.2021 | Simatic Systems Support
+	  //                       | Insert documentation
+	  // 03.00.02 | 19.11.2024 | Simatic Systems Support
+	  //                       | Fixed bug for histValues Array
+	  // 03.00.03 | 16.07.2025 | Simatic Systems Support
+	  //                       | Fixed comments and block info header 
+	  //=============================================================================
+	END_REGION Block info header
+	
+	REGION DESCRIPTION
+	  (/*
+	The block sorts the transferred data and calculates the general class width using the transferred class count and data range. The block then counts the values that lie within a class. In order to draw a histogram, the block also calculates the necessary X and Y coordinates.
+	
+	The elements of the passed array `values` are sorted in ascending order by the block. The `LGF_Shellsort_UDInt` block is used for sorting.
+	
+	The number of classes can be specified using the following rule of thumb:
+	
+	$$
+	 Number~of~classes = \sqrt{number~of~elements}
+	$$
+	
+	e.g. 100 values --> $Number~of~classes = \sqrt{100} = 10$
+	
+	#### Formulas
+	
+	The block uses the following formula to calculate the class width:
+	
+	$$
+	  classWidth = \frac{max - min}{Number~of~classes}
+	$$
+	*/)
+	END_REGION DESCRIPTION
+	
+	REGION Detect execution bit
+	  //Positive edge
+	  IF #execute AND NOT #statExecuteOld THEN
+	    //Get array boundaries
+	    #tempLowerBound := LOWER_BOUND(ARR := #values, DIM := #DIMENSION_ONE);
+	    #tempUpperBound := UPPER_BOUND(ARR := #values, DIM := #DIMENSION_ONE);
+	    
+	    //Reset and initialize tags
+	    FOR #statCounter := #CLASSES_COUNTER_LOW_LIMIT TO #CLASSES_COUNTER_UP_LIMIT DO
+	      #statHistFrequencyAbs[#statCounter] := #ZERO_INT;
+	      #statHistFrequencyRel[#statCounter] := #ZERO_LREAL;
+	      #statHistMiddleOfClass[#statCounter] := #ZERO_LREAL;
+	    END_FOR;
+	    
+	    #statStatus := #STATUS_FIRST_CALL;
+	    #statSubfuncStatus := #SUB_STATUS_NO_ERROR;
+	    #statFrequencyValues := #ZERO_INT;
+	    #statMaxFrequency := #ZERO_INT;
+	    #statIndex := #ZERO_INT;
+	    #statIndexOld := #ZERO_INT;
+	    
+	    //FB is currently inactive
+	  ELSIF NOT #execute THEN
+	    #statStatus := #STATUS_NO_CALL;
+	    #statSubfuncStatus := #SUB_STATUS_NO_ERROR;
+	  END_IF;
+	  #statExecuteOld := #execute;
+	END_REGION
+	
+	REGION Validation
+	  IF #statStatus = #STATUS_FIRST_CALL THEN
+	    //check number of classes
+	    IF ((#numberOfClasses > #MAX_CLASSES_NUMBER) OR (#numberOfClasses < #MIN_CLASSES_NUMBER)) THEN
+	      #statStatus := #ERR_WRONG_NO_CLASSES;
+	    END_IF;
+	  END_IF;
+	END_REGION
+	
+	REGION Histogram calculation 
+	  IF #statStatus = #STATUS_FIRST_CALL THEN
+	    // Array elements calculation
+	    // (for example: 6 - 2 = 4; but real number of elements is 5)
+	    #tempNumberOfElements := #tempUpperBound - #tempLowerBound + #ELEMENTS_COUNT_CORRECTION;
+	    
+	    // Shift array index to range 0..n
+	    #tempArrayOffset := - #tempLowerBound;
+	    
+	    //Sort array
+	    #instShellSort(array := #values);
+	    
+	    IF #instShellSort.error THEN
+	      #statStatus := #ERR_SHELL_SORT;
+	      #statSubfuncStatus := #instShellSort.status;
+	    ELSE
+	      //Identify max and min value
+	      #tempMinDInt := #values[#tempLowerBound];
+	      #tempMaxDInt := #values[#tempUpperBound];
+	      
+	      #statMin := DINT_TO_LREAL(#tempMinDInt);
+	      #statMax := DINT_TO_LREAL(#tempMaxDInt);
+	      
+	      //calculate classwidth
+	      #statWidth := (#statMax - #statMin) / #numberOfClasses;
+	      #statBound := (#statMin + #statWidth);
+	      
+	      // Fill temporary array
+	      FOR #tempLoopIndex := #tempLowerBound TO #tempUpperBound DO
+	        #statArray[#tempLoopIndex + #tempArrayOffset] := #values[#tempLoopIndex];
+	      END_FOR;
+	    
+	      //Start Value for tempValueDInt
+	      #tempValueDInt := #statArray[#ARRAY_START_INDEX];
+	      
+	      //search for all values
+	      FOR #statCounter := #ZERO_INT TO UINT_TO_INT(#numberOfClasses) - #COUNTER_CORRECTION DO
+	          
+	          //Count Values for Class 
+	          WHILE (#tempValueDInt <= LREAL_TO_DINT(#statBound)) AND (#statIndex < #tempNumberOfElements) DO
+	              
+	              IF #statIndex = #tempNumberOfElements THEN
+	                  EXIT;
+	              END_IF;
+	              #statIndex := #statIndex + #INCREMENT;
+	              #tempValueDInt := #statArray[#statIndex];
+	              
+	          END_WHILE;
+	          
+	          // Evaluate frequency values
+	          #statFrequencyValues := DINT_TO_INT(#statIndex - #statIndexOld);
+	          
+	          #statHistFrequencyAbs[#statCounter] := #statFrequencyValues;
+	          #statHistFrequencyRel[#statCounter] := INT_TO_LREAL(#statFrequencyValues) / DINT_TO_LREAL(#tempNumberOfElements) * #PERCENT_CORRECTION;
+	          
+	          //Max values in one class for y-axis 
+	          IF #statMaxFrequency < #statFrequencyValues THEN
+	              #statMaxFrequency := #statFrequencyValues;
+	          END_IF;
+	          
+	          #statBound := #statBound + #statWidth;
+	          #statIndexOld := #statIndex;
+	      END_FOR;
+	  END_IF;
+	    
+	    //find the middle of each class
+	    FOR #statCounter := #ZERO_INT TO UINT_TO_INT(#numberOfClasses) - #COUNTER_CORRECTION DO
+	      #statHistMiddleOfClass[#statCounter] := #statMin + (DINT_TO_LREAL(#statCounter) * #statWidth) + #statWidth / #RATIO;
+	    END_FOR;
+	    
+	    //Keeping those outputs in this IF statement and not in the out region
+	    //because filling of the array is needed only once on first call
+	    //copy values to output array
+	    FOR #statCounter := #CLASSES_COUNTER_LOW_LIMIT TO #CLASSES_COUNTER_UP_LIMIT DO
+	      #histValues[0, #statCounter] := #statHistFrequencyRel[#statCounter];
+	      #histValues[1, #statCounter] := #statHistMiddleOfClass[#statCounter];
+	    END_FOR;
+	    #statStatus := #STATUS_EXECUTION_FINISHED;
+	  END_IF;
+	END_REGION
+	
+	REGION Write outputs 
+	  // Assign Axis values
+	  #axis[0] := #statMin;
+	  #axis[1] := #statMax;
+	  #axis[2] := #ZERO_LREAL;
+	  #axis[3] := INT_TO_LREAL(#statMaxFrequency);
+	  
+	  // Write class width
+	  #classWidth := #statWidth;
+	  
+	  #error := #statStatus.%X15;
+	  #status := #statStatus;
+	  #subFunctionStatus := #statSubfuncStatus;
+	  
+	  // ENO mechanism is not used - forced to true.
+	  ENO := TRUE;
+	END_REGION
+	
+END_FUNCTION_BLOCK
+

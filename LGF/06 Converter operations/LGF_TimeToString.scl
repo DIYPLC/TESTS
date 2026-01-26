@@ -1,0 +1,144 @@
+﻿FUNCTION "LGF_TimeToString" : String
+TITLE = LGF_TimeToString
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_Digital_Industry
+FAMILY : LGF
+NAME : LGF_TimeToString
+//This function converts a variable of the system data type `Time` into a variable of the data type `String`.
+   VAR_INPUT 
+      timeValue : Time;   // Time value to convert  Example: `T#1D_3H_45M_6S`
+      separator { S7_HiddenAssignment := 'Hide'; S7_PredefinedAssignment := '$'-$''; S7_ShowAssignmentIfParamsNotIdentical := 'true'} : Char;   // Separator between the components of the output string
+   END_VAR
+
+   VAR_OUTPUT 
+      stringDay : String;   // Converted day as string
+      stringHour : String;   // Converted hour as string
+      stringMinute : String;   // Converted minute as string
+      stringSecond : String;   // Converted second as string
+      stringMilliSecond : String;   // Converted millisecond as string
+   END_VAR
+
+   VAR_TEMP 
+      tempTimeResult : String;   // Temp string to concat the results of conversions
+      tempTimeMilliseconds : DInt;   // Temp integer to calculate the different time values
+      tempDays : DInt;   // Temp number for days
+      tempHours : DInt;   // Temp number for hours
+      tempMinutes : DInt;   // Temp number for minutes
+      tempSecond : DInt;   // Temp number for seconds
+      tempMillisecond : DInt;   // Temp number for milliseconds
+   END_VAR
+
+   VAR CONSTANT 
+      MS_PER_DAY : DInt := 86400000;   // Milliseconds per day
+      MS_PER_HOUR : DInt := 3600000;   // Milliseconds per hour
+      MS_PER_MINUTE : DInt := 60000;   // Milliseconds per minute
+      MS_PER_SECOND : DInt := 1000;   // Milliseconds per second
+      NUMBER_OF_CHAR_TO_DEL : Int := 1;   // Number of characters to be deleted
+      FIRST_POSITION : Int := 1;   // Position in string from where the deletion will be begin
+      NO_REMAINDER : Int := 0;   // Remainder from devision
+   END_VAR
+
+
+BEGIN
+	REGION BLOCK INFO HEADER
+	  //===============================================================================
+	  // SIEMENS AG / (c)Copyright 2025
+	  //-------------------------------------------------------------------------------
+	  // Title:            LGF_TimeToString
+	  // Comment/Function: This function converts a time value to a string
+	  //                   When more than one time unit is specified, the value must not exceed 24 days, 23 hours, 59 minutes, 59 seconds or 999 milliseconds.
+	  //                   Output format is the folowing := '10D20H30M20S630MS', just existing parts would be added to the string
+	  // Library/Family:   LGF(Library General Functions)
+	  // Author:           Siemens Digital Industry Support
+	  // Tested with:      S7-PLCSIM Advanced V4.0
+	  // Engineering:      TIA Portal V17 
+	  // Restrictions:     ENO mechanism is not used, no error handling
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge       | Changes applied
+	  //----------|------------|------------------------|------------------------------
+	  // 01.00.00 | 03.07.2018 | Siemens Industry Online Support
+	  //                         First released version
+	  // 01.00.01 | 17.08.2018 | Siemens Industry Online Support
+	  //                         Upgrade: TIA V15 Update 2
+	  // 01.00.02 | 23.11.2018 | Siemens Industry Online Support
+	  //                         Upgrade: TIA V15.1
+	  // 01.00.03 | 02.07.2019 | Simatic Systems Support
+	  //                         Standard header and block parameters update, status parameter added
+	  // 01.00.05 | 09.07.2019 | Simatic Systems Support
+	  //                         Further improvements minimization and commends added
+	  // 01.00.06 | 30.07.2019 | Simatic Systems Support
+	  //                         Add ENO handling
+	  // 03.00.00 | 23.04.2020 | Simatic Systems Support | Set version to V3.0.0
+	  //                         Harmonize the version of the whole library
+	  // 03.00.01 | 23.02.2021 | Simatic Systems Support
+	  //                         Insert documentation
+	  // 03.01.00 | 17.07.2025 | Simatic Systems Support
+	  //                         Implemented separator input and functionality
+	  //===============================================================================
+	END_REGION Block info header
+	
+	REGION INITIALISATION
+	  #tempTimeResult := '';
+	END_REGION
+	
+	REGION CONVERT
+	    // convert from time to millisecond
+	    #tempTimeMilliseconds := TIME_TO_DINT(#timeValue);
+	    
+	    // calculate the days and remaining hours
+	    #tempDays := #tempTimeMilliseconds / #MS_PER_DAY;
+	    #tempTimeMilliseconds := #tempTimeMilliseconds MOD #MS_PER_DAY;
+	    
+	    // calculate the hours and remaining minutes
+	    #tempHours := #tempTimeMilliseconds / #MS_PER_HOUR;
+	    #tempTimeMilliseconds := #tempTimeMilliseconds MOD #MS_PER_HOUR;
+	    
+	    // calculate the minutes and remaining seconds
+	    #tempMinutes := #tempTimeMilliseconds / #MS_PER_MINUTE;
+	    #tempTimeMilliseconds := #tempTimeMilliseconds MOD #MS_PER_MINUTE;
+	    
+	    // calculate the seconds and remaining milliseconds
+	    #tempSecond := #tempTimeMilliseconds / #MS_PER_SECOND;
+	    #tempMillisecond := #tempTimeMilliseconds MOD #MS_PER_SECOND;
+	    
+	    // check if value is greater then zero and add to result string without leading "+"
+	    IF (#tempMillisecond > #NO_REMAINDER) THEN
+	        #stringMilliSecond := DELETE(IN := DINT_TO_STRING(#tempMillisecond), L := #NUMBER_OF_CHAR_TO_DEL, P := #FIRST_POSITION);
+	        #tempTimeResult := CONCAT(IN1 := #separator, IN2 := #stringMilliSecond, IN3 := 'MS');
+	    END_IF;
+	    
+	    // check if value is greater then zero and add to result string without leading "+"
+	    IF (#tempSecond > #NO_REMAINDER) THEN
+	        #stringSecond := DELETE(IN := DINT_TO_STRING(#tempSecond), L := #NUMBER_OF_CHAR_TO_DEL, P := #FIRST_POSITION);
+	        #tempTimeResult := CONCAT(IN1 := #separator, IN2 := #stringSecond, IN3 := 'S', IN4 := #tempTimeResult);
+	    END_IF;
+	    
+	    // check if value is greater then zero and add to result string without leading "+"
+	    IF (#tempMinutes > #NO_REMAINDER) THEN
+	        #stringMinute := DELETE(IN := DINT_TO_STRING(#tempMinutes), L := #NUMBER_OF_CHAR_TO_DEL, P := #FIRST_POSITION);
+	        #tempTimeResult := CONCAT(IN1 := #separator, IN2 := #stringMinute, IN3 := 'M', IN4 := #tempTimeResult);
+	    END_IF;
+	    
+	    // check if value is greater then zero and add to result string without leading "+"
+	    IF (#tempHours > #NO_REMAINDER) THEN
+	        #stringHour := DELETE(IN := DINT_TO_STRING(#tempHours), L := #NUMBER_OF_CHAR_TO_DEL, P := #FIRST_POSITION);
+	        #tempTimeResult := CONCAT(IN1 := #separator, IN2 := #stringHour, IN3 := 'H', IN4 := #tempTimeResult);
+	    END_IF;
+	    
+	    // check if value is greater then zero and add to result string without leading "+"
+	    IF (#tempDays > #NO_REMAINDER) THEN
+	        #stringDay := DELETE(IN := DINT_TO_STRING(#tempDays), L := #NUMBER_OF_CHAR_TO_DEL, P := #FIRST_POSITION);
+	        #tempTimeResult := CONCAT(IN1 := #stringDay, IN2 := 'D', IN3 := #tempTimeResult);
+	    END_IF;
+	END_REGION
+	
+	REGION OUTPUTS
+	  #LGF_TimeToString := #tempTimeResult;
+	  //ENO mechanism is not used - forced to true.
+	  ENO := TRUE;
+	END_REGION
+	
+END_FUNCTION
+

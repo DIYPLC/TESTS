@@ -1,0 +1,230 @@
+﻿FUNCTION "LGF_StringToTaddr" : TADDR_Param
+TITLE = LGF_StringToTaddr
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_Digital_Industry
+FAMILY : LGF
+NAME : LGF_StringToTaddr
+//The system data type `TADDR_Param` contains address information consisting of an IPV4 address and the port number.
+//
+//The `LGF_StringToTaddr` function converts a variable od data type `String` to a `TADDR_Param` system data type variable.
+   VAR_INPUT 
+      ipAddressString : String;   // IPV4 address string in the format of `192.168.1.200:55047`  [Port number including colon `:` is optional]
+   END_VAR
+
+   VAR_OUTPUT 
+      error : Bool;   // FALSE: No error  TRUE: An error occurred during the execution of the FB
+      status : Word;   // 16#0000-16#7FFF: Status of the FB  16#8000-16#FFFF: Error identification (see following Table)
+   END_VAR
+
+   VAR_TEMP 
+      tempOctetIndex : Int;   // Temp tag for Loop iterator for Octet conversion from string to number
+      tempCharPosition : Int;   // Temp tag to store character position
+      tempAddressString : String;   // Temp string to work on given adress and port
+      tempOctetString : String[#MAX_CHAR_FOR_IP_OCTET_NUMBER];   // Temp string to process octet string
+      tempNumber : UDInt;   // Temp unsigned double integer to process octet and port number conversions
+      tempPortNumberIsSpecified : Bool;   // Temp tag to remeber if Port number is present
+      tempIpAdressTaddr {InstructionName := 'TADDR_Param'; LibVersion := '1.0'} : TADDR_Param;   // Temp tag to stor the converted IP Address and Port number
+   END_VAR
+
+   VAR CONSTANT 
+      STATUS_FINISHED_NO_ERROR : Word := 16#0000;   // Status: Execution finished without errors
+      ERR_OCTET_WRONG_NUMBER_OF_CHAR : Word := 16#8110;   // Error: Wrong number / too many characters in the X'th octet of the IP address
+      ERR_OCTET_STRING_IS_EMPTY : Word := 16#8120;   // Error: No number/ character in the X'th octet of the IP address is given - String is empty
+      ERR_OCTET_EXCEEDS_MAX_IP_ADDRESS : Word := 16#8130;   // Error: Maximum possible number of IP address octet exceeded (255)
+      ERR_PORT_WRONG_NUMBER_OF_CHAR : Word := 16#8150;   // Error: Wrong number / to many characters in string port conversion
+      ERR_PORT_STRING_IS_EMPTY : Word := 16#8151;   // Error: No number/ character in the Port string is given - String is empty
+      ERR_PORT_EXCEEDS_MAX_PORT : Word := 16#8152;   // Error: Maximum number of Port exceeded (65535)
+      MAX_IP_ADDRESS_OCTET_NUMBER : USInt := 255;   // Maximum  number of IP Address Octet
+      MAX_PORT_NUMBER : UInt := 65535;   // Maximum  number of Port Address Number
+      EMPTY_STRING : Int := 0;   // Check if String is empty by using LEN(string)
+      MAX_CHAR_FOR_IP_OCTET_NUMBER : Int := 4;   // Maximum characters of IP Octet including the delimiter Dot '.' or Colon ':'
+      MAX_CHAR_FOR_PORT_NUMBER : Int := 5;   // Maximum characters of Port Number
+      INIT_VAL : USInt := 0;   // Initial values for Ip address and port
+      NUMBER_OF_IP_OCTETS : Int := 4;   // Number of octets in the IP address
+      CHAR_DOT : Char := '.';   // Character Dot '.' as seperator for ip adress octets
+      CHAR_COLON : Char := ':';   // Character Colon ':' as seperator for port from ip adress octets
+      CONVERT_FORMAT_TO_INTEGER : Word := 16#0000;   // Input format of the characters - Decimal fraction "."
+      CONVERT_START_POSITION : UInt := 1;   // Reference to the first character to be converted (first character = 1)
+   END_VAR
+
+
+BEGIN
+	REGION BLOCK INFO HEADER
+	  //===============================================================================
+	  // SIEMENS AG / (c)Copyright 2017
+	  //-------------------------------------------------------------------------------
+	  // Title:            LGF_StringToTaddr
+	  // Comment/Function: This function converts a string IP Address into TADDR Parameter format.
+	  // Library/Family:   LGF (Library General Functions)
+	  // Author:           Siemens Digital Industry Support
+	  // Tested with:      CPU1212C DC/DC/DC FW:V4.2
+	  // Engineering:      TIA Portal V14 Update 1
+	  // Restrictions:     ENO mechanism is not used - Error handling done by error and status
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge       | Changes applied
+	  //----------|------------|------------------------|------------------------------
+	  // 01.00.00 | 30.01.2017 | Siemens Industry Online Support
+	  //                         First released version
+	  // 01.00.01 | 17.08.2018 | Siemens Industry Online Support
+	  //                         Upgrade: TIA V15 Update 2
+	  // 01.00.02 | 23.11.2018 | Siemens Industry Online Support
+	  //                         Upgrade: TIA V15.1
+	  // 01.00.03 | 10.06.2019 | Simatic Systems Support
+	  //                         Standard header and block parameters update
+	  // 01.00.04 | 10.07.2019 | Simatic Systems Support
+	  //                         Code refactoring and performance improvements
+	  // 01.00.06 | 14.11.2019 | Simatic Systems Support
+	  //                         Add ENO handling
+	  // 03.00.00 | 23.04.2020 | Simatic Systems Support | Set version to V3.0.0
+	  //                         Harmonize the version of the whole library
+	  // 03.00.01 | 23.02.2021 | Simatic Systems Support
+	  //                         Insert documentation
+	  //=============================================================================
+	END_REGION Block info header
+	
+	REGION DESCRIPTION
+	  (/*
+	The function converts the IPV4 address with or without port number from data type `String` to `TADDR_Param`.  
+	The string must be in the following form:
+	
+	* without port number: `[0..255].[0..255].[0..255].[0..255]`
+	* with port number: `[0..255].[0..255].[0..255].[0..255]:[0..65535]`
+	
+	##### Example:
+	
+	* The standard string format for an IPV4 address without port number:  
+	`192.168.11.11`
+	* The standard string format for an IPV4 address with port number:  
+	`192.168.11.11:3294`
+	
+	Note
+	:    If you do not specify a port number in the `ipAddressString` parameter, the `Ret_Val.REM_PORT_NR` parameter returns `0`.
+	*/)
+	END_REGION DESCRIPTION
+	
+	REGION Initialization
+	  #tempAddressString := #ipAddressString;
+	  #tempIpAdressTaddr.REM_IP_ADDR[1] := #INIT_VAL;
+	  #tempIpAdressTaddr.REM_IP_ADDR[2] := #INIT_VAL;
+	  #tempIpAdressTaddr.REM_IP_ADDR[3] := #INIT_VAL;
+	  #tempIpAdressTaddr.REM_IP_ADDR[4] := #INIT_VAL;
+	  #tempIpAdressTaddr.REM_PORT_NR := #INIT_VAL;
+	  #LGF_StringToTaddr := #tempIpAdressTaddr;
+	END_REGION
+	
+	REGION Process Address String  
+	  REGION Process octests 1-4
+	    FOR #tempOctetIndex := 1 TO #NUMBER_OF_IP_OCTETS BY 1 DO
+	      // check if loop has not reached the last octet
+	      IF #tempOctetIndex < #NUMBER_OF_IP_OCTETS THEN
+	        // search for dot as octet seperator
+	        // there has to be a dot present between the octets
+	        #tempCharPosition := FIND(IN1 := #tempAddressString, IN2 := #CHAR_DOT);
+	        
+	      ELSE
+	        // search for colon as port seperator after the last Octet
+	        #tempCharPosition := FIND(IN1 := #tempAddressString, IN2 := #CHAR_COLON);
+	        
+	        // if colon is present, there is a port number specified / check if Port number added
+	        #tempPortNumberIsSpecified := (#tempCharPosition > 0);
+	        
+	        // if no port is spezified, its just the last octet
+	        IF NOT #tempPortNumberIsSpecified THEN
+	          // need to set the char position to the end of string + one for later cobesion and checks
+	          #tempCharPosition := LEN(#tempAddressString) + 1;
+	        END_IF;
+	      END_IF;
+	      
+	      REGION Octet conversion
+	        // check if IP Octet contains more then three digits --> Error
+	        IF #tempCharPosition > #MAX_CHAR_FOR_IP_OCTET_NUMBER THEN
+	          #error := TRUE;
+	          #status := #ERR_OCTET_WRONG_NUMBER_OF_CHAR OR INT_TO_WORD(#tempOctetIndex);
+	          #LGF_StringToTaddr := #tempIpAdressTaddr;
+	          RETURN;
+	        END_IF;
+	        
+	        // extract octet string
+	        #tempOctetString := LEFT(IN := #tempAddressString, L := #tempCharPosition - 1);
+	        // Check if Octet string is empty --> Error
+	        IF LEN(#tempOctetString) = #EMPTY_STRING THEN
+	          #error := TRUE;
+	          #status := #ERR_OCTET_STRING_IS_EMPTY OR INT_TO_WORD(#tempOctetIndex);
+	          #LGF_StringToTaddr := #tempIpAdressTaddr;
+	          RETURN;
+	        END_IF;
+	        
+	        // Convert the octet string to numerical value
+	        STRG_VAL(IN     := #tempOctetString,
+	                 FORMAT := #CONVERT_FORMAT_TO_INTEGER,
+	                 P      := #CONVERT_START_POSITION,
+	                 OUT    => #tempNumber);
+	        
+	        // check if the octet number exeeds the maximum possible range of 255 of USInt --> Error
+	        IF #tempNumber > #MAX_IP_ADDRESS_OCTET_NUMBER THEN
+	          #error := TRUE;
+	          #status := #ERR_OCTET_EXCEEDS_MAX_IP_ADDRESS OR INT_TO_WORD(#tempOctetIndex);
+	          #LGF_StringToTaddr := #tempIpAdressTaddr;
+	          RETURN;
+	        END_IF;
+	        
+	        // add address octet to temp address tag
+	        #tempIpAdressTaddr.REM_IP_ADDR[#tempOctetIndex] := UDINT_TO_USINT(#tempNumber);
+	        
+	        // delete octet string from address string
+	        #tempAddressString := DELETE(IN := #tempAddressString, P := 1, L := #tempCharPosition);
+	      END_REGION Octet conversion
+	    END_FOR;
+	  END_REGION Process octests 1-4
+	  
+	  REGION PORT number conversion
+	    // If the string contains a port number too, parse it
+	    IF #tempPortNumberIsSpecified THEN
+	      // lenght of string exceeds length of port string --> Error
+	      IF LEN(#tempAddressString) > #MAX_CHAR_FOR_PORT_NUMBER THEN
+	        #error := TRUE;
+	        #status := #ERR_PORT_WRONG_NUMBER_OF_CHAR;
+	        #LGF_StringToTaddr := #tempIpAdressTaddr;
+	        RETURN;
+	        
+	        // Check if string is empty --> Error
+	      ELSIF LEN(#tempAddressString) = #EMPTY_STRING THEN
+	        #error := TRUE;
+	        #status := #ERR_PORT_STRING_IS_EMPTY;
+	        #LGF_StringToTaddr := #tempIpAdressTaddr;
+	        RETURN;
+	      END_IF;
+	      
+	      // Convert the port number string to numerical value
+	      STRG_VAL(IN     := #tempAddressString,
+	               FORMAT := #CONVERT_FORMAT_TO_INTEGER,
+	               P      := #CONVERT_START_POSITION,
+	               OUT    => #tempNumber);
+	      
+	      // check if the Port number exeeds the maximum possible range of 65535 of UInt --> Error
+	      IF #tempNumber > #MAX_PORT_NUMBER THEN
+	        #error := TRUE;
+	        #status := #ERR_PORT_EXCEEDS_MAX_PORT;
+	        #LGF_StringToTaddr := #tempIpAdressTaddr;
+	        RETURN;
+	      END_IF;
+	      
+	      // add port number to temp address tag
+	      #tempIpAdressTaddr.REM_PORT_NR := UDINT_TO_UINT(#tempNumber);
+	    END_IF;
+	  END_REGION PORT number conversion
+	  
+	END_REGION
+	
+	REGION Outputs
+	  #error := FALSE;
+	  #status := #STATUS_FINISHED_NO_ERROR;
+	  #LGF_StringToTaddr := #tempIpAdressTaddr;
+	  //ENO mechanism is not used - forced to true.
+	  ENO := TRUE;
+	END_REGION
+	
+END_FUNCTION
+

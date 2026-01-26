@@ -1,0 +1,100 @@
+﻿FUNCTION_BLOCK "FunctionBlockTemplateAdvancved"
+TITLE = Function Block
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : '(department/personInCharge/contact)'
+FAMILY : '(family)'
+//Function block template for writing your own software modules
+   VAR_INPUT 
+      myInputVariable : Int;   // Add a constant to the given actual value
+   END_VAR
+
+   VAR_OUTPUT 
+      myOutputVariable { ExternalWritable := 'False'} : Int;   // Input value + constant
+      error { ExternalWritable := 'False'} : Bool;   // TRUE: An error occurred during the execution of the functionality
+      status { ExternalWritable := 'False'} : Word;   // 16#0000 - 16#7FFF: Status of the FB, 16#8000 - 16#FFFF: Error identification
+      diagnostics { ExternalWritable := 'False'} : "typeDiagnostics";   // Diagnostics information of FB (optional)
+   END_VAR
+
+   VAR 
+      statVariable { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Static variable to store values between cyclic call's
+      instWatchdog {InstructionName := 'IEC_TIMER'; LibVersion := '1.0'; ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'; S7_SetPoint := 'False'} : IEC_TIMER;   // Multi instance variable e.g. watchdog timer
+      instWatchDogs {InstructionName := 'IEC_TIMER'; LibVersion := '1.0'; ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'; S7_SetPoint := 'False'} : Array[0..#NO_OF_WATCHDOG] of IEC_TIMER;   // Multi instance array is plural  e.g. watchdog timer's
+      statDiagnostic { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'; S7_SetPoint := 'False'} : "typeDiagnostics";   // Static diagnostic variable to store internal diagnostic data like status and return value of called FBs, FCs and system blocks
+      statEmptyDiagnostics { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'; S7_SetPoint := 'False'} : "typeDiagnostics" := (#STATUS_FINISHED_NO_ERROR, #SUB_STATUS_NO_ERROR, ());   // Empty diagnostics information (for initialization purposes only)
+   END_VAR
+
+   VAR_TEMP 
+      tempVariable : Int;   // Temp value for “unspecified”
+   END_VAR
+
+   VAR CONSTANT 
+      NO_OF_WATCHDOG : DInt := 10;   // Maximum number of Watchdogs
+      TEMPORARY_INIT_VALUE : Int := 10;   // Value for the initialization of the temporary tag
+      SUB_STATUS_NO_ERROR : Word := 16#0000;   // NO error occurred in sub function call
+      STATUS_FINISHED_NO_ERROR : Word := 16#0000;   // Execution finished without errors
+      ERR_UNDEFINED : Word := 16#8000;   // Error: Due to an undefined event
+      STATUSRANGE_DEFINITIONS_ERR_IN_BLOCK_OPERATION : Word := 16#8001;   // Status range definitions along to SIMATIC StyleGuide --> Error: Wrong operation of the function block
+      STATUSRANGE_DEFINITIONS_ERR_PARAMETRIZATION : Word := 16#8200;   // Status range definitions along to SIMATIC StyleGuide --> Error: during parameterization
+      STATUSRANGE_DEFINITIONS_ERR_PROCESSING_EXTERN : Word := 16#8400;   // Status range definitions along to SIMATIC StyleGuide --> Error: While processing from outside (e. g. wrong I/O signals, axis not referenced)
+      STATUSRANGE_DEFINITIONS_ERR_PROCESSING_INTERN : Word := 16#8600;   // Status range definitions along to SIMATIC StyleGuide --> Error: While processing internally (e. g. when calling a system function)
+      STATUSRANGE_DEFINITIONS_ERR_AREA_RESERVED : Word := 16#8800;   // Status range definitions along to SIMATIC StyleGuide --> Error: Reserved area
+      STATUSRANGE_DEFINITIONS_ERR_USER_DEFINED_CLASSES : Word := 16#9000;   // Status range definitions along to SIMATIC StyleGuide --> Error: User-defined error classes
+   END_VAR
+
+
+BEGIN
+	REGION BLOCK INFO HEADER
+	  //===============================================================================
+	  // (c)Copyright (company) (year)
+	  //-------------------------------------------------------------------------------
+	  // Title:            (Title of this Block)
+	  // Comment/Function: (that is implemented in the block)
+	  // Library/Family:   (that the source is dedicated to)
+	  // Author:           (department / person in charge / contact)
+	  // Tested with:      (test system with FW version)
+	  // Engineering:      TIA Portal (SW version)
+	  // Restrictions:     (OB types, etc.)
+	  // Requirements:     (hardware, technological package, memory needed, etc.)
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge       | Changes applied
+	  //----------|------------|------------------------|------------------------------
+	  // 01.00.00 | yyyy-mm-dd | (name of expert)       | First released version
+	  //===============================================================================
+	END_REGION BLOCK INFO HEADER
+	
+	REGION DESCRIPTION
+	(/*
+	
+	*/)
+	END_REGION DESCRIPTION
+	
+	REGION INITIALISATION  
+	  // TODO: Initialize functionality: reset of variables, diagnostics, etc.
+	  // 
+	  #tempVariable := #TEMPORARY_INIT_VALUE;
+	  
+	  #statDiagnostic := #statEmptyDiagnostics;
+	END_REGION INITIALISATION  
+	
+	REGION PROGRAM LOGIC
+	  // TODO: Use this region for application specific code
+	  // 
+	  
+	  // just an example code fragment
+	  #tempVariable += #myInputVariable;
+	END_REGION PROGRAM LOGIC
+	
+	REGION OUTPUTS
+	  // TODO: Write application specific temp values to outputs
+	  // 
+	  #myOutputVariable := #tempVariable;
+	  #error := #statDiagnostic.status.%X15;
+	  #status := #statDiagnostic.status;
+	  #diagnostics := #statDiagnostic;
+	  // if ENO mechanism is not used / not wanted replace the following line by --> ENO := TRUE;
+	  ENO := NOT #statDiagnostic.status.%X15;
+	END_REGION OUTPUTS
+	
+END_FUNCTION_BLOCK
+

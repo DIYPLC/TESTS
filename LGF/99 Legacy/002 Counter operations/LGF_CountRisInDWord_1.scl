@@ -1,0 +1,247 @@
+﻿FUNCTION "LGF_CountRisInDWord_1" : Int
+TITLE = LGF_CountRisInDWord
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_Digital_Industry_Support
+FAMILY : LGF
+NAME : LGF_CountRisInDWord
+//The function analyzes a variable of the type DWORD and outputs how often a 0-1
+//sequence (rising edge) occurs in the variable.
+//
+//NOTE
+//:    ==LEGACY FUNCTION==
+//:    Please update and use the FB with the same name `LGF_CountRisInDWord` in the future!  
+//This function is no longer maintained!
+   VAR_INPUT 
+      dWordActCycle : DWord;   // Input Double word in which the rising edges are counted
+      dWordPrevCycle : DWord;   // Double word from the previous cycle
+   END_VAR
+
+   VAR_TEMP 
+      tempCount : Int;   // Temp count tag
+   END_VAR
+
+
+BEGIN
+	REGION Block info header
+	  //=============================================================================
+	  // SIEMENS AG / (c)Copyright 2017
+	  //-----------------------------------------------------------------------------
+	  // Library:       LGF (Library General Functions)
+	  // Tested with:   CPU1212C DC/DC/DC FW:V4.2
+	  // Engineering:   TIA Portal V14 Update 1
+	  // Restrictions:  -
+	  // Requirements:  PLC (S7-1200 / S7-1500)
+	  // Functionality: Detects and counts rising edges in variables of type DWORD
+	  //                NOTE
+	  //                ==LEGACY FUNCTION==
+	  //                Please update AND use the FB with the same name `LGF_CountRisInDWord` in the future!
+	  //                This function is no longer maintained!
+	  //-----------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge       | Changes applied
+	  //----------|------------|------------------------|------------------------------
+	  // Change log table:
+	  // Version  Date        In charge / Changes applied
+	  // 01.00.00 19.08.2015  Siemens Industry Online Support
+	  //                      First released version
+	  // 01.00.01 02.01.2017  Siemens Industry Online Support
+	  //                      Upgrade: TIA V14 Update 1
+	  // 01.00.02 17.08.2018  Siemens Industry Online Support
+	  //                      Upgrade: TIA V15 Update 2
+	  // 01.00.03 23.11.2018  Siemens Industry Online Support
+	  //                      Upgrade: TIA V15.1
+	  // 03.00.01 12.11.2020  Simatic Systems Support
+	  //                      Insert documentation and LEGACY Hint
+	  //                      Please use the FB with the same name `LGF_CountRisInDWord` in the future
+	  //=============================================================================
+	END_REGION Block info header
+	
+	REGION DESCRIPTION
+	  (/*
+	In a variable of the data type DWORD, the block counts the rising edges (0-1 transitions) from left to right. The output `countRisInDWord` outputs the number of rising edges.
+	
+	So that rising edges at the variable limit are also detected, the input `value` is copied to the static variable `statDWordPrevCycle` at the end of the evaluation and evaluated in the next cycle.
+	
+	##### Example
+	
+	The following example illustrates the block’s functionality. In this case, it is assumed that a signal of unknown length is continuously sampled in the form of double words (DWORD) per cycle.
+	
+	Within this signal, the 0-1 sequences (rising edges) must be counted and output continuously. To detect the rising edge on variable limits, as in this example, the input “statDWordPrevCycle” must be interconnected with the double word of the previous sampling.
+	
+	Table: Example
+	
+	{.pageWidth}
+	+:---------------------------------------:+:---------------------------------------:+
+	| DWord previous cycle                    | DWord actual cycle                      |
+	| `statDWordPrevCycle`                    | `value`                                 |
+	+=========================================+=========================================+
+	| 1001_0000_0001_1010_1001_0000_0001_1010 | 1010_1010_0001_1111_0100_0011_1000_0101 |
+	+-----------------------------------------+-----------------------------------------+
+	
+	Number of 0-1 sequences (rising edges): `Ret_Val` = 9
+	
+	------
+	
+	##### Application example:
+	
+	Excerpt from the manual of the technology module TM Timer DIDQ 16x24V:
+	
+	With the oversampling function, the technology module records the state of the respective digital input per application cycle (e.g. OB61) at 32 points in time with a uniform time interval. The 32 states are jointly returned as 32-bit values in the checkback interface.
+	
+	Figure: Example of an oversampling of DI0 on TM Timer DIDQ 16x24V
+	
+	![LGF_CountFalRiseInDWord - Example of an oversampling of DI0 on TM Timer DIDQ 16x24V](LGF_CountFalRiseInDWord.PNG "LGF_CountFalRiseInDWord - Example of an oversampling of DI0 on TM Timer DIDQ 16x24V")
+	
+	The block LGF_CountRisInDWordFB is used in this case to count how often a rising edge occurs.
+	
+	SIMATIC ET 200MP/S7-1500 Technology Module TM Timer DIDQ 16x24V  
+	(6ES7552-1AA00-0AB0)  
+	https://support.industry.siemens.com/cs/ww/en/view/95153313
+	*/)
+	END_REGION DESCRIPTION
+	
+	// Initialization
+	#tempCount := 0;
+	
+	//Byte 0
+	//Bit                76543210765432107654321076543210         76543210765432107654321076543210
+	IF ((#dWordActCycle AND DW#2#00000000000000000000000000000011) = DW#2#00000000000000000000000000000001) THEN
+	  #tempCount := #tempCount + 1;
+	END_IF;
+	//Bit                76543210765432107654321076543210         76543210765432107654321076543210
+	IF ((#dWordActCycle AND DW#2#00000000000000000000000000000110) = DW#2#00000000000000000000000000000010) THEN
+	  #tempCount := #tempCount + 1;
+	END_IF;
+	//Bit                76543210765432107654321076543210         76543210765432107654321076543210
+	IF ((#dWordActCycle AND DW#2#00000000000000000000000000001100) = DW#2#00000000000000000000000000000100) THEN
+	  #tempCount := #tempCount + 1;
+	END_IF;
+	//Bit                76543210765432107654321076543210         76543210765432107654321076543210
+	IF ((#dWordActCycle AND DW#2#00000000000000000000000000011000) = DW#2#00000000000000000000000000001000) THEN
+	  #tempCount := #tempCount + 1;
+	END_IF;
+	//Bit                76543210765432107654321076543210         76543210765432107654321076543210
+	IF ((#dWordActCycle AND DW#2#00000000000000000000000000110000) = DW#2#00000000000000000000000000010000) THEN
+	  #tempCount := #tempCount + 1;
+	END_IF;
+	//Bit                76543210765432107654321076543210         76543210765432107654321076543210
+	IF ((#dWordActCycle AND DW#2#00000000000000000000000001100000) = DW#2#00000000000000000000000000100000) THEN
+	  #tempCount := #tempCount + 1;
+	END_IF;
+	//Bit                76543210765432107654321076543210         76543210765432107654321076543210
+	IF ((#dWordActCycle AND DW#2#00000000000000000000000011000000) = DW#2#00000000000000000000000001000000) THEN
+	  #tempCount := #tempCount + 1;
+	END_IF;
+	//Bit                76543210765432107654321076543210         76543210765432107654321076543210
+	IF ((#dWordActCycle AND DW#2#00000000000000000000000110000000) = DW#2#00000000000000000000000010000000) THEN
+	  #tempCount := #tempCount + 1;
+	END_IF;
+	
+	//Byte 1
+	//Bit                76543210765432107654321076543210         76543210765432107654321076543210
+	IF ((#dWordActCycle AND DW#2#00000000000000000000001100000000) = DW#2#00000000000000000000000100000000) THEN
+	  #tempCount := #tempCount + 1;
+	END_IF;
+	//Bit                76543210765432107654321076543210         76543210765432107654321076543210
+	IF ((#dWordActCycle AND DW#2#00000000000000000000011000000000) = DW#2#00000000000000000000001000000000) THEN
+	  #tempCount := #tempCount + 1;
+	END_IF;
+	//Bit                76543210765432107654321076543210         76543210765432107654321076543210
+	IF ((#dWordActCycle AND DW#2#00000000000000000000110000000000) = DW#2#00000000000000000000010000000000) THEN
+	  #tempCount := #tempCount + 1;
+	END_IF;
+	//Bit                76543210765432107654321076543210         76543210765432107654321076543210
+	IF ((#dWordActCycle AND DW#2#00000000000000000001100000000000) = DW#2#00000000000000000000100000000000) THEN
+	  #tempCount := #tempCount + 1;
+	END_IF;
+	//Bit                76543210765432107654321076543210         76543210765432107654321076543210
+	IF ((#dWordActCycle AND DW#2#00000000000000000011000000000000) = DW#2#00000000000000000001000000000000) THEN
+	  #tempCount := #tempCount + 1;
+	END_IF;
+	//Bit                76543210765432107654321076543210         76543210765432107654321076543210
+	IF ((#dWordActCycle AND DW#2#00000000000000000110000000000000) = DW#2#00000000000000000010000000000000) THEN
+	  #tempCount := #tempCount + 1;
+	END_IF;
+	//Bit                76543210765432107654321076543210         76543210765432107654321076543210
+	IF ((#dWordActCycle AND DW#2#00000000000000001100000000000000) = DW#2#00000000000000000100000000000000) THEN
+	  #tempCount := #tempCount + 1;
+	END_IF;
+	//Bit                76543210765432107654321076543210         76543210765432107654321076543210
+	IF ((#dWordActCycle AND DW#2#00000000000000011000000000000000) = DW#2#00000000000000001000000000000000) THEN
+	  #tempCount := #tempCount + 1;
+	END_IF;
+	
+	//Byte 2
+	//Bit                76543210765432107654321076543210         76543210765432107654321076543210
+	IF ((#dWordActCycle AND DW#2#00000000000000110000000000000000) = DW#2#00000000000000010000000000000000) THEN
+	  #tempCount := #tempCount + 1;
+	END_IF;
+	//Bit                76543210765432107654321076543210         76543210765432107654321076543210
+	IF ((#dWordActCycle AND DW#2#00000000000001100000000000000000) = DW#2#00000000000000100000000000000000) THEN
+	  #tempCount := #tempCount + 1;
+	END_IF;
+	//Bit                76543210765432107654321076543210         76543210765432107654321076543210
+	IF ((#dWordActCycle AND DW#2#00000000000011000000000000000000) = DW#2#00000000000001000000000000000000) THEN
+	  #tempCount := #tempCount + 1;
+	END_IF;
+	//Bit                76543210765432107654321076543210         76543210765432107654321076543210
+	IF ((#dWordActCycle AND DW#2#00000000000110000000000000000000) = DW#2#00000000000010000000000000000000) THEN
+	  #tempCount := #tempCount + 1;
+	END_IF;
+	//Bit                76543210765432107654321076543210         76543210765432107654321076543210
+	IF ((#dWordActCycle AND DW#2#00000000001100000000000000000000) = DW#2#00000000000100000000000000000000) THEN
+	  #tempCount := #tempCount + 1;
+	END_IF;
+	//Bit                76543210765432107654321076543210         76543210765432107654321076543210
+	IF ((#dWordActCycle AND DW#2#00000000011000000000000000000000) = DW#2#00000000001000000000000000000000) THEN
+	  #tempCount := #tempCount + 1;
+	END_IF;
+	//Bit                76543210765432107654321076543210         76543210765432107654321076543210
+	IF ((#dWordActCycle AND DW#2#00000000110000000000000000000000) = DW#2#00000000010000000000000000000000) THEN
+	  #tempCount := #tempCount + 1;
+	END_IF;
+	//Bit                76543210765432107654321076543210         76543210765432107654321076543210
+	IF ((#dWordActCycle AND DW#2#00000001100000000000000000000000) = DW#2#00000000100000000000000000000000) THEN
+	  #tempCount := #tempCount + 1;
+	END_IF;
+	
+	//Byte 3
+	//Bit                76543210765432107654321076543210         76543210765432107654321076543210
+	IF ((#dWordActCycle AND DW#2#00000011000000000000000000000000) = DW#2#00000001000000000000000000000000) THEN
+	  #tempCount := #tempCount + 1;
+	END_IF;
+	//Bit                76543210765432107654321076543210         76543210765432107654321076543210
+	IF ((#dWordActCycle AND DW#2#00000110000000000000000000000000) = DW#2#00000010000000000000000000000000) THEN
+	  #tempCount := #tempCount + 1;
+	END_IF;
+	//Bit                76543210765432107654321076543210         76543210765432107654321076543210
+	IF ((#dWordActCycle AND DW#2#00001100000000000000000000000000) = DW#2#00000100000000000000000000000000) THEN
+	  #tempCount := #tempCount + 1;
+	END_IF;
+	//Bit                76543210765432107654321076543210         76543210765432107654321076543210
+	IF ((#dWordActCycle AND DW#2#00011000000000000000000000000000) = DW#2#00001000000000000000000000000000) THEN
+	  #tempCount := #tempCount + 1;
+	END_IF;
+	//Bit                76543210765432107654321076543210         76543210765432107654321076543210
+	IF ((#dWordActCycle AND DW#2#00110000000000000000000000000000) = DW#2#00010000000000000000000000000000) THEN
+	  #tempCount := #tempCount + 1;
+	END_IF;
+	//Bit                76543210765432107654321076543210         76543210765432107654321076543210
+	IF ((#dWordActCycle AND DW#2#01100000000000000000000000000000) = DW#2#00100000000000000000000000000000) THEN
+	  #tempCount := #tempCount + 1;
+	END_IF;
+	//Bit                76543210765432107654321076543210         76543210765432107654321076543210
+	IF ((#dWordActCycle AND DW#2#11000000000000000000000000000000) = DW#2#01000000000000000000000000000000) THEN
+	  #tempCount := #tempCount + 1;
+	END_IF;
+	//Bit                 76543210765432107654321076543210         76543210765432107654321076543210
+	IF (((#dWordActCycle AND DW#2#10000000000000000000000000000000) = DW#2#10000000000000000000000000000000)
+	  AND ((#dWordPrevCycle AND DW#2#00000000000000000000000000000001) = DW#2#00000000000000000000000000000000))
+	THEN
+	  #tempCount := #tempCount + 1;
+	END_IF;
+	
+	//Output
+	#LGF_CountRisInDWord_1 := #tempCount;
+END_FUNCTION
+

@@ -1,0 +1,121 @@
+﻿FUNCTION "LGF_SimpleSmoothingFC" : Void
+TITLE = LGF_SimpleSmoothingFC
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_Digital_Industry
+FAMILY : LGF
+NAME : LGF_SimpleSmoothingFC
+//The function calculates the linear mean value acyclically.
+//
+//The simplest form of smoothing a sequence of measured values is to calculate the linear mean value by three points.
+//
+//The function reads an array that is smoothed. $N-2$ smoothed measured values can be calculated from N measured values. Therefore, the output array in the index (0) and index (N) contains the value 0.
+   VAR_OUTPUT 
+      error : Bool;   // FALSE: No error  TRUE: An error occurred during the execution of the FB
+      status : Word;   // 16#0000-16#7FFF: Status of the FB  16#8000-16#FFFF: Error identification (see following Table)
+   END_VAR
+
+   VAR_IN_OUT 
+      values : Array[*] of LReal;   // Values that are to be included in the smoothing.
+      smoothedValues : Array[*] of LReal;   // The smoothed values.
+   END_VAR
+
+   VAR_TEMP 
+      tempCount : Int;   // Temp count
+      tempNumberOfElements : Int;   // Temp number of elements
+      tempNumberOfElementsOut : Int;   // Temp number of elements out
+      tempLowerBound : Int;   // Temp lower bound
+      tempUpperBound : Int;   // Temp upper bound
+      tempLowerBoundOut : Int;   // Temp lower bound out
+      tempUpperBoundOut : Int;   // Temp upper bound out
+   END_VAR
+
+   VAR CONSTANT 
+      NUMBER_OF_ELEMENTS_CORRECTION : Int := 1;   // Count also the starting value. e.g. [0.. 9] = 10 elements
+      DIMENSION_ONE : UDInt := 1;   // First dimension of the array
+      MINIMUM_ARRAY_ELEMENTS : UDInt := 3;   // The needed minimum number of ARRAY elements. Starting from 0
+      NUMBER_OF_VALUES : UDInt := 3;   // Number of averaged values
+      STATUS_FINISHED_NO_ERROR : Word := 16#0000;   // Status: Execution finished without errors
+      ERR_NOT_ENOUGH_VALUES : Word := 16#8400;   // Error: Not enough values.  The block requires three (3) values to calculate a smoothed value. Increase the size of the array at the input parameter `values`. Adapt the array on the output parameter `smoothedValues` to the new size.
+      ERR_ARRAY_DIFFERENT : Word := 16#8401;   // Error: The Arraysizes are not equal.  The arrays `values` and `smoothedValues` must have the same size.
+   END_VAR
+
+
+BEGIN
+	REGION Block info header
+	  //============================================================================
+	  // SIEMENS AG / (c)Copyright 2017
+	  //----------------------------------------------------------------------------
+	  // Title:            LGF_SimpleSmoothingFC
+	  // Comment/Function: This function calculates the smoothed values
+	  // Library/Family:   LGF(Library General Functions)
+	  // Author:           Siemens Digital Industry Support
+	  // Tested with:      S7-PLCSIM Advanced V2.0 SP1
+	  // Engineering:      TIA Portal V15 Update 2
+	  // Restrictions:     ENO disabled - error handling done by error and status
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge       | Changes applied
+	  //----------|------------|------------------------|------------------------------
+	  // 01.00.00 | 23.11.2018 | Siemens Industry Online Support
+	  //                       | First released version
+	  // 01.00.01 | 15.11.2019 | Simatic Systems Support
+	  //                       | Regions, comments and constants are added
+	  // 03.00.00 | 23.04.2020 | Simatic Systems Support
+	  //                       | Set version to V3.0.0, harmonize the version of the whole library
+	  // 03.00.01 | 06.04.2021 | Simatic Systems Support
+	  //                       | Insert documentation
+	  //=============================================================================
+	END_REGION Block info header
+	
+	REGION DESCRIPTION
+	  (/*
+	The function calculates the smoothed values using the following formula:
+	
+	$$
+	  \overline{y(n)} = \frac{y(n-1) + y(n) + y(n+1)}{3}
+	$$
+	
+	The calculated value is output or the calculated values are output at output `smoothedValue`.
+	
+	Based on this formula, the function cannot calculate values for the elements 0 and N.
+	*/)
+	END_REGION DESCRIPTION
+	
+	REGION Checking number of lower and upper bound
+	  #tempLowerBound := DINT_TO_INT(LOWER_BOUND(ARR := #values, DIM := #DIMENSION_ONE));
+	  #tempUpperBound := DINT_TO_INT(UPPER_BOUND(ARR := #values, DIM := #DIMENSION_ONE));
+	  
+	  #tempNumberOfElements := #tempUpperBound - #tempLowerBound + #NUMBER_OF_ELEMENTS_CORRECTION;
+	  
+	  #tempLowerBoundOut := DINT_TO_INT(LOWER_BOUND(ARR := #smoothedValues, DIM := #DIMENSION_ONE));
+	  #tempUpperBoundOut := DINT_TO_INT(UPPER_BOUND(ARR := #smoothedValues, DIM := #DIMENSION_ONE));
+	  
+	  #tempNumberOfElementsOut := #tempUpperBoundOut - #tempLowerBoundOut + #NUMBER_OF_ELEMENTS_CORRECTION;
+	  
+	  // Check if size of arrays is ok
+	  IF #tempNumberOfElements <> #tempNumberOfElementsOut THEN
+	    #error := true;
+	    #status := #ERR_ARRAY_DIFFERENT;
+	    RETURN;
+	    // Check size of arrays if the are big enough
+	  ELSIF #tempNumberOfElements < #MINIMUM_ARRAY_ELEMENTS THEN
+	    #error := true;
+	    #status := #ERR_NOT_ENOUGH_VALUES;
+	    RETURN;
+	  END_IF;
+	  
+	  // Caluclating smoothed value
+	  // y(Nsmoothed)= (y(n-1)+y(n)+y(n+1)) / 3
+	  FOR #tempCount := #tempLowerBound + 1 TO #tempUpperBound - 1 DO
+	    #smoothedValues[#tempCount] := (#values[#tempCount - 1] + #values[#tempCount] + #values[#tempCount + 1]) / #NUMBER_OF_VALUES;
+	  END_FOR;
+	  
+	  #error := false;
+	  #status := #STATUS_FINISHED_NO_ERROR;
+	  // ENO mechanism is not used - forced to true.
+	  ENO := TRUE;
+	END_REGION
+	
+END_FUNCTION
+

@@ -1,0 +1,229 @@
+﻿FUNCTION "LGF_DTLToString_ISO" : String
+TITLE = LGF_DTLToString_ISO
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_Digital_Industry
+FAMILY : LGF
+NAME : LGF_DTLToString_ISO
+//This function converts a date of data type DTL into a character string of data type STRING in international format (ISO) (YYYY MM DD…).
+   VAR_INPUT 
+      "date" {InstructionName := 'DTL'; LibVersion := '1.0'} : DTL;   // Date to convert as DTL tag
+      separator { S7_PredefinedAssignment := '$'-$''; S7_HiddenAssignment := 'Hide'; S7_ShowAssignmentIfParamsNotIdentical := 'true'} : Char;   // Separator between the components of the output date.
+      separatorDateAndTime { S7_HiddenAssignment := 'Hide'; S7_PredefinedAssignment := '$' $''; S7_ShowAssignmentIfParamsNotIdentical := 'true'} : Char;   // Separator between the components date and time.
+   END_VAR
+
+   VAR_TEMP 
+      tempString : String;   // Temp string to setup the date string
+      tempIndex : DInt;   // Temp iterator for replacing withspaces with '0' in nanosecondstring
+   END_VAR
+
+   VAR CONSTANT 
+      CONVERT_SIZE_YEAR : USInt := 4;   // Number of character positions for Year
+      CONVERT_SIZE_MONTH_DAY_HOUR_MINUTE_SECOND : USInt := 2;   // Number of character positions for Month, Day, Minute and Second
+      CONVERT_SIZE_NANOSECOND : USInt := 9;   // Number of character positions for Nanoseconds
+      CONVERT_PRECISION : USInt := 0;   // Number of decimal places to convert
+      CONVERT_FORMAT_TO_STRING : Word := 16#0000;   // Output format of the characters
+      CONVERT_START_POSITION_YEAR : UInt := 1;   // Character starting in string at which position the result is written.
+      CONVERT_START_POSITION_MONTH : UInt := 6;   // Character starting in string at which position the result is written.
+      CONVERT_START_POSITION_DAY : UInt := 9;   // Character starting in string at which position the result is written.
+      CONVERT_START_POSITION_HOUR : UInt := 12;   // Character starting in string at which position the result is written.
+      CONVERT_START_POSITION_MINUTE : UInt := 15;   // Character starting in string at which position the result is written.
+      CONVERT_START_POSITION_SECOND : UInt := 18;   // Character starting in string at which position the result is written.
+      CONVERT_START_POSITION_NANOSECOND : UInt := 21;   // Character starting in string at which position the result is written.
+      SEPARATOR_POSITION_YEAR_MONTH : UInt := 5;   // Character starting in string at which position the result is written.
+      SEPARATOR_POSITION_MONTH_DAY : UInt := 8;   // Character starting in string at which position the result is written.
+      SEPARATOR_POSITION_DATE_AND_TIME : UInt := 11;   // Character starting in string at which position the result is written.
+      SEPARATOR_POSITION_HOUR_MINUTE : UInt := 14;   // Character starting in string at which position the result is written.
+      SEPARATOR_POSITION_MINUTE_SECOND : UInt := 17;   // Character starting in string at which position the result is written.
+      SEPARATOR_POSITION_SECOND_NANOSECOND : UInt := 20;   // Character starting in string at which position the result is written.
+      SEPARATOR_NANOSECOND : Char := '.';   // Seperator for Nanosecond
+      SEPARATOR_TIME : Char := ':';   // Seperator for Time
+      SEPARATOR_DATE : Char := '-';   // Default separator for Date
+      SEPARATOR_DATE_AND_TIME : Char := ' ';   // Default separator between Date and Time
+      REPLACE_NANOSECOND_COUNT : DInt := 8;   // Number of Nanosecond characters to be checked for replacing withspaces with '0'
+   END_VAR
+
+
+BEGIN
+	REGION BLOCK INFO HEADER
+	  //===============================================================================
+	  // SIEMENS AG / (c)Copyright 2019
+	  //-------------------------------------------------------------------------------
+	  // Title:            LGF_DTLToString_ISO
+	  // Comment/Function: This function converts a date of data type DTL into a character string of data type STRING in international format (YYYY MM DD…).
+	  // Library/Family:   LGF (Library General Functions)
+	  // Author:           Siemens Digital Industry Support
+	  // Tested with:      S7-PLCSIM Advanced V2.0 SP1
+	  // Engineering:      TIA Portal V15.1
+	  // Restrictions:     ENO mechanism is not used, no error handling
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge       | Changes applied
+	  //----------|------------|------------------------|------------------------------
+	  // 01.00.00 | 15.06.2016 | Siemens Industry Online Support
+	  //                         First released version
+	  // 01.00.01 | 02.01.2017 | Siemens Industry Online Support
+	  //                         Upgrade: TIA Portal V14 Update 1
+	  // 01.00.02 | 17.08.2018 | Siemens Industry Online Support
+	  //                         Upgrade: TIA V15 Update 2
+	  // 01.00.03 | 23.11.2018 | Siemens Industry Online Support
+	  //                         Upgrade: TIA V15.1
+	  // 01.00.04 | 17.07.2019 | Simatic Systems Support
+	  //                         Bugfix - nanosecond precision and '0' filling
+	  // 01.00.05 | 18.07.2019 | Simatic Systems Support
+	  //                         Renamed from "LGF_DTLtoString" to "LGF_DTLToString_ISO"
+	  //                         Split into two blocks, removed "format" input
+	  // 03.00.00 | 23.04.2020 | Simatic Systems Support | Set version to V3.0.0
+	  //                         Harmonize the version of the whole library
+	  // 03.00.01 | 23.02.2021 | Simatic Systems Support
+	  //                         Insert documentation
+	  // 03.01.00 | 25.07.2025 | Simatic Systems Support
+	  //                         Insert parameter for separator between Data and time
+	  //                         Assign default value '-' for separator parameter
+	  // 03.01.01 | 09.10.2025 | Simatic Systems Support
+	  //                         Spelling errors
+	  //=============================================================================
+	END_REGION Block info header
+	
+	REGION DESCRIPTION
+	  (/*
+	The block reads a date of data type DTL and converts the individual components of the date (year, month, day, hour…) into a character string and outputs it in international format (ISO 8601). The separator between the components of the date is variable.
+	
+	##### International format (ISO 8601):
+	
+	{.imagePageWidth}
+	![LGF_DTLToString_ISO - Structure of the character string in accordance with ISO 8601](LGF_DTLToString_ISO.png "LGF_DTLToString_ISO - Structure of the character string in accordance with ISO 8601")
+	
+	##### Separator:
+	
+	At the input parameter `separator`, you specify the separator between the components of the date, at `seperatorDateAndTime` you specify the separator between the date and the time.
+	
+	##### Example:
+	
+	* separator = `-` - outString = `2016-03-16…` (default)
+	* separator = `/` - outString = `2016/03/16…`
+	
+	* separatorDateAndTime = ` ` - outString = `2016-03-16 12:45…` (default)
+	* separatorDateAndTime = `T` - outString = `2016/03/16T12:45…`
+	*/)
+	END_REGION DESCRIPTION
+	
+	REGION INITIALISATION
+	  #tempString := '';
+	END_REGION
+	
+	REGION CONVERTER
+	  // Set format parameters for output string
+	  // International ISO 8601
+	  // DTL  | Y| Y| Y| Y| -| M| M| -| D| D|  | H| H| :| M| M| :| S| S| .|NS|NS|NS|NS|NS|NS|NS|NS|NS
+	  // -----|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--
+	  // Pos  | 1| 2| 3| 4| 5| 6| 7| 8| 9|10|11|12|13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29
+	  
+	  // Convert "Value" into "String" and place at the right position
+	  VAL_STRG(FORMAT := #CONVERT_FORMAT_TO_STRING,
+	           IN     := #date.YEAR,
+	           P      := #CONVERT_START_POSITION_YEAR,
+	           PREC   := #CONVERT_PRECISION,
+	           SIZE   := #CONVERT_SIZE_YEAR,
+	           OUT    => #tempString);    // DTL YEAR --> String --> #tempPosYear
+	  
+	  VAL_STRG(FORMAT := #CONVERT_FORMAT_TO_STRING,
+	           IN     := #date.MONTH,
+	           P      := #CONVERT_START_POSITION_MONTH,
+	           PREC   := #CONVERT_PRECISION,
+	           SIZE   := #CONVERT_SIZE_MONTH_DAY_HOUR_MINUTE_SECOND,
+	           OUT    => #tempString);     // DTL MONTH --> String --> #tempPosMonth
+	  
+	  VAL_STRG(FORMAT := #CONVERT_FORMAT_TO_STRING,
+	           IN     := #date.DAY,
+	           P      := #CONVERT_START_POSITION_DAY,
+	           PREC   := #CONVERT_PRECISION,
+	           SIZE   := #CONVERT_SIZE_MONTH_DAY_HOUR_MINUTE_SECOND,
+	           OUT    => #tempString);     // DTL DAY --> String --> #tempPosDay
+	  
+	  VAL_STRG(FORMAT := #CONVERT_FORMAT_TO_STRING,
+	           IN     := #date.HOUR,
+	           P      := #CONVERT_START_POSITION_HOUR,
+	           PREC   := #CONVERT_PRECISION,
+	           SIZE   := #CONVERT_SIZE_MONTH_DAY_HOUR_MINUTE_SECOND,
+	           OUT    => #tempString);     // DTL HOUR --> String --> #tempPosHour
+	  
+	  VAL_STRG(FORMAT := #CONVERT_FORMAT_TO_STRING,
+	           IN     := #date.MINUTE,
+	           P      := #CONVERT_START_POSITION_MINUTE,
+	           PREC   := #CONVERT_PRECISION,
+	           SIZE   := #CONVERT_SIZE_MONTH_DAY_HOUR_MINUTE_SECOND,
+	           OUT    => #tempString);     // DTL MINUTE --> String --> #tempPosMinute
+	  
+	  VAL_STRG(FORMAT := #CONVERT_FORMAT_TO_STRING,
+	           IN     := #date.SECOND,
+	           P      := #CONVERT_START_POSITION_SECOND,
+	           PREC   := #CONVERT_PRECISION,
+	           SIZE   := #CONVERT_SIZE_MONTH_DAY_HOUR_MINUTE_SECOND,
+	           OUT    => #tempString);     // DTL SECOND --> String --> #tempPosSecond
+	  
+	  VAL_STRG(FORMAT := #CONVERT_FORMAT_TO_STRING,
+	           IN     := #date.NANOSECOND,
+	           P      := #CONVERT_START_POSITION_NANOSECOND,
+	           PREC   := #CONVERT_PRECISION,
+	           SIZE   := #CONVERT_SIZE_NANOSECOND,
+	           OUT    => #tempString);     // DTL NANOSECOND --> String --> #tempPosNanosecond
+	  
+	  // Place separators at the right position in the string
+	  IF #separator = '$00' THEN
+	    #tempString[#SEPARATOR_POSITION_YEAR_MONTH] := #SEPARATOR_DATE;
+	    #tempString[#SEPARATOR_POSITION_MONTH_DAY] := #SEPARATOR_DATE;
+	  ELSE
+	    #tempString[#SEPARATOR_POSITION_YEAR_MONTH] := #separator;
+	    #tempString[#SEPARATOR_POSITION_MONTH_DAY] := #separator;
+	  END_IF;
+	  
+	  IF #separatorDateAndTime = '$00' THEN
+	    #tempString[#SEPARATOR_POSITION_DATE_AND_TIME] := #SEPARATOR_DATE_AND_TIME;
+	  ELSE
+	    #tempString[#SEPARATOR_POSITION_DATE_AND_TIME] := #separatorDateAndTime;
+	  END_IF;
+	  
+	  #tempString[#SEPARATOR_POSITION_HOUR_MINUTE] := #SEPARATOR_TIME;
+	  #tempString[#SEPARATOR_POSITION_MINUTE_SECOND] := #SEPARATOR_TIME;
+	  #tempString[#SEPARATOR_POSITION_SECOND_NANOSECOND] := #SEPARATOR_NANOSECOND;
+	  
+	  // Correcting the string, due to the conversion of a leading "0" value into a "blank".
+	  // Replacing of "blank" by "0"
+	  IF (#tempString[#CONVERT_START_POSITION_MONTH] = ' ') THEN
+	    #tempString[#CONVERT_START_POSITION_MONTH] := '0';
+	  END_IF;
+	  
+	  IF (#tempString[#CONVERT_START_POSITION_DAY] = ' ') THEN
+	    #tempString[#CONVERT_START_POSITION_DAY] := '0';
+	  END_IF;
+	  
+	  IF (#tempString[#CONVERT_START_POSITION_HOUR] = ' ') THEN
+	    #tempString[#CONVERT_START_POSITION_HOUR] := '0';
+	  END_IF;
+	  
+	  IF (#tempString[#CONVERT_START_POSITION_MINUTE] = ' ') THEN
+	    #tempString[#CONVERT_START_POSITION_MINUTE] := '0';
+	  END_IF;
+	  
+	  IF (#tempString[#CONVERT_START_POSITION_SECOND] = ' ') THEN
+	    #tempString[#CONVERT_START_POSITION_SECOND] := '0';
+	  END_IF;
+	  
+	  FOR #tempIndex := 0 TO #REPLACE_NANOSECOND_COUNT DO
+	    IF (#tempString[UINT_TO_SINT(#CONVERT_START_POSITION_NANOSECOND) + #tempIndex] = ' ') THEN
+	      #tempString[UINT_TO_SINT(#CONVERT_START_POSITION_NANOSECOND) + #tempIndex] := '0';
+	    ELSE
+	      EXIT;
+	    END_IF;
+	  END_FOR;
+	END_REGION
+	
+	REGION OUTPUTS
+	  #LGF_DTLToString_ISO := #tempString;
+	  // no error handling needed
+	  ENO := TRUE;
+	END_REGION
+	
+END_FUNCTION
+

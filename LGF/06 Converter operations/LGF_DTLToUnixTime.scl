@@ -1,0 +1,104 @@
+﻿FUNCTION "LGF_DTLToUnixTime" : DInt
+TITLE = LGF_DTLToUnixTime
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_Digital_Industry
+FAMILY : LGF
+NAME : LGF_DTLToUnixTime
+//This function converts the date and time of data type DTL to the UNIX time of data type DInt. The timestamp is calculated in UTC. This means that the time zone is not considered.
+//
+//Only times after 01/01/1990 are permitted.
+   VAR_INPUT 
+      timeDTL {InstructionName := 'DTL'; LibVersion := '1.0'} : DTL;   // Date and time as DTL to convert to UNIX time
+   END_VAR
+
+   VAR_OUTPUT 
+      error : Bool;   // FALSE: No error  TRUE: An error occurred during the execution of the FB
+      status : Word;   // 16#0000-16#7FFF: Status of the FB  16#8000-16#FFFF: Error identification (see following Table)
+   END_VAR
+
+   VAR_TEMP 
+      tempTimeDtl {InstructionName := 'DTL'; LibVersion := '1.0'} : DTL;   // Temp value of DTL
+      tempUnixTime : DInt;   // Temp result of conversion from DTL to DInt as Unix time
+   END_VAR
+
+   VAR CONSTANT 
+      DELTA_1970_1990 : DInt := 631_152_000;   // Delta between 1970-1-1 and 1990-1-1 in seconds (IEC Time Base)
+      SEC_PER_DAY : DInt := 86400;   // 86400 seconds in 1 day
+      TIME_ZERO_FORCE_UPDATE : Time := t#0d;   // By adding zero an update of DTL Tag is forced and auto checks are applied
+      STATUS_EXECUTION_FINISHED_NO_ERROR : Word := 16#0000;   // Execution finished without errors
+      ERR_TIME_BEFORE_1990 : Word := 16#8000;   // Error: Input time is before 01/01/1990. The function does not support this conversion, because of internal used  datatype
+      ERR_DTL_INPUT_VALUE_INVALID : Word := 16#8001;   // Error: Input timestamp value not valid.  The data type contains implausible data.
+      CONVERSION_LIMIT {InstructionName := 'DTL'; LibVersion := '1.0'} : DTL := DTL#1990-01-01-00:00:00;   // Limit of the conversion 
+   END_VAR
+
+
+BEGIN
+	REGION BLOCK INFO HEADER
+	  //===============================================================================
+	  // SIEMENS AG / (c)Copyright 2017
+	  //-------------------------------------------------------------------------------
+	  // Title:            LGF_DTLToUnixTime
+	  // Comment/Function: This function converts the date and time of data type DTL to a Unix time of data type DInt.
+	  //                   The timestamp is calculated in UTC. This means that the time zone is not taken into account.
+	  //                   Only times after 01/01/1990 are permitted.
+	  // Library/Family:   LGF (Library General Functions)
+	  // Author:           Siemens Digital Industry Support
+	  // Tested with:      S7-PLCSIM Advanced V2.0 SP1
+	  // Engineering:      TIA Portal V15
+	  // Restrictions:     Date type (range from 01.01.1990) is used in the "Function" therefore the conversion limit is set.
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge       | Changes applied
+	  //----------|------------|------------------------|------------------------------
+	  // 01.00.00 | 16.10.2018 | Siemens Industry Online Support
+	  //                         First released version
+	  // 01.00.01 | 20.06.2019 | Simatic Systems Support
+	  //                         Standard header and block parameters update, status parameter added
+	  // 01.00.02 | 10.07.2019 | Simatic Systems Support
+	  //                         Commends added and code refactoring
+	  //                         Add ENO handling
+	  // 03.00.00 | 23.04.2020 | Simatic Systems Support | Set version to V3.0.0
+	  //                         Harmonize the version of the whole library
+	  // 03.00.01 | 23.02.2021 | Simatic Systems Support
+	  //                         Insert documentation
+	  // 03.00.02 | 14.04.2023 | Simatic Systems Support
+	  //                         Improve data verification for input `timeDTL` for valid data
+	  //===============================================================================
+	END_REGION Block info header
+	
+	REGION INITIALISATION
+	  #tempUnixTime := 0;
+	END_REGION
+	
+	REGION CONVERT  IF NOT ENO THEN
+	  // adding zero forces the PLC to update the tag and sets EON in case an error happend to the DTL value
+	  #tempTimeDtl := #timeDTL + #TIME_ZERO_FORCE_UPDATE;
+	  
+	  IF NOT ENO THEN // Check if DTL has valid format and data
+	    #LGF_DTLToUnixTime := #tempUnixTime;
+	    #error := TRUE;
+	    #status := #ERR_DTL_INPUT_VALUE_INVALID;
+	    RETURN;
+	    
+	  ELSIF (#tempTimeDtl < #CONVERSION_LIMIT) THEN // Check if timeUnix less than 01.01.1990
+	    #LGF_DTLToUnixTime := #tempUnixTime;
+	    #error := TRUE;
+	    #status := #ERR_TIME_BEFORE_1990;
+	    RETURN;
+	  END_IF;
+	  
+	  // Convert System Time (UTC) to UNIX time
+	  // DATE range D#1990-01-01 to D#2169-06-06
+	  // DATE_TO_DINT conversion - The number of days since 1/1/1990 is returned as result.
+	  #tempUnixTime := (DATE_TO_DINT(DTL_TO_DATE(#tempTimeDtl)) * #SEC_PER_DAY) + (TOD_TO_DINT(DTL_TO_TOD(#tempTimeDtl)) / 1000) + #DELTA_1970_1990;
+	END_REGION
+	
+	REGION OUTPUTS
+	  #LGF_DTLToUnixTime := #tempUnixTime;
+	  #error := FALSE;
+	  #status := #STATUS_EXECUTION_FINISHED_NO_ERROR;
+	END_REGION
+	
+END_FUNCTION
+

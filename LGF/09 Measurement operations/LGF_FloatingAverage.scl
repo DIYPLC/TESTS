@@ -1,0 +1,192 @@
+﻿FUNCTION_BLOCK "LGF_FloatingAverage"
+TITLE = LGF_FloatingAverage
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Siemens_Digital_Industry
+FAMILY : LGF
+NAME : LGF_FloatingAverage
+//This function calculates a moving arithmetic mean value from REAL values. This method can be used to smooth data series. The values can be read in cyclically or triggered.
+   VAR_INPUT 
+      cyclicExecution : Bool := false;   // TRUE: cyclic operation, trigger not in use
+      trigger : Bool;   // Read in `value` with every pulse at input `trigger`
+      value : LReal;   // Value/s from which the moving average is to be determined.
+      windowSize : Int := 100;   // Window length for sliding averaging in the range from 1..100.  The standard value is 100.
+      reset : Bool;   // TRUE: The block is reset and the calculation starts again.
+   END_VAR
+
+   VAR_OUTPUT 
+      average { ExternalWritable := 'False'} : LReal;   // Moving / Floating average
+      windowSizeReached { ExternalWritable := 'False'} : Bool;   // FALSE: Maximum window width not yet reached,  TRUE: Maximum window width reached
+      error { ExternalWritable := 'False'} : Bool;   // FALSE: No error  TRUE: An error occurred during the execution of the FB
+      status { ExternalWritable := 'False'} : Word;   // 16#0000-16#7FFF: Status of the FB  16#8000-16#FFFF: Error identification (see following Table)
+   END_VAR
+
+   VAR 
+      statValues { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Array[#ZERO_INT..#MAX_WINDOW_SIZE] of LReal;   // Static stored values for average calculation on a defined window size
+      statValuesSum { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : LReal := 0.0;   // Static added sum for average
+      statArithmeticAverage { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : LReal := 0.0;   // Static calculated average
+      statWindowSizeOld { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Int := 0;   // Static windows size from previous scan
+      statCounter { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Int := 0;   // Static counter  for number of elements stored in the array
+      statwindowSizeReached { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;   // Static windows size reached memory bit
+      statTriggerOld { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool := false;   // Static value of trigger from previous scan. Used for edge detection.
+   END_VAR
+
+   VAR_TEMP 
+      tempValue : LReal;   // Temp variable for value input
+      tempIndex : Int;   // Temp index for loop
+      tempTriggerEdge : Bool;   // Temp positive edge for trigger bit
+   END_VAR
+
+   VAR CONSTANT 
+      ZERO_INT : Int := 0;   // Zero constant in Int format
+      ZERO_LREAL : LReal := 0.0;   // Zero constant in LReal format
+      MAX_WINDOW_SIZE : Int := 100;   // Number of prev. values for floating average
+      INCREMENT : Int := 1;   // Increment value
+      STATUS_FINISHED_NO_ERROR : Word := 16#0000;   // Status: Execution finished without errors
+      ERR_WRONG_WINDOW_SIZE : Word := 16#8200;   // Error: Incorrect window size/width set.  Set a value between 1 and 100.
+   END_VAR
+
+
+BEGIN
+	REGION Block info header
+	  //===============================================================================
+	  // SIEMENS AG / (c)Copyright 2019
+	  //-------------------------------------------------------------------------------
+	  // Title:            LGF_FloatingAverage
+	  // Comment/Function: This function block calculates the floating arithmetic average
+	  //                   of incoming REAL values each cycle or each trigger impulse.
+	  // Library/Family:   LGF (Library General Functions)
+	  // Author:           Siemens Digital Industry Support
+	  // Tested with:      CPU 1515F-2 PN FW:V2.6
+	  // Engineering:      TIA Portal V15.1 Update 2
+	  // Restrictions:     ENO disabled, forced to true - error handling done by error and status
+	  // Requirements:     PLC (S7-1200 / S7-1500)
+	  //-------------------------------------------------------------------------------
+	  // Change log table:
+	  // Version  | Date       | Expert in charge       | Changes applied
+	  //----------|------------|------------------------|------------------------------
+	  // 01.00.00 | 16.06.2016 | Siemens Industry Online Support
+	  //                       | First released version
+	  // 01.00.01 | 02.01.2017 | Siemens Industry Online Support
+	  //                       | Upgrade: TIA Portal V14 Update 1
+	  // 01.01.00 | 21.02.2017 | Siemens Industry Online Support
+	  //                       | Adding variable window size for calculation
+	  //                       | Optimizing calculation algorithm
+	  // 01.01.01 | 17.08.2018 | Siemens Industry Online Support
+	  //                       | Upgrade: TIA V15 Update 2
+	  // 01.01.02 | 23.11.2018 | Siemens Industry Online Support
+	  //                       | Upgrade: TIA V15.1
+	  // 01.01.03 | 07.11.2019 | Simatic Systems Support
+	  //                       | Code refactoring, comments added
+	  // 03.00.00 | 23.04.2020 | Simatic Systems Support
+	  //                       | Set version to V3.0.0, harmonize the version of the whole library
+	  // 03.00.01 | 16.06.2020 | Simatic Systems Support
+	  //                       | refactor and simplify code
+	  // 03.00.02 | 06.04.2021 | Simatic Systems Support
+	  //                       | Insert documentation
+	  //=============================================================================
+	END_REGION Block info header
+	
+	REGION DESCRIPTION
+	  (/*
+	Note
+	:    The block `LGF_FloatingAverage` does not query the data type for the input parameter `value`. For data types other than REAL, either an implicit conversion is performed automatically or an error is generated during compilation.
+	:    You can find further information in the Chapter “Overview of Data Type Conversion” in the Online Help section of the TIA Portal or under:
+	:    https://support.industry.siemens.com/cs/ww/en/view/109773506/100611494667
+	
+	---
+	
+	The block calculates the (moving) mean value based on the set window width. The window width indicates the maximum number of values read in last. After the maximum number of values has been read, the output `windowSizeReached` is set and each newly read value replaces the oldest value (FIFO principle).
+	
+	Two options are available for reading the values. With the input `cyclicExecution`, the values are read and calculated cyclically. With the `trigger` input, the values are read in and calculated with each pulse.
+	*/)
+	END_REGION DESCRIPTION
+	
+	REGION Initialization and input data processing
+	  // Copy commonly used data to temp variables
+	  #tempValue := #value;
+	  
+	  // Positive edge detection for triggering of calculation
+	  #tempTriggerEdge := #trigger AND NOT #statTriggerOld;
+	  #statTriggerOld := #trigger;
+	  
+	  // Reset OR if window size changes the calculation
+	  IF #reset OR (#windowSize <> #statWindowSizeOld) THEN
+	    #statWindowSizeOld := #windowSize;
+	    #statCounter := #ZERO_INT;
+	    #statValuesSum := #ZERO_LREAL;
+	    #statArithmeticAverage := #ZERO_LREAL;
+	    #average := #ZERO_LREAL;
+	    #windowSizeReached := FALSE;
+	    #statwindowSizeReached := FALSE;
+	    #error := false;
+	    #status := #STATUS_FINISHED_NO_ERROR;
+	    RETURN;
+	    
+	    // Check window size, in case of incorrect window size setup an error
+	  ELSIF (#windowSize <= #ZERO_INT) OR (#windowSize > #MAX_WINDOW_SIZE) THEN
+	    #statWindowSizeOld := #windowSize;
+	    #statCounter := #ZERO_INT;
+	    #statValuesSum := #ZERO_LREAL;
+	    #statArithmeticAverage := #ZERO_LREAL;
+	    #average := #ZERO_LREAL;
+	    #statwindowSizeReached := FALSE;
+	    #windowSizeReached := FALSE;
+	    #error := TRUE;
+	    #status := #ERR_WRONG_WINDOW_SIZE; // Info "No correct set of window size"
+	    RETURN;
+	  END_IF;
+	END_REGION
+	
+	REGION Floating average calculation
+	  // Triggered calculation OR cyclicly operation
+	  IF #cyclicExecution OR #tempTriggerEdge THEN
+	    
+	    //Calculate array counter by using modulo
+	    #tempIndex := #statCounter MOD #windowSize;
+	    
+	    // First step - fill the Array with values
+	    // as long as desired window size is not reached
+	    // counter and array starts with zero
+	    IF (#statCounter < #windowSize) THEN
+	      // Add value to sum
+	      #statValuesSum += #tempValue;
+	      // Add value to window
+	      #statValues[#tempIndex] := #tempValue;
+	      // Increment counter
+	      #statCounter += #INCREMENT;
+	      // Calculate avarage value
+	      #statArithmeticAverage := #statValuesSum / #statCounter;
+	      
+	    ELSE
+	      // wuindow size is reached, set output
+	      #statwindowSizeReached := TRUE;
+	      // Add value to sum
+	      #statValuesSum += #tempValue - #statValues[#tempIndex];
+	      // Add value to window
+	      #statValues[#tempIndex] := #tempValue;
+	      // Calculate avarage value
+	      #statArithmeticAverage := #statValuesSum / #windowSize;
+	      
+	      // Manipulate counter value of window if modulo calc result is zero
+	      IF (#tempIndex = #ZERO_INT) THEN
+	        #statCounter := #windowSize + #INCREMENT;
+	      ELSE
+	        // Increment counter
+	        #statCounter += #INCREMENT;
+	      END_IF;
+	    END_IF;
+	  END_IF;
+	END_REGION
+	
+	REGION Outputs
+	  #average := #statArithmeticAverage;
+	  #windowSizeReached := #statwindowSizeReached;
+	  #error := FALSE;
+	  #status := #STATUS_FINISHED_NO_ERROR;
+	  
+	  // ENO mechanism is not used - forced to true
+	  ENO := TRUE;
+	END_REGION
+	
+END_FUNCTION_BLOCK
+
