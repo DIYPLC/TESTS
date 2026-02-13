@@ -5,31 +5,63 @@
 Программа для настройки ПИД- регулятора.
 Шаг 0й импорт данный PLC PIDcontrol из WinCC classic trends или PLC анализатора.
 Шаг 1й импорт данных из csv файла и подготовка их к идентификации передаточной функции в формате json.
-Шаг 2й Идентификация математематической модели объекта управления (передаточной функции).
-Шаг 3й Рассчет настроек ПИД- регулятора
+Шаг 2й Идентификация математической модели объекта управления (передаточной функции).
+Шаг 3й Расчет настроек ПИД- регулятора
 Шаг 3.1 Построение модели замкнутой системы управления в рабочей точке и в отклонениях от абсолютных величин.
 Шаг 3.2 Расчет критериев качества работы замкнутой системы управления.
 Шаг 3.3 Оптимизация настроек ПИД- регулятора по выбранному критерию.
+
+Контрольные точки.
+-Можно проводит идентификацию по изменению заданного значения, но там меньше спектр и менее достоверный результат.
+Хороший спектр у ступенчатого воздействия, еще лучше у импульсного воздействия.
+-Вместо математического моделирования можно проводить настройку на объекте.
+Для этого для каждого эксперимента необходимо рассчитать параметры качества регулирования.
+И оптимизировать настройки регулятора по заданному параметру качества регулирования.
+-Настройки можно оптимизировать по разным критериям:
+по минимуму времени переходного процесса,
+по минимуму перерегулирования,
+по каналу управления,
+по каналу возмущения
+- Если нагрев и охлаждение имеет разную скорость нужен адаптивный ПИД- регулятор, с меняющимися в работе настройками.
+- В модели объекта управления необходимо учитывать:
+Интегратор.
+Транспортная задержка.
+Рампа разгона / торможения.
+Шумы измерения.
+Нелинейности амплитудного ограничителя.
+Квантование по уровню с заданным шагом цап / ацп.
+Различное с регулятором время дискретизации отчетов.
+Моделирование в абсолютных или относительных единицах.
+Начальные условия интегрирования.
+Нелинейность коэффициента управления.
+Настройка адаптивного регулятора под разные рабочие точки.
+
+
+
 """
 
 import csv
 import json
-try: #импортируем библиотеку
+
+try:  # импортируем библиотеку
     import matplotlib.pyplot
-except: #если нет библиотеки качаем ее из интернета и пробуем еще раз
+except:  # если нет библиотеки качаем ее из интернета и пробуем еще раз
     import os
+
     os.system("pip install matplotlib")
 
-def read_csv_file_to_list_3d(filename = 'step0_trends.csv'):
+
+def read_csv_file_to_list_3d(filename='step0_trends.csv'):
     list1 = []
     with open(filename, newline='') as csvfile:
-        reader = csv.reader(csvfile, delimiter = ';')
+        reader = csv.reader(csvfile, delimiter=';')
         i = 0
         for row in reader:
             list1.append(row)
             i = i + 1
-    del list1[0] # del text string
+    del list1[0]  # del text string
     return list1
+
 
 def list_3d_to_time_axis(list_3d):
     list1 = list_3d
@@ -38,12 +70,14 @@ def list_3d_to_time_axis(list_3d):
         time.append(int(i[0]))
     return time
 
+
 def list_3d_to_MW_axis(list_3d):
     list1 = list_3d
     MW = []
     for i in list1:
         MW.append(float(i[1]))
     return MW
+
 
 def list_3d_to_PV_axis(list_3d):
     list1 = list_3d
@@ -52,12 +86,14 @@ def list_3d_to_PV_axis(list_3d):
         PV.append(float(i[2]))
     return PV
 
+
 def offset_for_time(list_in):
     list_out = []
     offset = 129930
     for current_vale in list_in:
         list_out.append(current_vale - offset)
     return list_out
+
 
 def offset_for_MW(list_in):
     list_out = []
@@ -66,6 +102,7 @@ def offset_for_MW(list_in):
         list_out.append(current_vale - offset)
     return list_out
 
+
 def offset_for_PV(list_in):
     list_out = []
     offset = 5
@@ -73,16 +110,18 @@ def offset_for_PV(list_in):
         list_out.append(current_vale - offset)
     return list_out
 
+
 def resampling_10ms_to_100ms(list_in):
     list_out = []
-    #list_out.append(list_in[0]) первый сэмпл выкидываем для постоянства времени скана в начале
+    # list_out.append(list_in[0]) первый сэмпл выкидываем для постоянства времени скана в начале
     offset = 5
     i = 1
     for current_vale in list_in:
-        if (i%10 == 0): # читаем каждый 10й сэмпл.
+        if i % 10 == 0:  # читаем каждый 10й сэмпл.
             list_out.append(current_vale)
         i = i + 1
     return list_out
+
 
 def offset_for_time2(list_in):
     list_out = []
@@ -90,6 +129,7 @@ def offset_for_time2(list_in):
     for current_vale in list_in:
         list_out.append(current_vale - offset)
     return list_out
+
 
 def export_axis_to_json(t_axis, x_axis, y_axis):
     with open('step2_t_axis.json', 'w') as file:
@@ -100,26 +140,28 @@ def export_axis_to_json(t_axis, x_axis, y_axis):
         json.dump(y_axis, file)
         return
 
+
 def print_trend1(t_axis, y_axis, x_axis):
     try:
         matplotlib.pyplot.title("Speed to Pressure")
         matplotlib.pyplot.xlabel("time ms")
         matplotlib.pyplot.ylabel("HZ, Kgs/cm2")
-        matplotlib.pyplot.plot(t_axis,y_axis)
-        matplotlib.pyplot.plot(t_axis,x_axis)
+        matplotlib.pyplot.plot(t_axis, y_axis)
+        matplotlib.pyplot.plot(t_axis, x_axis)
         matplotlib.pyplot.show()
     except:
-        ("error import matplotlib")
+        print("error import matplotlib")
+
 
 if __name__ == "__main__":
     # читаем из файла в общий массив с тремя осями
-    list_3d = read_csv_file_to_list_3d(filename = 'step0_trends.csv')
+    list_3d = read_csv_file_to_list_3d(filename='step0_trends.csv')
     print("----------------------------------------------------------------------------")
     print(list_3d[0], "// list_3d[]")
     print(list_3d[1], "// list_3d[]")
     print(list_3d[2], "// list_3d[]")
     print("----------------------------------------------------------------------------")
-    # из общего массива достаем отдеьные оси
+    # из общего массива достаем отдельные оси
     time = list_3d_to_time_axis(list_3d)
     MW = list_3d_to_MW_axis(list_3d)
     PV = list_3d_to_PV_axis(list_3d)
@@ -135,7 +177,7 @@ if __name__ == "__main__":
     print(time[1], "time ms", MW[1], "MW Hz", PV[1], "PV Kgs/cm2", "// offset_for_time()")
     print(time[2], "time ms", MW[2], "MW Hz", PV[2], "PV Kgs/cm2", "// offset_for_time()")
     print("----------------------------------------------------------------------------")
-    # исходные данные из анализатора излишне продудлирваны на одну реальную выборку 10 записей
+    # исходные данные из анализатора излишне продублированы на одну реальную выборку 10 записей
     # Ресемплинг читаем каждую 10ю выборку остальные выкидываем
     time = resampling_10ms_to_100ms(time)
     MW = resampling_10ms_to_100ms(MW)
@@ -145,15 +187,15 @@ if __name__ == "__main__":
     print(time[2], "time ms", MW[2], "MW Hz", PV[2], "PV Kgs/cm2", "// resampling_10ms_to_100ms()")
     print("----------------------------------------------------------------------------")
     # Коррекция оси времени после ресемплинга.
-    time= offset_for_time2(time)
+    time = offset_for_time2(time)
     print(time[0], "time ms", MW[0], "MW Hz", PV[0], "PV Kgs/cm2", "// offset_for_time2()")
     print(time[1], "time ms", MW[1], "MW Hz", PV[1], "PV Kgs/cm2", "// offset_for_time2()")
     print(time[2], "time ms", MW[2], "MW Hz", PV[2], "PV Kgs/cm2", "// offset_for_time2()")
     print("----------------------------------------------------------------------------")
-    # Опрравка данных в программу для идентификации передаточной функции
-    export_axis_to_json(t_axis = time, y_axis = PV, x_axis = MW)
+    # Отправка данных в программу для идентификации передаточной функции
+    export_axis_to_json(t_axis=time, y_axis=PV, x_axis=MW)
     # 2D график для просмотра результата
-    print_trend1(t_axis = time, y_axis = PV, x_axis = MW)
+    print_trend1(t_axis=time, y_axis=PV, x_axis=MW)
     input("Press any key for exit...")
 
 # @COPYLEFT ALL WRONGS RESERVED :)

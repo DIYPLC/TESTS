@@ -7,10 +7,12 @@ W(p) = y(t)/x(t) = PV(t)/MV(t) = K1 / (1 + T1 * p), p==d/dt
 """
 
 import json
-try: #импортируем библиотеку
+
+try:  # импортируем библиотеку
     import matplotlib.pyplot
-except: #если нет библиотеки качаем ее из интернета и пробуем еще раз
+except:  # если нет библиотеки качаем ее из интернета и пробуем еще раз
     import os
+
     os.system("pip install matplotlib")
 import FbFilterA
 
@@ -25,7 +27,7 @@ with open('step2_y_axis.json') as file:
 
 
 def calc_time_sample_ms_axis(axis_in):
-    # инкрементная ось времени преобразуется в ось временем скана как в плк в милисекундах.
+    # инкрементная ось времени преобразуется в ось временем скана как в плк в миллисекундах.
     axis_out = []
     time_previous_ms = 0
     time_sample_ms = 0
@@ -36,7 +38,7 @@ def calc_time_sample_ms_axis(axis_in):
     return axis_out
 
 
-def ident(gain = 0.2, time_filter_s = 0.3):
+def ident(gain=0.2, time_filter_s=0.3):
     DbFilterA1 = FbFilterA.FbFilterA()
     error_model = 0.0
     i = 0
@@ -48,36 +50,38 @@ def ident(gain = 0.2, time_filter_s = 0.3):
         try:
             error_model = error_model + abs(y_axis[i] - DbFilterA1.Out)
         except:
-            error_model = 2**32
+            error_model = 2 ** 32
         i = i + 1
     return error_model
 
-def find_tranfer_function():
-    error_minimum = 2**64
-    error = error_minimum
-    gain_find = 0
-    time_filter_s_find = 0
-    gain = 0.1
-    time_filter_s = 0.3
-    for i in range(200):
-        gain = gain + 0.001
-        time_filter_s = 0.1
-        for j in range(200):
-            time_filter_s = time_filter_s + 0.01
-            error = ident(gain = gain, time_filter_s = time_filter_s)
-            if error < error_minimum: # Запомнить найденный минимум
-                error_minimum = error
-                gain_find = gain
-                time_filter_s_find = time_filter_s
-    gain = gain_find
-    time_filter_s = time_filter_s_find
-    error = ident(gain = gain, time_filter_s = time_filter_s)
 
-    return (gain, time_filter_s, error)
+def find_transfer_function():
+    _error_minimum = 2 ** 64
+    _error = _error_minimum
+    _gain_find = 0
+    _time_filter_s_find = 0
+    _gain = 0.1
+    _time_filter_s = 0.3
+    for i in range(200):
+        _gain = _gain + 0.001
+        _time_filter_s = 0.1
+        for j in range(200):
+            _time_filter_s = _time_filter_s + 0.01
+            _error = ident(gain=_gain, time_filter_s=_time_filter_s)
+            if _error < _error_minimum:  # Запомнить найденный минимум
+                _error_minimum = _error
+                _gain_find = _gain
+                _time_filter_s_find = _time_filter_s
+    _gain = _gain_find
+    _time_filter_s = _time_filter_s_find
+    _error = ident(gain=_gain, time_filter_s=_time_filter_s)
+    return _gain, _time_filter_s, _error
+
 
 y_axis_math_model = []
 
-def plotter(gain = 0.0, time_filter_s = 0.0):
+
+def plotter(gain=0.0, time_filter_s=0.0):
     DbFilterA1 = FbFilterA.FbFilterA()
     error_model = 0.0
     i = 0
@@ -90,16 +94,18 @@ def plotter(gain = 0.0, time_filter_s = 0.0):
         i = i + 1
     return error_model
 
+
 def print_trend1(t_axis, y_axis, x_axis):
     try:
         matplotlib.pyplot.title("trend and model")
         matplotlib.pyplot.xlabel("time ms")
-        matplotlib.pyplot.ylabel("HZ, Kgs/cm2")
-        matplotlib.pyplot.plot(t_axis,y_axis)
-        matplotlib.pyplot.plot(t_axis,x_axis)
+        matplotlib.pyplot.ylabel("Kgs/cm2")
+        matplotlib.pyplot.plot(t_axis, y_axis)
+        matplotlib.pyplot.plot(t_axis, x_axis)
         matplotlib.pyplot.show()
     except:
-        ("error import matplotlib")
+        print("error import matplotlib")
+
 
 if __name__ == "__main__":
     print("len(t_axis) =", len(t_axis))
@@ -107,13 +113,13 @@ if __name__ == "__main__":
     print("len(y_axis) =", len(y_axis))
     Ts_ms_axis = calc_time_sample_ms_axis(t_axis)
     print("len(Ts_ms_axis) =", len(Ts_ms_axis))
-    gain, time_filter_s, error = find_tranfer_function()
+    gain, time_filter_s, error = find_transfer_function()
     print("-------------------------------------------------------------------")
     print("W(p) = y(t)/x(t) = PV(t)/MV(t) = K1 / (1 + T1 * p), p==d/dt")
     print("K1 =", gain, "T1 =", time_filter_s)
-    print("gain =", gain, "time_filter_s =", time_filter_s ,"error =", error)
+    print("gain =", gain, "time_filter_s =", time_filter_s, "error =", error)
     print("-------------------------------------------------------------------")
-    plotter(gain = gain, time_filter_s = time_filter_s)
+    plotter(gain=gain, time_filter_s=time_filter_s)
     print("len(y_axis_math_model) =", len(y_axis_math_model))
     print_trend1(t_axis, y_axis, y_axis_math_model)
 
