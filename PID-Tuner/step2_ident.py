@@ -81,7 +81,7 @@ def find_transfer_function():
 y_axis_math_model = []
 
 
-def plotter(gain=0.0, time_filter_s=0.0):
+def calc_finall_model(gain=0.0, time_filter_s=0.0):
     DbFilterA1 = FbFilterA.FbFilterA()
     error_model = 0.0
     i = 0
@@ -119,7 +119,7 @@ if __name__ == "__main__":
     print("K1 =", gain, "T1 =", time_filter_s)
     print("gain =", gain, "time_filter_s =", time_filter_s, "error =", error)
     print("-------------------------------------------------------------------")
-    plotter(gain=gain, time_filter_s=time_filter_s)
+    calc_finall_model(gain=gain, time_filter_s=time_filter_s)
     print("len(y_axis_math_model) =", len(y_axis_math_model))
     print_trend1(t_axis, y_axis, y_axis_math_model)
 
