@@ -4,6 +4,12 @@
 """
 Мат модель объекта управления.
 W(p) = y(t)/x(t) = PV(t)/MV(t) = K1 / (1 + T1 * p), p==d/dt
+Результаты поиска :
+K1 = 0.2170000000000001 T1 = 1.460000000000001
+gain = 0.2170000000000001 time_filter_s = 1.460000000000001 error = 22.38667804175744
+K1 можно приближенно вычислить графически.
+Т1 можно приближенно вычислить графически.
+Демпфирование в датчике 0.3с, время разгона торможения 15с от 0 до 50 Гц
 """
 
 import json
@@ -61,11 +67,11 @@ def find_transfer_function():
     _gain_find = 0
     _time_filter_s_find = 0
     _gain = 0.1
-    _time_filter_s = 0.3
-    for i in range(200):
+    _time_filter_s = 0.1
+    while(_gain <= 1.0):
         _gain = _gain + 0.001
         _time_filter_s = 0.1
-        for j in range(200):
+        while(_time_filter_s <= 5.0):
             _time_filter_s = _time_filter_s + 0.01
             _error = ident(gain=_gain, time_filter_s=_time_filter_s)
             if _error < _error_minimum:  # Запомнить найденный минимум
