@@ -99,12 +99,13 @@ https://ru.wikipedia.org/wiki/%D0%9A%D0%9C%D0%9E%D0%9F
 ***
 БЛЭ
 И-ИЛИ-НЕ 2И-НЕ
+XOR ax,ax / mov ax,0 // зачем
 ***
-Сумматор
-+ - * /
-RS RG RAM
-T SHL * /
-TIM/CT 
+DC CD SUM ADD SUB MUL DIV ALU
+RS R_TRIG F_TRIG TON TOF
+RG RAM
+TT SHL SHR * /
+TIM CNT
 ***
 - Типы АЛУ
 Аккумуляторный Intel 8080 (Z80)
