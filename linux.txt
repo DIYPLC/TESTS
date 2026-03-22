@@ -27,10 +27,17 @@ apt install gnupg
 sudo apt install vlc
 sudo apt install wine
 
+Копирование исходных кодов
 git clone https://github.com/DIYPLC/LIB_PLC.git
 git clone https://github.com/DIYPLC/DIY_PLC.git
 git clone https://github.com/DIYPLC/HMI_PLC.git
 git clone https://github.com/DIYPLC/Tests.git
+git clone https://github.com/torvalds/linux.git
+git clone https://github.com/python/cpython.git
+git clone https://github.com/python/peps.git
+git clone https://github.com/gcc-mirror/gcc.git
+git clone https://github.com/mirror/make.git
+
 Просмотр содержимого ранее удаленных файлов в репозитории.
 usr@pc:~/DIY_PLC/.git$ git log --graph --decorate
 usr@pc:~/DIY_PLC/.git$ git show 488865d3cc94cd5eb2cfd2cb01c0ff261f4502cd
@@ -107,3 +114,47 @@ lynx https://www.fsf.org/
 python ftp server
 pip3 install pyftpdlib
 python -m pyftpdlib --interface 0.0.0.0 --port 21021 --username=usr --password=pwd --directory=C:\xyz
+
+debian-13.3.0-amd64-DVD-1.iso
+server1@user1:~$
+English lang 1й
+deb.debian.org
+LXDE
+snapshot
+
+pip3 install pyodbc
+pip3 install python-snap7
+pip3 install freeopcua
+pip3 install opcua-client
+pip3 install pyserial
+pip3 install minimalmodbus
+pip3 install pycomm3
+pip3 install numpy
+pip3 install matplotlib
+pip3 install pyinstaller
+pip3 install pyftpdlib
+
+pip3 download --dest pyodbc/ pyodbc
+pip3 download --dest python-snap7/ python-snap7
+pip3 download --dest freeopcua/ freeopcua
+pip3 download --dest opcua-client/ opcua-client
+pip3 download --dest pyserial/ pyserial
+pip3 download --dest minimalmodbus/ minimalmodbus
+pip3 download --dest pycomm3/ pycomm3
+pip3 download --dest numpy/ numpy
+pip3 download --dest matplotlib/ matplotlib
+pip3 download --dest pyinstaller/ pyinstaller
+pip3 download --dest pyftpdlib/ pyftpdlib
+
+pip3 download --dest pyodbc/ --only-binary=:all: --platform win32 pyodbc
+pip3 download --dest pyodbc/ --only-binary=:all: --platform win_amd64 pyodbc
+pip3 download --dest pyodbc/ --only-binary=:all: --platform manylinux2014_x86_64 pyodbc
+pip3 download --dest pyodbc/ --only-binary=:all: --python-version 34 --platform win32 pyodbc==4.0.14
+pip3 download --dest pyodbc/ --only-binary=:all: --python-version 37 --platform win32 pyodbc==4.0.39
+pip3 download --dest pyodbc/ --only-binary=:all: --python-version 37 --platform win_amd64 pyodbc==4.0.39
+pip3 download --dest pyodbc/ --only-binary=:all: --python-version 314 --platform win_amd64 pyodbc==5.3.0
+pip3 download --dest python-snap7/ --only-binary=:all: --python-version 310 --platform win_amd64 python-snap7==3.0.0
+
+
+
+
