@@ -155,6 +155,8 @@ pip3 download --dest pyodbc/ --only-binary=:all: --python-version 37 --platform 
 pip3 download --dest pyodbc/ --only-binary=:all: --python-version 314 --platform win_amd64 pyodbc==5.3.0
 pip3 download --dest python-snap7/ --only-binary=:all: --python-version 310 --platform win_amd64 python-snap7==3.0.0
 
-
+# pyodbc offline install for Win7 32bit Python 3.7.0rc1
+C:\ASU\pyodbc\pyodbc-4.0.30-cp37-cp37m-win32.whl
+C:\ASU\pyodbc>pip install --no-index --find-links C:\ASU\pyodbc pyodbc
 
 
