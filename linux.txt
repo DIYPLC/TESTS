@@ -2,10 +2,12 @@
 
 echo "install software"
 sudo apt-get update && sudo apt-get dist-upgrade
+sudo apt update && sudo apt upgrade
+
 sudo apt update
-sudo apt upgrade
-sudo apt install gcc g++ make git vim htop cmatrix mc tmux python3-pip python3-tk
-sudo apt install net-tools
+apt install gcc g++ make git vim htop cmatrix mc tmux python3-pip p7zip-full gnupg rsync
+apt install python3-tk arduino vlc
+
 sudo apt install gcc
 sudo apt install g++
 sudo apt install make
@@ -16,36 +18,49 @@ sudo apt install cmatrix
 sudo apt install mc
 sudo apt install tmux
 sudo apt install python3-pip
+sudo apt install p7zip-full
+sudo apt install gnupg
+sudo apt install rsync
+
 sudo apt install python3-tk
+sudo apt install arduino
+sudo apt install vlc
+sudo apt install freecad
+sudo apt install wine
+sudo apt install net-tools
 sudo apt install nmap
 sudo apt install qbittorrent-nox
 sudo apt install dosbox
-sudo apt install arduino
-sudo apt install freecad
-sudo apt install p7zip-full
-apt install gnupg
-sudo apt install vlc
-sudo apt install wine
 
-Копирование исходных кодов
+# Копирование исходных кодов
 git clone https://github.com/DIYPLC/LIB_PLC.git
 git clone https://github.com/DIYPLC/DIY_PLC.git
 git clone https://github.com/DIYPLC/HMI_PLC.git
 git clone https://github.com/DIYPLC/Tests.git
+
 git clone https://github.com/torvalds/linux.git
 git clone https://github.com/python/cpython.git
 git clone https://github.com/python/peps.git
 git clone https://github.com/gcc-mirror/gcc.git
 git clone https://github.com/mirror/make.git
 
+wget https://github.com/DIYPLC/LIB_PLC/archive/refs/heads/main.zip
+wget https://github.com/DIYPLC/DIY_PLC/archive/refs/heads/main.zip
+wget https://github.com/DIYPLC/HMI_PLC/archive/refs/heads/main.zip
+wget https://github.com/DIYPLC/TESTS/archive/refs/heads/main.zip
+
 Просмотр содержимого ранее удаленных файлов в репозитории.
 usr@pc:~/DIY_PLC/.git$ git log --graph --decorate
 usr@pc:~/DIY_PLC/.git$ git show 488865d3cc94cd5eb2cfd2cb01c0ff261f4502cd
 
+# Резервное копирование исходных кодов gnu через rsync
+rsync --archive --verbose --compress --progress --bwlimit=1024 --delete rsync://mirror.truenetwork.ru/gnu ./ftp.gnu.org/
+rsync --archive --verbose --compress --progress --bwlimit=1024 --delete rsync://ftp.gnu.org/gnu ./ftp.gnu.org/
+
 echo "ubuntu software"
-dpkg менеджер пакетов
-snapd менеджер пакетов
-aptitude менеджер пакетов
+# dpkg менеджер пакетов
+# snapd менеджер пакетов
+# aptitude менеджер пакетов
 tcpdump
 Wireshark
 nmap
@@ -79,7 +94,13 @@ pycharm communiti edition
 7Zip
 wifite
 
+# Скачивание видео.
 python3 -m youtube_dl 'https://youtu.be/M379y0op1WM'
+
+# https://ru.wikipedia.org/wiki/JDownloader
+apt install default-jdk
+java -jar JDownloader.jar
+
 sudo reboot
 sudo halt
 sudo tcpdump -vv -i eth0 port 502
@@ -91,24 +112,19 @@ ifconfig
 iwconfig
 pstree #see process tree
 
-gpg для шифрования
+# gpg для шифрования
 apt install gnupg
 
-сжатие с шифрованием
+# сжатие с шифрованием
 sudo apt install p7zip-full
 7z a arxiv1.7z ./folder1
 7z a -p1234567890 -mhe=on LIB_PLC.7z ./LIB_PLC/
 
-Скачать сайт самым простым способом.
+# Скачать сайт самым простым способом.
 wget -r -k -l 99 -p -E -nc -e robots=off --no-check-certificate https://www.felser.ch/profibus-manual/index.html
 wget -r -k -l 99 -p -E -nc -e robots=off --no-check-certificate https://www.gnu.org/
 
-Резервное копирование исходных кодов gnu через rsync
-apt install rsync
-rsync --archive --verbose --compress --progress --bwlimit=1024 --delete rsync://mirror.truenetwork.ru/gnu ./ftp.gnu.org/
-rsync --archive --verbose --compress --progress --bwlimit=1024 --delete rsync://ftp.gnu.org/gnu ./ftp.gnu.org/
-
-Браузер в командной строке.
+# Браузер в командной строке.
 lynx https://www.fsf.org/
 
 python ftp server
@@ -159,4 +175,9 @@ pip3 download --dest python-snap7/ --only-binary=:all: --python-version 310 --pl
 C:\pyodbc\pyodbc-4.0.30-cp37-cp37m-win32.whl
 C:\pyodbc>pip install --no-index --find-links C:\pyodbc pyodbc
 
-
+# https://bellard.org/
+https://ffmpeg.org/
+https://bellard.org/tcc/
+https://bellard.org/jslinux/
+https://bellard.org/pi/tinypi/
+https://www.qemu.org/
