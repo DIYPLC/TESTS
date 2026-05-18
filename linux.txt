@@ -144,6 +144,7 @@ pip3 install freeopcua
 pip3 install opcua-client
 pip3 install pyserial
 pip3 install minimalmodbus
+pip3 install modbus_tk
 pip3 install pycomm3
 pip3 install numpy
 pip3 install matplotlib
@@ -156,6 +157,7 @@ pip3 download --dest freeopcua/ freeopcua
 pip3 download --dest opcua-client/ opcua-client
 pip3 download --dest pyserial/ pyserial
 pip3 download --dest minimalmodbus/ minimalmodbus
+pip3 download --dest modbus_tk/ modbus_tk
 pip3 download --dest pycomm3/ pycomm3
 pip3 download --dest numpy/ numpy
 pip3 download --dest matplotlib/ matplotlib
