@@ -138,7 +138,7 @@ def export_axis_to_json(t_axis, x_axis, y_axis):
         json.dump(x_axis, file)
     with open('step2_y_axis.json', 'w') as file:
         json.dump(y_axis, file)
-        return
+    return
 
 
 def print_trend1(t_axis, y_axis, x_axis):
