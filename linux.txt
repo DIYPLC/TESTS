@@ -129,7 +129,7 @@ lynx https://www.fsf.org/
 
 python ftp server
 pip3 install pyftpdlib
-python -m pyftpdlib --interface 0.0.0.0 --port 21021 --username=usr --password=pwd --directory=C:\xyz
+python -m pyftpdlib --write --interface 0.0.0.0 --port 21021 --username=usr --password=pwd --directory=C:\xyz
 ftp://usr:pwd@192.168.88.15:21021/
 
 debian-13.3.0-amd64-DVD-1.iso
