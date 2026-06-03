@@ -5,8 +5,9 @@ sudo apt-get update && sudo apt-get dist-upgrade
 sudo apt update && sudo apt upgrade
 
 sudo apt update
-apt install gcc g++ make git vim htop cmatrix mc tmux python3-pip p7zip-full gnupg rsync
-apt install python3-tk arduino vlc
+apt install gcc g++ make git vim htop cmatrix mc tmux p7zip-full gnupg rsync net-tools
+apt install python3-tk python3-pip python3-full pipx
+apt install arduino vlc
 
 sudo apt install gcc
 sudo apt install g++
@@ -19,6 +20,8 @@ sudo apt install cmatrix
 sudo apt install mc
 sudo apt install tmux
 sudo apt install python3-pip
+sudo apt install python3-full
+sudo apt install pipx
 sudo apt install p7zip-full
 sudo apt install gnupg
 sudo apt install rsync
@@ -131,17 +134,27 @@ nmap --script vuln 192.168.88.1
 # Путь к сереру 255 хопов максимум
 traceroute -m 255 8.8.8.8
 
-# Скачать сайт самым простым способом.
-wget -r -k -l 99 -p -E -nc -e robots=off --no-check-certificate https://www.felser.ch/profibus-manual/index.html
-wget -r -k -l 99 -p -E -nc -e robots=off --no-check-certificate https://www.gnu.org/
-
-# Браузер в командной строке.
-lynx https://www.fsf.org/
-
-python ftp server
+# python ftp server
 pip3 install pyftpdlib
 python -m pyftpdlib --write --interface 0.0.0.0 --port 21021 --username=usr --password=pwd --directory=C:\xyz
 ftp://usr:pwd@192.168.88.15:21021/
+
+# Удобный локальный обмен файлами без сторонних библиотек
+ipconfig
+python -m http.server 8888 --bind 0.0.0.0
+python -m http.server 8888 --bind 0.0.0.0 --directory C:\obmen
+/sbin/ifconfig
+python3 -m http.server 8888 --bind 0.0.0.0 --directory /home/xyz/obmen
+http://127.0.0.1:8888/
+http://192.168.88.18:8888/
+
+# Браузер в командной строке.
+lynx https://127.0.0.1:8888/
+lynx https://www.fsf.org/
+
+# Скачать сайт самым простым способом.
+wget -r -k -l 99 -p -E -nc -e robots=off --no-check-certificate https://www.felser.ch/profibus-manual/index.html
+wget -r -k -l 99 -p -E -nc -e robots=off --no-check-certificate https://www.gnu.org/
 
 debian-13.3.0-amd64-DVD-1.iso
 server1@user1:~$
@@ -185,6 +198,9 @@ pip3 download --dest pyodbc/ --only-binary=:all: --python-version 37 --platform 
 pip3 download --dest pyodbc/ --only-binary=:all: --python-version 37 --platform win_amd64 pyodbc==4.0.39
 pip3 download --dest pyodbc/ --only-binary=:all: --python-version 314 --platform win_amd64 pyodbc==5.3.0
 pip3 download --dest python-snap7/ --only-binary=:all: --python-version 310 --platform win_amd64 python-snap7==3.0.0
+
+# for debian
+pipx install pyftpdlib
 
 # pyodbc offline install for Win7 32bit Python 3.7.0rc1
 C:\pyodbc\pyodbc-4.0.30-cp37-cp37m-win32.whl
