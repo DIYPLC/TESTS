@@ -35,6 +35,7 @@ sudo apt install net-tools
 sudo apt install nmap
 sudo apt install qbittorrent-nox
 sudo apt install dosbox
+sudo apt install info
 
 # Копирование исходных кодов
 git clone https://github.com/DIYPLC/LIB_PLC.git
@@ -212,3 +213,23 @@ https://bellard.org/tcc/
 https://bellard.org/jslinux/
 https://bellard.org/pi/tinypi/
 https://www.qemu.org/
+
+################
+# Back in bash #
+################
+man ls # Спрака по ls
+info ls # Спрака с гиперссылками по ls
+info # Спрака с гиперссылками общая
+ls -lh -a # Содержимое каталога с подробностями.
+pwd # Показать текущий каталог
+cd .. # Перейти в родительскую папку
+history # История команд
+ls -l 1> log.txt # Перенаправления стандартного потока вывода-1, ошибки-2
+less log.txt # Чтение файла
+su - # Получить рута
+chmode +x run.sh # Дать файлу права на выполнение
+echo $PATH # Путь системный
+python3 /home/xyz/HMI_PLC/SOFT_PLC/__main__.py > log.txt & # Запуск команды в фоновом режиме
+find / -type f -name "*.c" # Поиск фалов
+ps # Список процессов для kill 1234
+pstree # Дерево процессов
