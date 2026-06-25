@@ -36,6 +36,9 @@ sudo apt install nmap
 sudo apt install qbittorrent-nox
 sudo apt install dosbox
 sudo apt install info
+apt install gparted
+apt install tree
+apt install lshw
 
 # Копирование исходных кодов
 git clone https://github.com/DIYPLC/LIB_PLC.git
@@ -233,3 +236,7 @@ python3 /home/xyz/HMI_PLC/SOFT_PLC/__main__.py > log.txt & # Запуск ком
 find / -type f -name "*.c" # Поиск фалов
 ps # Список процессов для kill 1234
 pstree # Дерево процессов
+which nano # print path /usr/bin/nano
+cat log.txt
+mkdir /mnt/ramdisk
+sudo mount -t tmpfs -o size=128m tmpfs /mnt/ramdisk
