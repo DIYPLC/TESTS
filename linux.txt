@@ -1,4 +1,4 @@
-#!/bin/bash
+﻿#!/bin/bash
 
 echo "install software"
 sudo apt-get update && sudo apt-get dist-upgrade
@@ -179,6 +179,7 @@ pip3 install numpy
 pip3 install matplotlib
 pip3 install pyinstaller
 pip3 install pyftpdlib
+pip3 install icmplib
 
 pip3 download --dest pyodbc/ pyodbc
 pip3 download --dest python-snap7/ python-snap7
