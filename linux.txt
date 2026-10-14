@@ -5,40 +5,75 @@ sudo apt-get update && sudo apt-get dist-upgrade
 sudo apt update && sudo apt upgrade
 
 sudo apt update
-apt install gcc g++ make git vim htop cmatrix mc tmux p7zip-full gnupg rsync net-tools
-apt install python3-tk python3-pip python3-full pipx
-apt install arduino vlc
-
 sudo apt install gcc
 sudo apt install g++
 sudo apt install make
 sudo apt install git
+sudo apt install gh
 sudo apt install vim
 sudo apt install emacs
 sudo apt install htop
 sudo apt install cmatrix
 sudo apt install mc
 sudo apt install tmux
-sudo apt install python3-pip
-sudo apt install python3-full
-sudo apt install pipx
 sudo apt install p7zip-full
 sudo apt install gnupg
 sudo apt install rsync
 sudo apt install traceroute
+sudo apt install net-tools
+sudo apt install nmap
+sudo apt install wifite
+sudo apt install qbittorrent-nox
+sudo apt install dosbox
+
+sudo apt install info
+sudo apt install gparted
+sudo apt install tree
+sudo apt install lshw
+
+sudo apt install python3-full
+sudo apt install python3-pip
 sudo apt install python3-tk
+sudo apt install pipx
+sudo apt install idle
+
 sudo apt install arduino
 sudo apt install vlc
 sudo apt install freecad
 sudo apt install wine
-sudo apt install net-tools
-sudo apt install nmap
-sudo apt install qbittorrent-nox
-sudo apt install dosbox
-sudo apt install info
-apt install gparted
-apt install tree
-apt install lshw
+sudo apt install scilab
+
+
+echo "ubuntu software"
+# dpkg менеджер пакетов
+# snapd менеджер пакетов
+# aptitude менеджер пакетов
+tcpdump
+Wireshark
+strace
+latex
+OBS Studio
+LibreCAD
+libreoffice
+Cura
+KiCAD
+gimp
+InkScape
+pinta
+VirtualBox
+Telegram Desktop
+Jami
+nano
+sublime-text
+geany
+Eclipse
+chromium
+transmission
+uget
+putty
+Jupyter Notebook
+pycharm communiti edition
+
 
 # Копирование исходных кодов
 git clone https://github.com/DIYPLC/LIB_PLC.git
@@ -64,40 +99,6 @@ usr@pc:~/DIY_PLC/.git$ git show 488865d3cc94cd5eb2cfd2cb01c0ff261f4502cd
 # Резервное копирование исходных кодов gnu через rsync
 rsync --archive --verbose --compress --progress --bwlimit=1024 --delete rsync://mirror.truenetwork.ru/gnu ./ftp.gnu.org/
 rsync --archive --verbose --compress --progress --bwlimit=1024 --delete rsync://ftp.gnu.org/gnu ./ftp.gnu.org/
-
-echo "ubuntu software"
-# dpkg менеджер пакетов
-# snapd менеджер пакетов
-# aptitude менеджер пакетов
-tcpdump
-Wireshark
-strace
-latex
-OBS Studio
-LibreCAD
-libreoffice
-FreeCAD
-Cura
-KiCAD
-VLC
-gimp
-InkScape
-pinta
-Wine
-VirtualBox
-Telegram Desktop
-Jami
-nano
-sublime-text
-geany
-Eclipse
-chromium
-transmission
-uget
-putty
-Jupyter Notebook
-pycharm communiti edition
-wifite
 
 # Скачивание видео.
 python3 -m youtube_dl 'https://youtu.be/M379y0op1WM'
@@ -167,6 +168,7 @@ deb.debian.org
 LXDE
 snapshot
 
+sudo apt install python3-pyodbc # new pep
 pip3 install pyodbc
 pip3 install python-snap7
 pip3 install freeopcua
